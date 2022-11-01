@@ -59,4 +59,4 @@ COPY tests $LIBERA_RAD_DIRECTORY/tests
 COPY pylintrc $LIBERA_RAD_DIRECTORY
 
 # Set entrypoint
-ENTRYPOINT pytest
+ENTRYPOINT ["pytest", "--cov=libera_rad", "--cov-report=xml:coverage.xml", "--junit-xml=junit.xml"]
