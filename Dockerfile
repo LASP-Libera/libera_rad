@@ -44,7 +44,7 @@ RUN poetry install --no-dev
 
 # Define the entrypoint of the container. Passing arguments when running the
 # container will be passed as arguments to the function
-ENTRYPOINT ["rad"]
+ENTRYPOINT ["libera-rad"]
 
 
 # libera-rad-test
