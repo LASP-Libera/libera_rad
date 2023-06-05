@@ -10,7 +10,7 @@ import time
 import xarray as xr
 # local
 from libera_utils.io.manifest import Manifest
-from libera_utils.io.filenaming import DataLevel, ManifestType
+from libera_utils.io.filenaming import DataLevel, ManifestType, ManifestFilename
 from libera_utils.io.smart_open import smart_open
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ def algorithm(parsed_cli_args: argparse.Namespace) -> str:
     return output_manifest_filepath
 
 
-def write_data_product(incoming_file: str, input_man: str) -> str:
+def write_data_product(incoming_file: str, input_man: ManifestFilename) -> str:
     """
     Takes a file named in the input manifest and generates the output nectdf4 file, with tags and correct output name
 
@@ -68,8 +68,9 @@ def write_data_product(incoming_file: str, input_man: str) -> str:
     ----------
     incoming_file: str
         incoming data file retrieved from the input manifest file
-    input_man
-        the incoming manifest that houses the files, needed to add tags to the newly created netcdf4 files
+    input_man: ManifestFilename
+        The name of the incoming manifest file that houses the files, needed to add tags to the
+        newly created netcdf4 files
 
 
     Returns
@@ -85,7 +86,7 @@ def write_data_product(incoming_file: str, input_man: str) -> str:
 
     logger.info('Adding tags to the netcdf4 dataset')
     incoming_data.attrs['Incoming_Process_Date(UTC)'] = str(datetime.utcnow())
-    incoming_data.attrs['Incoming_manifest_name'] = input_man
+    incoming_data.attrs['Incoming_manifest_name'] = str(input_man.path.name)
 
     timestamp = datetime.utcnow().strftime("%Y%m%dt%H%M%S")
 
