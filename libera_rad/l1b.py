@@ -4,13 +4,11 @@ import argparse
 from datetime import datetime
 import logging
 import os
-import pathlib
 import time
 # installed
 import xarray as xr
-# local
 from libera_utils.io.manifest import Manifest
-from libera_utils.io.filenaming import DataLevel, ManifestType, ManifestFilename
+from libera_utils.io.filenaming import DataLevel, ManifestFilename
 from libera_utils.io.smart_open import smart_open
 
 logger = logging.getLogger(__name__)
@@ -36,7 +34,7 @@ def algorithm(parsed_cli_args: argparse.Namespace) -> str:
     input_manifest = Manifest.from_file(parsed_cli_args.manifest)
 
     logger.info("Creating output manifest")
-    output_manifest = Manifest(manifest_type=ManifestType.OUTPUT, files=[], configuration={})
+    output_manifest = Manifest.output_manifest_from_input_manifest(input_manifest)
 
     logger.info("Reading each file in the manifest")
     for file in input_manifest.files:
@@ -55,7 +53,8 @@ def algorithm(parsed_cli_args: argparse.Namespace) -> str:
         time.sleep(1)
 
     logger.info("Writing the physical output manifest")
-    output_manifest_filepath = output_manifest.write(pathlib.Path(os.getenv("PROCESSING_DROPBOX")))
+    dropbox_path = os.getenv("PROCESSING_PATH")
+    output_manifest_filepath = output_manifest.write(dropbox_path)
 
     return output_manifest_filepath
 
@@ -82,7 +81,7 @@ def write_data_product(incoming_file: str, input_man: ManifestFilename) -> str:
     """
 
     logger.info("Opening the file ")
-    incoming_data = xr.open_dataset(incoming_file, engine="h5netcdf")
+    incoming_data = xr.open_dataset(incoming_file)
 
     logger.info('Adding tags to the netcdf4 dataset')
     incoming_data.attrs['Incoming_Process_Date(UTC)'] = str(datetime.utcnow())
@@ -90,11 +89,11 @@ def write_data_product(incoming_file: str, input_man: ManifestFilename) -> str:
 
     timestamp = datetime.utcnow().strftime("%Y%m%dt%H%M%S")
 
-    dropbox_path = os.getenv("PROCESSING_DROPBOX")
+    dropbox_path = os.getenv("PROCESSING_PATH")
     data_product_filename = f"{dropbox_path}/libera_cam_{DataLevel['L1B']}_ThisIsARandDesc_" \
                             f"{timestamp}_vM1m2p3_r27002112233.h5"
 
     logger.info("Writing the new netcdf4 file to the output manifest")
-    incoming_data.to_netcdf(data_product_filename, engine="h5netcdf")
+    incoming_data.to_netcdf(data_product_filename)
 
     return data_product_filename

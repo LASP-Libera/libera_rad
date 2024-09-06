@@ -2,7 +2,7 @@
 
 # libera-rad
 # ----------
-FROM python:3.9-slim AS libera-rad
+FROM python:3.11-slim AS libera-rad
 USER root
 
 # Location for Core package installation location. This can be used later by images that inherit from this one
@@ -16,7 +16,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 # libpq so we can install psycopg2
 # curl so we can install poetry
 # gcc because it's often required for python package installations
-RUN apt-get update && apt-get install -y libpq-dev curl gcc
+RUN apt-get update && apt-get install -y libpq-dev curl gcc pkg-config libhdf5-dev
 
 # Create virtual environment and permanently activate it for this image
 ENV VIRTUAL_ENV=/opt/venv
@@ -40,8 +40,7 @@ COPY pyproject.toml $LIBERA_RAD_DIRECTORY
 RUN true
 
 # Install libera_rad and all its (non-dev) dependencies according to pyproject.toml
-RUN poetry install --no-dev
-
+RUN poetry install --only main
 # Define the entrypoint of the container. Passing arguments when running the
 # container will be passed as arguments to the function
 ENTRYPOINT ["libera-rad"]
