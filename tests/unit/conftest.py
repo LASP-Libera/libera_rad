@@ -1,3 +1,5 @@
+"""Conftest for Libera Rad unit tests"""
+from datetime import datetime, date, timezone
 import pytest
 import sys
 from pathlib import Path
@@ -21,6 +23,10 @@ def generate_input_manifest(tmp_path, test_data_path):
 
     input_manifest.add_file_to_manifest(filenames[0])
     input_manifest.add_file_to_manifest(filenames[1])
+    input_manifest.add_desired_time_range(
+        start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc),
+        end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=timezone.utc)
+    )
 
     input_manifest_file_path = input_manifest.write(outpath=tmp_path)
 

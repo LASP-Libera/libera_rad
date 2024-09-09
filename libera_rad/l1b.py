@@ -7,8 +7,9 @@ import os
 import time
 # installed
 import xarray as xr
+from libera_utils.aws.constants import DataLevel
 from libera_utils.io.manifest import Manifest
-from libera_utils.io.filenaming import DataLevel, ManifestFilename
+from libera_utils.io.filenaming import ManifestFilename
 from libera_utils.io.smart_open import smart_open
 
 logger = logging.getLogger(__name__)

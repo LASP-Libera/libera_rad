@@ -1,5 +1,3 @@
-version: '1'
-
 services:
 
   # Runs program inside a docker container. Not used in Jenkins.

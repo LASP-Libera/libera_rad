@@ -15,29 +15,29 @@ from libera_rad import cli, l1b, pass_through
              manifest='input_manifest.json',
              verbose=True
          )),
-        (['pass_through', '-p', 'spice_azel', 'input_manifest.json'],
+        (['pass_through', '-p', 'spice-azel', 'input_manifest.json'],
             argparse.Namespace(
                 func=pass_through.algorithm,
                 manifest='input_manifest.json',
-                processing_step='spice_azel'
+                processing_step='spice-azel'
             )),
-        (['pass_through', '-p', 'spice_jpss', 'input_manifest.json'],
+        (['pass_through', '-p', 'spice-jpss', 'input_manifest.json'],
             argparse.Namespace(
                 func=pass_through.algorithm,
                 manifest='input_manifest.json',
-                processing_step='spice_jpss'
+                processing_step='spice-jpss'
             )),
-        (['pass_through', '-p', 'l1b_cam', 'input_manifest.json'],
+        (['pass_through', '-p', 'l1b-cam', 'input_manifest.json'],
             argparse.Namespace(
                 func=pass_through.algorithm,
                 manifest='input_manifest.json',
-                processing_step='l1b_cam'
+                processing_step='l1b-cam'
             )),
-        (['pass_through', '-p', 'l1b_rad', 'input_manifest.json'],
+        (['pass_through', '-p', 'l1b-rad', 'input_manifest.json'],
             argparse.Namespace(
                 func=pass_through.algorithm,
                 manifest='input_manifest.json',
-                processing_step='l1b_rad'
+                processing_step='l1b-rad'
             )),
         (['--version'],
             argparse.Namespace(

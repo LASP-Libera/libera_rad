@@ -55,8 +55,8 @@ def parse_cli_args(cli_args: list):
                                      help="input manifest file")
     pass_through_parser.add_argument('-p', '--processing_step', type=str,
                                      help="processing step to simulate. options include: "
-                                          "'spice_azel', 'spice_jpss', "
-                                          "'l1b_cam' or 'l1b_rad'")
+                                          "'spice-azel', 'spice-jpss', "
+                                          "'l1b-cam' or 'l1b-rad'")
 
     parsed_args = parser.parse_args(cli_args)
     return parsed_args

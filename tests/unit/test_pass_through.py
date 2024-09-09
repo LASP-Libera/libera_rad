@@ -1,7 +1,7 @@
 """Tests for the l1b algorithm"""
 # Standard
 from argparse import Namespace
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 # Installed
 import pytest
 import xarray as xr
@@ -19,7 +19,9 @@ def test_write_spice_jpss(tmp_path):
     data = xr.DataArray([1, 2, 3, 4, 5])
     data.attrs['Incoming_Process_Date(UTC)'] = str(datetime.utcnow())
     data.attrs['Incoming_manifest_name'] = "test_manifest"
-    spk_file_path, ck_file_path = write_dummy_spice_jpss_files(data, str(tmp_path))
+    start_time = datetime.now(timezone.utc)
+    end_time = start_time + timedelta(days=1)
+    spk_file_path, ck_file_path = write_dummy_spice_jpss_files(data, str(tmp_path), start_time, end_time)
     assert AnyPath(spk_file_path).exists()
     assert AnyPath(ck_file_path).exists()
 
@@ -29,7 +31,9 @@ def test_write_spice_az_el(tmp_path):
     data = xr.DataArray([1, 2, 3, 4, 5])
     data.attrs['Incoming_Process_Date(UTC)'] = str(datetime.utcnow())
     data.attrs['Incoming_manifest_name'] = "test_manifest"
-    az_file_path, el_file_path = write_dummy_spice_az_el_files(data, str(tmp_path))
+    start_time = datetime.now(timezone.utc)
+    end_time = start_time + timedelta(days=1)
+    az_file_path, el_file_path = write_dummy_spice_az_el_files(data, str(tmp_path), start_time, end_time)
     assert AnyPath(az_file_path).exists()
     assert AnyPath(el_file_path).exists()
 
@@ -45,17 +49,19 @@ def test_write_l1b(tmp_path, instrument_type):
     data = xr.DataArray([1, 2, 3, 4, 5])
     data.attrs['Incoming_Process_Date(UTC)'] = str(datetime.utcnow())
     data.attrs['Incoming_manifest_name'] = "test_manifest"
-    l1b_file_path = write_dummy_l1b_files(data, str(tmp_path), instrument_type)
+    start_time = datetime.now(timezone.utc)
+    end_time = start_time + timedelta(days=1)
+    l1b_file_path = write_dummy_l1b_files(data, str(tmp_path), instrument_type, start_time, end_time)
     assert AnyPath(l1b_file_path).exists()
 
 
 @pytest.mark.parametrize(
     ("processing_step"),
     [
-        "spice_jpss",
-        "spice_azel",
-        "l1b_cam",
-        "l1b_rad"
+        "spice-jpss",
+        "spice-azel",
+        "l1b-cam",
+        "l1b-rad"
     ])
 def test_pass_through_algorithm(generate_input_manifest, monkeypatch, tmp_path, processing_step):
     """Testing the algorithm to generate output manifests"""
