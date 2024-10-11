@@ -1,8 +1,10 @@
 ## Dockerfile that installs libera_rad and its dependencies
 
+ARG BUILDPLATFORM=linux/amd64
+
 # libera-rad
 # ----------
-FROM python:3.11-slim AS libera-rad
+FROM --platform=${BUILDPLATFORM} python:3.11-slim AS libera-rad
 USER root
 
 # Location for Core package installation location. This can be used later by images that inherit from this one

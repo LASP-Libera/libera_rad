@@ -15,7 +15,7 @@ authors = [
 python = ">=3.9,<3.12"
 cloudpathlib = ">=0.13.0,<1.0.0"
 urllib3 = "<2"  # To reduce dependency solving time related to AWS libraries
-libera-utils = { version="^2.4.0", allow-prereleases=true }
+libera-utils = { version="^2.4.3", allow-prereleases=true }
 #libera-utils = { path="../libera_utils", develop=true }
 xarray = ">=2023.1.0"
 netcdf4 = "^1.7.0"

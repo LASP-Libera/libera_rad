@@ -4,8 +4,10 @@ libera-cam
 """
 # Standard
 import argparse
+# Installed
+from libera_utils.aws.constants import ProcessingStepIdentifier
 # Local
-from libera_rad import l1b, pass_through
+from libera_rad import l1b
 from libera_rad.version import version as libera_rad_version
 
 
@@ -40,7 +42,7 @@ def parse_cli_args(cli_args: list):
 
     subparsers = parser.add_subparsers(description="sub-commands for libera-rad CLI")
 
-    l1b_parser = subparsers.add_parser('l1b',
+    l1b_parser = subparsers.add_parser(ProcessingStepIdentifier.l1b_rad.value,  # l1b-rad
                                        help='generate L1b data products')
     l1b_parser.set_defaults(func=l1b.algorithm)
     l1b_parser.add_argument('manifest', type=str,
@@ -48,15 +50,6 @@ def parse_cli_args(cli_args: list):
     l1b_parser.add_argument('-v', '--verbose', action='store_true',
                             help="set DEBUG level logging output")
 
-    pass_through_parser = subparsers.add_parser('pass_through',
-                                                help='generate dummy data products')
-    pass_through_parser.set_defaults(func=pass_through.algorithm)
-    pass_through_parser.add_argument('manifest', type=str,
-                                     help="input manifest file")
-    pass_through_parser.add_argument('-p', '--processing_step', type=str,
-                                     help="processing step to simulate. options include: "
-                                          "'spice-azel', 'spice-jpss', "
-                                          "'l1b-cam' or 'l1b-rad'")
 
     parsed_args = parser.parse_args(cli_args)
     return parsed_args
