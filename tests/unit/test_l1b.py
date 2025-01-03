@@ -18,5 +18,5 @@ def test_algorithm(generate_input_manifest, monkeypatch, tmp_path):
     output_manifest_obj = Manifest.from_file(output_manifest_path)
 
     for file in output_manifest_obj.files:
-        data_product = xr.open_dataset(file['filename'])
+        data_product = xr.open_dataset(file.filename)
         print(data_product)

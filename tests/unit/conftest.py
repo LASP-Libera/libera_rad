@@ -19,15 +19,14 @@ def generate_input_manifest(tmp_path, test_data_path):
     filenames = (test_data_path / "libera_rad_l1b_descriptor_20220909t000000_20220910t000000.h5",
                  test_data_path / "libera_rad_l1b_descriptor_20221010t000000_20221011t000000.h5")
 
-    input_manifest = Manifest(ManifestType.INPUT, files=[], configuration={})
+    input_manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
 
-    input_manifest.add_file_to_manifest(filenames[0])
-    input_manifest.add_file_to_manifest(filenames[1])
+    input_manifest.add_files(filenames[0], filenames[1])
     input_manifest.add_desired_time_range(
         start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc),
         end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=timezone.utc)
     )
 
-    input_manifest_file_path = input_manifest.write(outpath=tmp_path)
+    input_manifest_file_path = input_manifest.write(out_path=tmp_path)
 
     return input_manifest_file_path

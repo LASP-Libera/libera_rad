@@ -5,17 +5,21 @@ from datetime import datetime
 import logging
 import os
 import time
+from pathlib import Path
+from typing import Union
+
 # installed
 import xarray as xr
+from cloudpathlib import S3Path
 from libera_utils.aws.constants import DataLevel
 from libera_utils.io.manifest import Manifest
-from libera_utils.io.filenaming import ManifestFilename
+from libera_utils.io.filenaming import ManifestFilename, AbstractValidFilename
 from libera_utils.io.smart_open import smart_open
 
 logger = logging.getLogger(__name__)
 
 
-def algorithm(parsed_cli_args: argparse.Namespace) -> str:
+def algorithm(parsed_cli_args: argparse.Namespace) -> Union[Path, S3Path]:
     """
 
     Parameters
@@ -48,9 +52,9 @@ def algorithm(parsed_cli_args: argparse.Namespace) -> str:
             logger.info('Unsuccessfully opened the file')
 
         logger.info("Writing the new netcdf4 file to the output manifest")
-        data_product_file = write_data_product(file['filename'], input_manifest.filename)
+        data_product_file = write_data_product(file.filename, input_manifest.filename)
 
-        output_manifest.add_file_to_manifest(data_product_file)
+        output_manifest.add_files(data_product_file)
         time.sleep(1)
 
     logger.info("Writing the physical output manifest")
@@ -60,13 +64,13 @@ def algorithm(parsed_cli_args: argparse.Namespace) -> str:
     return output_manifest_filepath
 
 
-def write_data_product(incoming_file: str, input_man: ManifestFilename) -> str:
+def write_data_product(incoming_file: str, input_man: Union[str, ManifestFilename]) -> str:
     """
     Takes a file named in the input manifest and generates the output nectdf4 file, with tags and correct output name
 
     Parameters
     ----------
-    incoming_file: str
+    incoming_file: Union[str, ManifestFilename]
         incoming data file retrieved from the input manifest file
     input_man: ManifestFilename
         The name of the incoming manifest file that houses the files, needed to add tags to the
@@ -75,10 +79,8 @@ def write_data_product(incoming_file: str, input_man: ManifestFilename) -> str:
 
     Returns
     -------
-
-    data_product_filename: str
+    str
         the file path of the data product filename
-
     """
 
     logger.info("Opening the file ")
@@ -86,6 +88,8 @@ def write_data_product(incoming_file: str, input_man: ManifestFilename) -> str:
 
     logger.info('Adding tags to the netcdf4 dataset')
     incoming_data.attrs['Incoming_Process_Date(UTC)'] = str(datetime.utcnow())
+    if not isinstance(input_man, ManifestFilename):
+        input_man = AbstractValidFilename.from_file_path(input_man)
     incoming_data.attrs['Incoming_manifest_name'] = str(input_man.path.name)
 
     timestamp = datetime.utcnow().strftime("%Y%m%dt%H%M%S")
