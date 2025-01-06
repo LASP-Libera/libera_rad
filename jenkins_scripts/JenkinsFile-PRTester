@@ -64,17 +64,23 @@ pipeline {
         }
         stage('Run Pylint') {
             steps {
-                sh 'docker-compose run -T linting'
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    sh 'docker-compose run -T linting'
+                }
             }
         }
         stage('Run Bandit') {
             steps {
-                sh 'docker-compose run -T ast'
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    sh 'docker-compose run -T ast'
+                }
             }
         }
         stage('Run Tests') {
             steps {
-                sh 'docker-compose run -T tests'
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    sh 'docker-compose run -T tests'
+                }
             }
         }
     }
@@ -87,7 +93,7 @@ pipeline {
             emailext attachLog: true,
             body: 'Log is attached',
             subject: 'libera_rad PR Tests Failed',
-            to: 'gavin.medley@lasp.colorado.edu,matt.watwood@lasp.colorado.edu,caleb.kumar@lasp.colorado.edu'
+            to: 'gavin.medley@lasp.colorado.edu,matt.watwood@lasp.colorado.edu,kim.kokkonen@lasp.colorado.edu'
 
             slackSend color: "bad", message: """libera_rad PR tests FAILED for PR #${env.pr_id}
             Source branch: ${env.pr_from_ref}

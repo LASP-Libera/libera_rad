@@ -2,8 +2,33 @@
 from datetime import datetime, date, timezone
 import pytest
 import sys
+import json
 from pathlib import Path
+import pandas as pd
 from libera_utils.io.manifest import Manifest, ManifestType
+# Local
+from libera_rad.calibration.calibration_models import LiberaGroundCalibration
+
+
+@pytest.fixture
+def ground_data(test_data_path):
+    """Returns a pandas DataFrame of ground data from Dave 11/1"""
+    dave_ground_data = test_data_path / "ground_calibration_test_data.csv"
+    return pd.read_csv(dave_ground_data)
+
+
+@pytest.fixture
+def calibration_data(calibration_data_path):
+    """Returns a dictionary of calibration data"""
+    with open(calibration_data_path / "l1b_ground_calibration.json") as f:
+        ground_calibration = json.load(f)
+    return LiberaGroundCalibration(**ground_calibration)
+
+
+@pytest.fixture
+def calibration_data_path():
+    """Returns the Path to the calibration_data directory"""
+    return Path(sys.modules[__name__.split('.')[0]].__file__).parent.parent / 'libera_rad' / 'data'
 
 
 @pytest.fixture

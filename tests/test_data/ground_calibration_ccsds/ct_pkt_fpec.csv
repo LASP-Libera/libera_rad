@@ -1,0 +1,20 @@
+Name,APID,Element,StreamName,ShortDescription,LongDescription,PrimaryHeader,SecondaryHeader,Trailer
+cmd_hk,305,fpec,,"Command Housekeeping Packet",,,,
+cmd_echo,306,fpec,,"Command Echo Packet",,,,
+lib_hk,300,fpec,,"Library Housekeeping Packet",,,,
+log_msg,312,fpec,,"Format of Event Message",,,,
+log_hk,311,fpec,,"Log Housekeeping Packet",,,,
+mem_hk,301,fpec,,"Memory Housekeeping Packet",,,,
+mem_dump,303,fpec,,"Memory Dump Packet",,,,
+tlm_hk,307,fpec,,"Telemetry Hk Packet",,,,
+tbl_hk,304,fpec,,"Table Housekeeping Packet",,,,
+des_hk,308,fpec,,"DES Housekeeping Packet",,,,
+des_task,309,fpec,,"DES Task Diag Packet",,,,
+des_time,310,fpec,,"DES Task Timing Packet",,,,
+version,313,fpec,,"Version Status Packet",,,,
+heater_hk,316,fpec,,"heater Housekeeping Packet",,,,
+adc_hk,315,fpec,,"ADC HK Packet",,,,
+hw_stat,302,fpec,,"Hardware Status Packet",,,,
+sw_stat,1006,fpec,,"Software Status Packet",,,,
+
+
