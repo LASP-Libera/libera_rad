@@ -1,45 +1,51 @@
-""" Module for calculating the radiance of a detector for the Libera mission"""
+"""Module for calculating the radiance of a detector for the Libera mission"""
+
 # Standard
-from typing import Union
 import logging
+
 # Installed
 import numpy as np
-from scipy import constants
 import pandas as pd
+from scipy import constants
+
+from libera_rad.calibration.calibration_models import (
+    BoardCalibrations,
+    ChannelCalibrations,
+    LiberaGroundCalibration,
+    TemperatureCoefficients,
+)
+
 # Local
 from libera_rad.calibration.constants import (
-    ChannelName,
     BoardName,
+    ChannelName,
     DetectorTracePath,
     DetectorType,
-    HousekeepingTemperatureCoefficient,
-    RadianceMethod
+    RadianceMethod,
 )
-from libera_rad.calibration.calibration_models import (
-    ChannelCalibrations,
-    TemperatureCoefficients,
-    LiberaGroundCalibration,
-    BoardCalibrations
+from libera_rad.calibration.constants import (
+    HousekeepingTemperatureCoefficient as TemperatureCoefficient,
+)
 
-)
 logger = logging.getLogger(__name__)
 
 
-def calculate_radiance(pwm_dn_data: Union[float, pd.Series],
-                       temperature_dn_data: Union[float, pd.Series],
-                       channel_name: ChannelName,
-                       calibration_data: LiberaGroundCalibration,
-                       radiance_method: RadianceMethod = RadianceMethod.NUMERICAL,
-                       electronics_board_name: BoardName = BoardName.EMFPE,
-                       temperature_coefficient_name: HousekeepingTemperatureCoefficient =
-                       HousekeepingTemperatureCoefficient.BENCH_COEFFICIENTS) -> float:
+def calculate_radiance(
+    pwm_dn_data: float | pd.Series,
+    temperature_dn_data: float | pd.Series,
+    channel_name: ChannelName,
+    calibration_data: LiberaGroundCalibration,
+    radiance_method: RadianceMethod = RadianceMethod.NUMERICAL,
+    electronics_board_name: BoardName = BoardName.EMFPE,
+    temperature_coefficient_name: TemperatureCoefficient = TemperatureCoefficient.BENCH_COEFFICIENTS,
+) -> float:
     """
     Calculate the radiance of a Libera detector for a single channel.
 
     As the physical derivation of radiance is not significantly different from the numerical derivation, we expect to
     later change this to use the physically derived method in operations, however for now to match to instrument tests
     we are using the numerical method.
-    
+
     A more thorough example and explanation of the radiance calculation can be found in the Libera Radiometer
     Algorithm Theoretical Basis Document (ATBD) and the provided learning notebooks in this repository.
 
@@ -67,31 +73,31 @@ def calculate_radiance(pwm_dn_data: Union[float, pd.Series],
         The radiance of the detector in units of W m^-2 sr^-1
     """
     if radiance_method == RadianceMethod.NUMERICAL:
-        nw_per_dn = calculate_numerical_nanowatts_per_dn(pwm_dn_data,
-                                                         temperature_dn_data,
-                                                         channel_name,
-                                                         calibration_data,
-                                                         electronics_board_name,
-                                                         temperature_coefficient_name)
+        nw_per_dn = calculate_numerical_nanowatts_per_dn(
+            pwm_dn_data,
+            temperature_dn_data,
+            channel_name,
+            calibration_data,
+            electronics_board_name,
+            temperature_coefficient_name,
+        )
     elif radiance_method == RadianceMethod.PHYSICAL:
-        nw_per_dn = calculate_physical_nanowatts_per_dn(pwm_dn_data,
-                                                        temperature_dn_data,
-                                                        calibration_data,
-                                                        electronics_board_name)
+        nw_per_dn = calculate_physical_nanowatts_per_dn(
+            pwm_dn_data, temperature_dn_data, calibration_data, electronics_board_name
+        )
     else:
         raise ValueError("Radiance method must be either numerical or physical")
 
-    radiance = calculate_radiance_from_dn(pwm_dn_data,
-                                          nw_per_dn,
-                                          channel_name,
-                                          calibration_data)
+    radiance = calculate_radiance_from_dn(pwm_dn_data, nw_per_dn, channel_name, calibration_data)
     return radiance
 
 
-def calculate_radiance_from_dn(pwm_dn_data: Union[float, pd.Series],
-                               nw_per_dn: float,
-                               channel_name: ChannelName,
-                               calibration_data: LiberaGroundCalibration):
+def calculate_radiance_from_dn(
+    pwm_dn_data: float | pd.Series,
+    nw_per_dn: float,
+    channel_name: ChannelName,
+    calibration_data: LiberaGroundCalibration,
+):
     """
     Calculate the radiance from the count data (dn's) in a science data packet using a given nw_per_dn conversion
     factor.
@@ -124,13 +130,14 @@ def calculate_radiance_from_dn(pwm_dn_data: Union[float, pd.Series],
     return radiance
 
 
-def calculate_numerical_nanowatts_per_dn(dark_pwm_dn_data: Union[float, pd.Series],
-                                         temperature_dn_data: [float, pd.Series],
-                                         channel_name: ChannelName,
-                                         calibration_data: LiberaGroundCalibration,
-                                         electronics_board_name: BoardName = BoardName.EMFPE,
-                                         temperature_coefficient_name: HousekeepingTemperatureCoefficient =
-                                         HousekeepingTemperatureCoefficient.BENCH_COEFFICIENTS) -> float:
+def calculate_numerical_nanowatts_per_dn(
+    dark_pwm_dn_data: float | pd.Series,
+    temperature_dn_data: [float, pd.Series],
+    channel_name: ChannelName,
+    calibration_data: LiberaGroundCalibration,
+    electronics_board_name: BoardName = BoardName.EMFPE,
+    temperature_coefficient_name: TemperatureCoefficient = TemperatureCoefficient.BENCH_COEFFICIENTS,
+) -> float:
     """
     Calculate the nano-watts per count (dn) conversion factor using the numerical method
 
@@ -171,18 +178,21 @@ def calculate_numerical_nanowatts_per_dn(dark_pwm_dn_data: Union[float, pd.Serie
     bench_temp = calculate_temperature_from_dn(temperature_dn_data, board_temp_coefficients)
     reference_temp = radiance_coefficients.t0_per_dn
 
-    nw_per_dn = radiance_coefficients.constant_offset + \
-                radiance_coefficients.temp_difference_linear * (bench_temp - reference_temp) + \
-                radiance_coefficients.temp_difference_quadratic * (bench_temp - reference_temp) ** 2 + \
-                radiance_coefficients.mean_state_offset_linear * active_dc + \
-                radiance_coefficients.mean_state_offset_quadratic * active_dc ** 2 + \
-                radiance_coefficients.mean_state_vs_temperature_crossover * (bench_temp - reference_temp) * active_dc
+    nw_per_dn = (
+        radiance_coefficients.constant_offset
+        + radiance_coefficients.temp_difference_linear * (bench_temp - reference_temp)
+        + radiance_coefficients.temp_difference_quadratic * (bench_temp - reference_temp) ** 2
+        + radiance_coefficients.mean_state_offset_linear * active_dc
+        + radiance_coefficients.mean_state_offset_quadratic * active_dc**2
+        + radiance_coefficients.mean_state_vs_temperature_crossover * (bench_temp - reference_temp) * active_dc
+    )
 
     return nw_per_dn
 
 
-def calculate_dark_level_duty_cycle(pwm_dn_data: Union[float, pd.Series],
-                                    electronics_calibration_data: BoardCalibrations) -> float:
+def calculate_dark_level_duty_cycle(
+    pwm_dn_data: float | pd.Series, electronics_calibration_data: BoardCalibrations
+) -> float:
     """
     Placeholder for calculating the dark level duty cycle as it becomes clearer on how the instrument team does this.
     Currently using the median of a full sample as each detector is turned off most of the time
@@ -203,8 +213,9 @@ def calculate_dark_level_duty_cycle(pwm_dn_data: Union[float, pd.Series],
     return dark_level
 
 
-def calculate_temperature_from_dn(temperature_dn_data: Union[float, pd.Series],
-                                  temperature_coefficients: TemperatureCoefficients):
+def calculate_temperature_from_dn(
+    temperature_dn_data: float | pd.Series, temperature_coefficients: TemperatureCoefficients
+):
     """
     Calculate a temperature from the dn's in a science data packet using a cubic fit created by the instrument team
 
@@ -220,19 +231,23 @@ def calculate_temperature_from_dn(temperature_dn_data: Union[float, pd.Series],
     temperature : float
         The temperature in degrees Celsius
     """
-    temperature = temperature_coefficients.constant + \
-                  temperature_coefficients.linear * temperature_dn_data + \
-                  temperature_coefficients.quadratic * temperature_dn_data ** 2 + \
-                  temperature_coefficients.cubic * temperature_dn_data ** 3
+    temperature = (
+        temperature_coefficients.constant
+        + temperature_coefficients.linear * temperature_dn_data
+        + temperature_coefficients.quadratic * temperature_dn_data**2
+        + temperature_coefficients.cubic * temperature_dn_data**3
+    )
 
     return temperature
 
 
-def calculate_physical_nanowatts_per_dn(active_pwm: Union[float, pd.Series],
-                                        heat_sink_temp: float,
-                                        channel_name: ChannelName,
-                                        ground_calibration_info: LiberaGroundCalibration,
-                                        board_name: BoardName = BoardName.EMFPE) -> float:
+def calculate_physical_nanowatts_per_dn(
+    active_pwm: float | pd.Series,
+    heat_sink_temp: float,
+    channel_name: ChannelName,
+    ground_calibration_info: LiberaGroundCalibration,
+    board_name: BoardName = BoardName.EMFPE,
+) -> float:
     """
     Calculate the nano-watts per count (dn) conversion factor using physical principles. Extended discussion of this
     method can be found in the Libera Radiometer Algorithm Theoretical Basis Document (ATBD) and the provided learning
@@ -267,10 +282,8 @@ def calculate_physical_nanowatts_per_dn(active_pwm: Union[float, pd.Series],
     # Build the power emission equation
     # Temperature range in Kelvin
     temp_range_c = np.arange(heat_sink_temp, heat_sink_temp + 200, 0.1)
-    temp_range_k = constants.convert_temperature(temp_range_c, 'C', 'K')
-    emitted_power_range = create_emitted_power_interpolation(temp_range_k,
-                                                             heat_sink_temp,
-                                                             channel_calibration)
+    temp_range_k = constants.convert_temperature(temp_range_c, "C", "K")
+    emitted_power_range = create_emitted_power_interpolation(temp_range_k, heat_sink_temp, channel_calibration)
 
     # Starting temperature guess in Celsius
     # These will be iteratively updated
@@ -281,15 +294,19 @@ def calculate_physical_nanowatts_per_dn(active_pwm: Union[float, pd.Series],
     # Iterate until the temperature converges to a 1 ppm level at the nW level (1e-9*1e-6)
     while abs(estimated_temp - previous_temp) > 1e-15 and iteration < 10:
         previous_temp = estimated_temp
-        max_heater_power = calculate_heater_max_power(estimated_temp,
-                                                      heat_sink_temp,
-                                                      channel_specific_calibration_data=channel_calibration,
-                                                      board_specific_calibration_data=board_calibration)
+        max_heater_power = calculate_heater_max_power(
+            estimated_temp,
+            heat_sink_temp,
+            channel_specific_calibration_data=channel_calibration,
+            board_specific_calibration_data=board_calibration,
+        )
 
-        thermistor_power = calculate_thermistor_power(estimated_temp,
-                                                      heat_sink_temp,
-                                                      channel_specific_calibration_data=channel_calibration,
-                                                      board_specific_calibration_data=board_calibration)
+        thermistor_power = calculate_thermistor_power(
+            estimated_temp,
+            heat_sink_temp,
+            channel_specific_calibration_data=channel_calibration,
+            board_specific_calibration_data=board_calibration,
+        )
 
         # Total Power from the circuit perspective
         mean_heater_power = max_heater_power * mean_duty_cycle
@@ -297,7 +314,7 @@ def calculate_physical_nanowatts_per_dn(active_pwm: Union[float, pd.Series],
 
         # Estimate the temperature using the emitted power calculation from the beginning
         estimated_temp_kelvin = np.interp(total_power, emitted_power_range, temp_range_k)
-        estimated_temp = constants.convert_temperature(estimated_temp_kelvin, 'K', 'C')
+        estimated_temp = constants.convert_temperature(estimated_temp_kelvin, "K", "C")
 
         logger.debug(f"Iteration: {iteration}. Estimated Temperature:  {estimated_temp}")
         iteration += 1
@@ -311,10 +328,12 @@ def calculate_physical_nanowatts_per_dn(active_pwm: Union[float, pd.Series],
     return watts_per_dn * 1e9
 
 
-def calculate_resistance_from_temp(temperature_data: Union[float, pd.Series],
-                                   channel_specific_calibration_information: ChannelCalibrations,
-                                   trace_path: DetectorTracePath,
-                                   detector_choice: DetectorType = DetectorType.ACTIVE) -> float:
+def calculate_resistance_from_temp(
+    temperature_data: float | pd.Series,
+    channel_specific_calibration_information: ChannelCalibrations,
+    trace_path: DetectorTracePath,
+    detector_choice: DetectorType = DetectorType.ACTIVE,
+) -> float:
     """
     Calculate the resistance of a detector from temperature data using ground calibration information derived by the
     instrument team.
@@ -360,23 +379,23 @@ def calculate_resistance_from_temp(temperature_data: Union[float, pd.Series],
 
 
 class GeometricResistance:
-    """ Class to hold the geometric resistances of a detector trace, the silicone resistance, the leg resistance, and
+    """Class to hold the geometric resistances of a detector trace, the silicone resistance, the leg resistance, and
     the detector resistance.
     """
-    def __init__(self, *,
-                 silicone_resistance: float,
-                 leg_resistance: float,
-                 detector_resistance: float):
+
+    def __init__(self, *, silicone_resistance: float, leg_resistance: float, detector_resistance: float):
         self.silicone_resistance = silicone_resistance
         self.leg_resistance = leg_resistance
         self.detector_resistance = detector_resistance
 
 
-def calculate_geometric_resistance(trace_resistance: Union[float, pd.Series],
-                                   heat_sink_resistance: float,
-                                   channel_specific_calibration_data: ChannelCalibrations,
-                                   trace_path: DetectorTracePath,
-                                   detector_choice: DetectorType = DetectorType.ACTIVE) -> GeometricResistance:
+def calculate_geometric_resistance(
+    trace_resistance: float | pd.Series,
+    heat_sink_resistance: float,
+    channel_specific_calibration_data: ChannelCalibrations,
+    trace_path: DetectorTracePath,
+    detector_choice: DetectorType = DetectorType.ACTIVE,
+) -> GeometricResistance:
     """
     Calculate the geometric resistance of a detector trace using ground calibration information
 
@@ -421,17 +440,17 @@ def calculate_geometric_resistance(trace_resistance: Union[float, pd.Series],
     detector = circuit_path_specific_cal_data.meander_trace_fraction * trace_resistance
 
     total_resistance = GeometricResistance(
-        silicone_resistance=silicone,
-        leg_resistance=legs,
-        detector_resistance=detector
+        silicone_resistance=silicone, leg_resistance=legs, detector_resistance=detector
     )
     return total_resistance
 
 
-def calculate_heater_current(geometric_resistances: GeometricResistance,
-                             channel_specific_calibration_data: ChannelCalibrations,
-                             board_specific_calibration_data: BoardCalibrations,
-                             detector_choice: DetectorType = DetectorType.ACTIVE) -> float:
+def calculate_heater_current(
+    geometric_resistances: GeometricResistance,
+    channel_specific_calibration_data: ChannelCalibrations,
+    board_specific_calibration_data: BoardCalibrations,
+    detector_choice: DetectorType = DetectorType.ACTIVE,
+) -> float:
     """
     Calculate the current across the heater trace of a detector
 
@@ -462,9 +481,10 @@ def calculate_heater_current(geometric_resistances: GeometricResistance,
     top_resistance = detector_specific_cal_data.top_resistance
     # Calculate the total resistance across the heater
     total_resistance = top_resistance + (
-            geometric_resistances.detector_resistance +
-            geometric_resistances.leg_resistance +
-            geometric_resistances.silicone_resistance)
+        geometric_resistances.detector_resistance
+        + geometric_resistances.leg_resistance
+        + geometric_resistances.silicone_resistance
+    )
 
     # Calculate the total voltage on that path
     total_voltage = board_specific_calibration_data.voltage_reference  # Older + detector_specific_cal_data.vos
@@ -474,11 +494,13 @@ def calculate_heater_current(geometric_resistances: GeometricResistance,
     return current
 
 
-def calculate_heater_max_power(estimated_temp: Union[float, pd.Series],
-                               heat_sink_temp: float,
-                               channel_specific_calibration_data: ChannelCalibrations,
-                               board_specific_calibration_data: BoardCalibrations,
-                               detector_choice: DetectorType = DetectorType.ACTIVE):
+def calculate_heater_max_power(
+    estimated_temp: float | pd.Series,
+    heat_sink_temp: float,
+    channel_specific_calibration_data: ChannelCalibrations,
+    board_specific_calibration_data: BoardCalibrations,
+    detector_choice: DetectorType = DetectorType.ACTIVE,
+):
     """
     Compute the mean power along the heating circuit path
 
@@ -503,30 +525,39 @@ def calculate_heater_max_power(estimated_temp: Union[float, pd.Series],
     """
 
     # Calculate the heater resistance from temperature
-    heater_resistance = calculate_resistance_from_temp(estimated_temp,
-                                                       channel_specific_calibration_data,
-                                                       detector_choice=detector_choice,
-                                                       trace_path=DetectorTracePath.HEATER)
+    heater_resistance = calculate_resistance_from_temp(
+        estimated_temp,
+        channel_specific_calibration_data,
+        detector_choice=detector_choice,
+        trace_path=DetectorTracePath.HEATER,
+    )
     # Calculate the heat_sink resistance from temperature
-    heater_heat_sink_resistance = calculate_resistance_from_temp(heat_sink_temp,
-                                                                 channel_specific_calibration_data,
-                                                                 detector_choice=detector_choice,
-                                                                 trace_path=DetectorTracePath.HEATER)
+    heater_heat_sink_resistance = calculate_resistance_from_temp(
+        heat_sink_temp,
+        channel_specific_calibration_data,
+        detector_choice=detector_choice,
+        trace_path=DetectorTracePath.HEATER,
+    )
     # Calculate the resistance using the geometry of the detector
-    heater_geometric_resistance = calculate_geometric_resistance(heater_resistance,
-                                                                 heater_heat_sink_resistance,
-                                                                 channel_specific_calibration_data,
-                                                                 trace_path=DetectorTracePath.HEATER,
-                                                                 detector_choice=detector_choice)
+    heater_geometric_resistance = calculate_geometric_resistance(
+        heater_resistance,
+        heater_heat_sink_resistance,
+        channel_specific_calibration_data,
+        trace_path=DetectorTracePath.HEATER,
+        detector_choice=detector_choice,
+    )
     # Calculate the relevant resistances using the geometry of the detector
     heater_effective_resistance = heater_geometric_resistance.detector_resistance + (
-            heater_geometric_resistance.leg_resistance / 2)
+        heater_geometric_resistance.leg_resistance / 2
+    )
 
     # Calculate the current across the heater
-    heater_current = calculate_heater_current(heater_geometric_resistance,
-                                              channel_specific_calibration_data,
-                                              board_specific_calibration_data,
-                                              detector_choice=detector_choice)
+    heater_current = calculate_heater_current(
+        heater_geometric_resistance,
+        channel_specific_calibration_data,
+        board_specific_calibration_data,
+        detector_choice=detector_choice,
+    )
     # Calculate the power over the heater
     # P = I^2 * R
     max_heater_power = np.power(heater_current, 2) * heater_effective_resistance
@@ -534,11 +565,13 @@ def calculate_heater_max_power(estimated_temp: Union[float, pd.Series],
     return max_heater_power
 
 
-def calculate_thermistor_power(estimated_temp: Union[float, pd.Series],
-                               heat_sink_temp: float,
-                               channel_specific_calibration_data: ChannelCalibrations,
-                               board_specific_calibration_data: BoardCalibrations,
-                               detector_choice: DetectorType = DetectorType.ACTIVE) -> float:
+def calculate_thermistor_power(
+    estimated_temp: float | pd.Series,
+    heat_sink_temp: float,
+    channel_specific_calibration_data: ChannelCalibrations,
+    board_specific_calibration_data: BoardCalibrations,
+    detector_choice: DetectorType = DetectorType.ACTIVE,
+) -> float:
     """
     Compute the power along the thermistor circuit path.
 
@@ -557,20 +590,26 @@ def calculate_thermistor_power(estimated_temp: Union[float, pd.Series],
         The type of detector. Options are ACTIVE and REFERENCE. Default is ACTIVE
     """
     # Calculate the thermistor resistance from temperature
-    thermistor_resistance = calculate_resistance_from_temp(estimated_temp,
-                                                           channel_specific_calibration_data,
-                                                           detector_choice=detector_choice,
-                                                           trace_path=DetectorTracePath.THERMISTOR)
+    thermistor_resistance = calculate_resistance_from_temp(
+        estimated_temp,
+        channel_specific_calibration_data,
+        detector_choice=detector_choice,
+        trace_path=DetectorTracePath.THERMISTOR,
+    )
     # Calculate the heat_sink resistance from temperature
-    thermistor_heat_sink_resistance = calculate_resistance_from_temp(heat_sink_temp,
-                                                                     channel_specific_calibration_data,
-                                                                     detector_choice=detector_choice,
-                                                                     trace_path=DetectorTracePath.THERMISTOR)
+    thermistor_heat_sink_resistance = calculate_resistance_from_temp(
+        heat_sink_temp,
+        channel_specific_calibration_data,
+        detector_choice=detector_choice,
+        trace_path=DetectorTracePath.THERMISTOR,
+    )
     # Calculate the power over the thermistor
-    geometry_resistances = calculate_geometric_resistance(thermistor_resistance,
-                                                          thermistor_heat_sink_resistance,
-                                                          channel_specific_calibration_data,
-                                                          trace_path=DetectorTracePath.THERMISTOR)
+    geometry_resistances = calculate_geometric_resistance(
+        thermistor_resistance,
+        thermistor_heat_sink_resistance,
+        channel_specific_calibration_data,
+        trace_path=DetectorTracePath.THERMISTOR,
+    )
     # Calculate the relevant resistances using the geometry of the detector
     thermistor_lead_resistance = geometry_resistances.silicone_resistance + geometry_resistances.leg_resistance / 2
     thermistor_effective_resistance = geometry_resistances.detector_resistance + geometry_resistances.leg_resistance / 2
@@ -587,7 +626,8 @@ def calculate_thermistor_power(estimated_temp: Union[float, pd.Series],
 
     # Calculate the current across the thermistor
     thermistor_rms_current = (2 * sine_rms) / (
-            thermistor_lead_resistance + thermistor_effective_resistance + bridge_resistance)
+        thermistor_lead_resistance + thermistor_effective_resistance + bridge_resistance
+    )
     # Calculate the power over the thermistor
     # P = I^2 * R
     thermistor_power = np.power(thermistor_rms_current, 2) * thermistor_effective_resistance
@@ -595,10 +635,12 @@ def calculate_thermistor_power(estimated_temp: Union[float, pd.Series],
     return thermistor_power
 
 
-def create_emitted_power_interpolation(temperature_range: Union[float, pd.Series],
-                                       heat_sink_temp: float,
-                                       channel_specific_calibration_data: ChannelCalibrations,
-                                       detector_choice: DetectorType = DetectorType.ACTIVE) -> np.ndarray:
+def create_emitted_power_interpolation(
+    temperature_range: float | pd.Series,
+    heat_sink_temp: float,
+    channel_specific_calibration_data: ChannelCalibrations,
+    detector_choice: DetectorType = DetectorType.ACTIVE,
+) -> np.ndarray:
     """
     Create an interpolation of the emitted power based on a temperature range and heat transfer principles
 
@@ -626,12 +668,15 @@ def create_emitted_power_interpolation(temperature_range: Union[float, pd.Series
     else:
         raise ValueError("Detector choice must be either active or reference")
 
-    t_base = constants.convert_temperature(heat_sink_temp, 'C', 'K')
+    t_base = constants.convert_temperature(heat_sink_temp, "C", "K")
     # Conductive Power
     cond_power = active_detector_calibration_info.conductive_constant * (temperature_range - t_base)
     # Radiated Power
-    rad_power = constants.Stefan_Boltzmann * active_detector_calibration_info.radiative_constant * (
-            np.power(temperature_range, 4) - np.power(t_base, 4))
+    rad_power = (
+        constants.Stefan_Boltzmann
+        * active_detector_calibration_info.radiative_constant
+        * (np.power(temperature_range, 4) - np.power(t_base, 4))
+    )
     # Total Emitted Power = Conductive Power + Radiated Power (in uW, microWatts)
     power_emitted_range_uW = cond_power + rad_power
 

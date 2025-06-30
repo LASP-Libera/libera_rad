@@ -1,43 +1,115 @@
-[tool.poetry]
+[project]
 name = "libera_rad"
-version = "0.3.0"
+version = "0.4.0"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
-    "Stéphane Béland <stephane.beland@lasp.colorado.edu>",
-    "Kim Kokkonen <kim.kokkonen@lasp.colorado.edu>",
-    "Gavin Medley <gavin.medley@lasp.colorado.edu>",
-    "Laura Sandoval <laura.sandoval@lasp.colorado.edu>",
-    "Matt Watwood <matt.watwood@lasp.colorado.edu>",
-    "Caleb Kumar <caleb.kumar@colorado.edu>"
+    { name = "Stephane Beland" },
+    { name = "Heather Cronk" },
+    { name = "Kim Kokkonen" },
+    { name = "Gavin Medley" },
+    { name = "Laura Sandoval" },
+    { name = "Matt Watwood" }
+]
+maintainers = [
+    { name = "Gavin Medley" },
+    { name = "Matt Watwood" },
+    { name = "Libera Science Data Center", email = "libera.sdp.support@lists.lasp.colorado.edu" }
+]
+license = { text = "BSD-3-Clause" }
+readme = "README.md"
+requires-python = ">=3.11,<4"
+keywords = [
+    "libera",
+    "earth science",
+    "radiation budget",
+    "lasp",
+    "university of colorado",
+    "bolometer",
+    "radiometer"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: BSD License"
+]
+# These are the dependencies used in the package metadata when building the project
+dependencies = [
+    "cloudpathlib[s3]>=0.14.0,<1.0",
+    "urllib3 <2",  # To reduce dependency solving time related to AWS libraries
+    "libera-utils >= 3.1.0",
+    #libera-utils = { path="../libera_utils", develop=true }
+    "xarray >= 2023.1.0",
+    "netcdf4 >=1.7.0,<2.0",
+    "pandas >=2.0, <3.0",
+    "scipy >= 1.7.0, <2.0",
+    "pydantic >2.0.3, <3.0",
+    "matplotlib >=3.5.0, <4.0",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.9,<3.12"
-cloudpathlib = ">=0.13.0,<1.0.0"
-urllib3 = "<2"  # To reduce dependency solving time related to AWS libraries
-libera-utils = { version="^2.5.0", allow-prereleases=true }
-#libera-utils = { path="../libera_utils", develop=true }
-xarray = ">=2023.1.0"
-netcdf4 = "^1.7.0"
-pandas = "^2.0"
-scipy = "^1.7.0"
-pydantic = "^2.9"
-matplotlib = "^3.9.0"
+[project.scripts]
+libera-rad = 'libera_rad.cli:main'
+
+[tool.poetry]
+packages = [
+    { include = "libera_rad" }
+]
+include = [
+    "LICENSE.txt",
+    "README.md"
+]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.1.2"
-pytest-randomly = "^3.12.0"
-pytest-coverage = "^0.0"
-pylint = "^2.14.2"
-bandit = "^1.7.4"
+bandit = "*"
+pre-commit = "*"
+pytest-cov = "*"
+pytest-randomly = "*"
+pytest-subprocess = "*"
+ruff = "*"
 
 [tool.poetry.group.extras.dependencies]
 ipykernel = "^6.4.1"
 jupyter = "^1.0.0"
 
-[tool.poetry.scripts]
-libera-rad = 'libera_rad.cli:main'
+[tool.pytest.ini_options]
+markers = [
+    "integration: mark a test as an integration test. Skip these tests with `pytest -m 'not integration' tests`"
+]
+addopts = [
+    "-s"  # Don't capture output (print it)
+]
+minversion = 6.0
+xfail_strict = true
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
+requires = ["poetry-core>=2.0.1"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 120
+extend-include = [
+    "libera_rad/**/*.py",
+    "tests/**/*.py"
+]
+extend-exclude = [
+    "tests/test_data/**",
+    "libera_rad/data/**",
+    "learning_notebooks/**",
+    "calibration_tools/**",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort import sorting
+    "S",  # flake8-bandit security
+    "PT",  # flake8-pytest-style
+    "UP"  # pyupgrade syntax upgrader
+]
+per-file-ignores = { "tests/*" = ["S"] }

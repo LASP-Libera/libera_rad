@@ -802,5 +802,3 @@ fpec,time_pps_src,sw_stat,,,1006,"Indicates source of last PPS",,D8,,0/EXTERNAL 
 fpec,REUSABLE_SPARE_8,sw_stat,,,1006,"",,U8,,,,FSW,,,,
 fpec,sw_img_idx,sw_stat,,,1006,"Current image index from flash",,U32,,,,FSW,,,,
 fpec,sw_stat_checksum,sw_stat,,,1006,"Packet checksum",,U32,,,,FSW,,,,
-
-

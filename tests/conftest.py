@@ -1,11 +1,14 @@
 """Conftest for Libera Rad unit tests"""
-from datetime import datetime, date, timezone
-import pytest
-import sys
+
 import json
+import sys
+from datetime import UTC, date, datetime
 from pathlib import Path
+
 import pandas as pd
+import pytest
 from libera_utils.io.manifest import Manifest, ManifestType
+
 # Local
 from libera_rad.calibration.calibration_models import LiberaGroundCalibration
 
@@ -28,28 +31,30 @@ def calibration_data(calibration_data_path):
 @pytest.fixture
 def calibration_data_path():
     """Returns the Path to the calibration_data directory"""
-    return Path(sys.modules[__name__.split('.')[0]].__file__).parent.parent / 'libera_rad' / 'data'
+    return Path(sys.modules[__name__.split(".")[0]].__file__).parent.parent / "libera_rad" / "data"
 
 
 @pytest.fixture
 def test_data_path():
     """Returns the Path to the test_data directory"""
-    return Path(sys.modules[__name__.split('.')[0]].__file__).parent / 'test_data'
+    return Path(sys.modules[__name__.split(".")[0]].__file__).parent / "test_data"
 
 
 @pytest.fixture
 def generate_input_manifest(tmp_path, test_data_path):
     """Generating test manifest from the data in test_data"""
 
-    filenames = (test_data_path / "libera_rad_l1b_descriptor_20220909t000000_20220910t000000.h5",
-                 test_data_path / "libera_rad_l1b_descriptor_20221010t000000_20221011t000000.h5")
+    filenames = (
+        test_data_path / "libera_rad_l1b_descriptor_20220909t000000_20220910t000000.h5",
+        test_data_path / "libera_rad_l1b_descriptor_20221010t000000_20221011t000000.h5",
+    )
 
     input_manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
 
     input_manifest.add_files(filenames[0], filenames[1])
     input_manifest.add_desired_time_range(
-        start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=timezone.utc),
-        end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=timezone.utc)
+        start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC),
+        end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=UTC),
     )
 
     input_manifest_file_path = input_manifest.write(out_path=tmp_path)

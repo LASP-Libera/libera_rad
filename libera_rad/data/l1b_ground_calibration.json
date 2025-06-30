@@ -1,325 +1,325 @@
 {
-    "boards": {
-        "p01": {
-            "name": "p01",
-            "voltage_reference": 5.00109,
-            "vrms_per_vamp": 1.6078,
-            "max_pwm": 10000,
-            "sine_rms": -1.0
-        },
-        "p02": {
-            "name": "p02",
-            "voltage_reference": 5.0497,
-            "vrms_per_vamp": 1.6044,
-            "max_pwm": 10000,
-            "sine_rms": -1.0
-        },
-        "p03": {
-            "name": "p03",
-            "voltage_reference": 5.0272,
-            "vrms_per_vamp": 1.6083,
-            "max_pwm": 10000,
-            "sine_rms": -1.0
-        },
-        "emfpe": {
-            "name": "emfpe",
-            "voltage_reference": 5.0296,
-            "vrms_per_vamp": -1.0,
-            "max_pwm": 12500,
-            "sine_rms": 2.402
-        }
+  "boards": {
+    "p01": {
+      "name": "p01",
+      "voltage_reference": 5.00109,
+      "vrms_per_vamp": 1.6078,
+      "max_pwm": 10000,
+      "sine_rms": -1.0
     },
-    "channels": {
-        "sw": {
-            "name": "sw",
-            "channel_enum": 0,
-            "module_sn": 7,
-            "carrier_sn": 14,
-            "chip_sn": "6g.06",
-            "detector_pcb": "sn04",
-            "collection_area": 0.00016181,
-            "collection_area_sd": 5e-07,
-            "solid_angle": 0.00076549,
-            "solid_angle_sd": 1.16e-05,
-            "substrate_temp_offset": 0,
-            "t0": 32,
-            "radiance_coefficients": {
-                "t0_per_dn": 34.0,
-                "constant_offset": 31.978685,
-                "temp_difference_linear": 0.0005442404,
-                "temp_difference_quadratic": -3.372524e-05,
-                "mean_state_offset_linear": 0.01472927,
-                "mean_state_offset_quadratic": -0.008655094,
-                "mean_state_vs_temperature_crossover": -0.001087891
-            },
-            "active_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00284,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99287,
-                    "t_vs_r_intercept": 13994.86349,
-                    "t_vs_r_slope": 44.98048
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00633,
-                    "leg_trace_fraction": 0.01038,
-                    "meander_trace_fraction": 0.98329,
-                    "t_vs_r_intercept": 5947.26459,
-                    "t_vs_r_slope": 19.12521
-                },
-                "top_resistance": 15745.8,
-                "bridge_resistance": 6565.2,
-                "vos": -1.1e-05,
-                "conductive_constant": 2.4239,
-                "radiative_constant": 3.5107
-            },
-            "reference_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00263,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99307,
-                    "t_vs_r_intercept": 13840.06425,
-                    "t_vs_r_slope": 44.45106
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00454,
-                    "leg_trace_fraction": 0.0104,
-                    "meander_trace_fraction": 0.98506,
-                    "t_vs_r_intercept": 5875.5534,
-                    "t_vs_r_slope": 18.88432
-                },
-                "top_resistance": 25007.5,
-                "bridge_resistance": 6489.6,
-                "vos": -4e-06,
-                "conductive_constant": 2.32109,
-                "radiative_constant": 3.48308
-            }
-        },
-        "total": {
-            "name": "total",
-            "channel_enum": 1,
-            "module_sn": 8,
-            "carrier_sn": 22,
-            "chip_sn": "6g.02",
-            "detector_pcb": "sn01",
-            "collection_area": 0.00016084,
-            "collection_area_sd": 5.4e-07,
-            "solid_angle": 0.00076986,
-            "solid_angle_sd": 1.16e-05,
-            "substrate_temp_offset": 0,
-            "t0": 32,
-            "radiance_coefficients": {
-                "t0_per_dn": 34.0,
-                "constant_offset": 32.092187,
-                "temp_difference_linear": 0.0005312841,
-                "temp_difference_quadratic": -3.491208e-05,
-                "mean_state_offset_linear": 0.01384798,
-                "mean_state_offset_quadratic": -0.008083757,
-                "mean_state_vs_temperature_crossover": -0.001069344
-            },
-            "active_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00284,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99287,
-                    "t_vs_r_intercept": 14013.94592,
-                    "t_vs_r_slope": 44.9026
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00633,
-                    "leg_trace_fraction": 0.01038,
-                    "meander_trace_fraction": 0.98329,
-                    "t_vs_r_intercept": 5942.78421,
-                    "t_vs_r_slope": 19.04861
-                },
-                "top_resistance": 15690.1,
-                "bridge_resistance": 6530.0,
-                "vos": 2e-06,
-                "conductive_constant": 2.62552,
-                "radiative_constant": 3.69861
-            },
-            "reference_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00263,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99307,
-                    "t_vs_r_intercept": 13942.59016,
-                    "t_vs_r_slope": 44.61951
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00454,
-                    "leg_trace_fraction": 0.0104,
-                    "meander_trace_fraction": 0.98506,
-                    "t_vs_r_intercept": 5904.42164,
-                    "t_vs_r_slope": 18.89952
-                },
-                "top_resistance": 25008.6,
-                "bridge_resistance": 6489.9,
-                "vos": 1e-06,
-                "conductive_constant": 2.62675,
-                "radiative_constant": 3.67364
-            }
-        },
-        "lw": {
-            "name": "lw",
-            "channel_enum": 2,
-            "module_sn": 3,
-            "carrier_sn": 21,
-            "chip_sn": "6g.04",
-            "detector_pcb": "sn02",
-            "collection_area": 0.00016107,
-            "collection_area_sd": 1e-06,
-            "solid_angle": 0.00076212,
-            "solid_angle_sd": 1.16e-05,
-            "substrate_temp_offset": 0,
-            "t0": 32,
-            "radiance_coefficients": {
-                "t0_per_dn": 34.0,
-                "constant_offset": 32.82866,
-                "temp_difference_linear": 0.000569387,
-                "temp_difference_quadratic": -3.700489e-05,
-                "mean_state_offset_linear": 0.01422352,
-                "mean_state_offset_quadratic": -0.00816794,
-                "mean_state_vs_temperature_crossover": -0.001107112
-            },
-            "active_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00284,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99287,
-                    "t_vs_r_intercept": 13742.37024,
-                    "t_vs_r_slope": 43.93335
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00633,
-                    "leg_trace_fraction": 0.01038,
-                    "meander_trace_fraction": 0.98329,
-                    "t_vs_r_intercept": 5802.1895,
-                    "t_vs_r_slope": 18.55332
-                },
-                "top_resistance": 15337.9,
-                "bridge_resistance": 6521.0,
-                "vos": 4e-06,
-                "conductive_constant": 3.33427,
-                "radiative_constant": 3.78767
-            },
-            "reference_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00263,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99307,
-                    "t_vs_r_intercept": 13705.19585,
-                    "t_vs_r_slope": 43.82074
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00454,
-                    "leg_trace_fraction": 0.0104,
-                    "meander_trace_fraction": 0.98506,
-                    "t_vs_r_intercept": 5773.88277,
-                    "t_vs_r_slope": 18.46568
-                },
-                "top_resistance": 23999.7,
-                "bridge_resistance": 6490.4,
-                "vos": 3e-05,
-                "conductive_constant": 3.01156,
-                "radiative_constant": 3.75859
-            }
-        },
-        "ssw": {
-            "name": "ssw",
-            "channel_enum": 3,
-            "module_sn": 5,
-            "carrier_sn": 23,
-            "chip_sn": "6g.05",
-            "detector_pcb": "sn03",
-            "collection_area": 0.00016056,
-            "collection_area_sd": 5e-07,
-            "solid_angle": 0.00076785,
-            "solid_angle_sd": 1.16e-05,
-            "substrate_temp_offset": 0,
-            "t0": 32,
-            "radiance_coefficients": {
-                "t0_per_dn": 34.0,
-                "constant_offset": 32.655269,
-                "temp_difference_linear": 0.0005476286,
-                "temp_difference_quadratic": -3.411099e-05,
-                "mean_state_offset_linear": 0.01501601,
-                "mean_state_offset_quadratic": -0.008908572,
-                "mean_state_vs_temperature_crossover": -0.001109455
-            },
-            "active_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00284,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99287,
-                    "t_vs_r_intercept": 13713.65487,
-                    "t_vs_r_slope": 43.82566
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00633,
-                    "leg_trace_fraction": 0.01038,
-                    "meander_trace_fraction": 0.98329,
-                    "t_vs_r_intercept": 5801.17262,
-                    "t_vs_r_slope": 18.54555
-                },
-                "top_resistance": 15419.2,
-                "bridge_resistance": 6489.9,
-                "vos": -1.1e-05,
-                "conductive_constant": 2.50584,
-                "radiative_constant": 3.54371
-            },
-            "reference_detector": {
-                "heater": {
-                    "silicone_trace_fraction": 0.00263,
-                    "leg_trace_fraction": 0.0043,
-                    "meander_trace_fraction": 0.99307,
-                    "t_vs_r_intercept": 13719.78568,
-                    "t_vs_r_slope": 43.8451
-                },
-                "thermistor": {
-                    "silicone_trace_fraction": 0.00454,
-                    "leg_trace_fraction": 0.0104,
-                    "meander_trace_fraction": 0.98506,
-                    "t_vs_r_intercept": 5804.44376,
-                    "t_vs_r_slope": 18.55665
-                },
-                "top_resistance": 23998.0,
-                "bridge_resistance": 6492.8,
-                "vos": -6e-05,
-                "conductive_constant": 2.35927,
-                "radiative_constant": 3.5187
-            }
-        }
+    "p02": {
+      "name": "p02",
+      "voltage_reference": 5.0497,
+      "vrms_per_vamp": 1.6044,
+      "max_pwm": 10000,
+      "sine_rms": -1.0
     },
-    "housekeeping_temperature_coefficients": {
-        "bench_coefficients": {
-            "constant": 115.309,
-            "linear": -0.0685359,
-            "quadratic": 1.94817e-05,
-            "cubic": -3.07771e-09
-        },
-        "lt1000_coefficients": {
-            "constant": 115.309,
-            "linear": -0.0685359,
-            "quadratic": 1.94817e-05,
-            "cubic": -3.07771e-09
-        },
-        "caes_coefficients": {
-            "constant": 115.309,
-            "linear": -0.0685359,
-            "quadratic": 1.94817e-05,
-            "cubic": -3.07771e-09
-        },
-        "heater_adc_coefficients": {
-            "constant": -0.375,
-            "linear": 0.002989,
-            "quadratic": 0.0,
-            "cubic": 0.0
-        }
+    "p03": {
+      "name": "p03",
+      "voltage_reference": 5.0272,
+      "vrms_per_vamp": 1.6083,
+      "max_pwm": 10000,
+      "sine_rms": -1.0
     },
-    "calibration_source": "ground",
-    "calibration_version": "0.0.2",
-    "calibration_notes": "First draft made from detector team's IDL code and CSV files. Updated from CSV on 2024-11-01 Updated from CSV on 2024-11-01 Updated from CSV on 2024-11-01 Updated from CSV on 2024-11-01",
-    "calibration_author": "Matt Watwood",
-    "calibration_author_email": "matt.watwood@lasp.colorado.edu"
+    "emfpe": {
+      "name": "emfpe",
+      "voltage_reference": 5.0296,
+      "vrms_per_vamp": -1.0,
+      "max_pwm": 12500,
+      "sine_rms": 2.402
+    }
+  },
+  "channels": {
+    "sw": {
+      "name": "sw",
+      "channel_enum": 0,
+      "module_sn": 7,
+      "carrier_sn": 14,
+      "chip_sn": "6g.06",
+      "detector_pcb": "sn04",
+      "collection_area": 0.00016181,
+      "collection_area_sd": 5e-7,
+      "solid_angle": 0.00076549,
+      "solid_angle_sd": 1.16e-5,
+      "substrate_temp_offset": 0,
+      "t0": 32,
+      "radiance_coefficients": {
+        "t0_per_dn": 34.0,
+        "constant_offset": 31.978685,
+        "temp_difference_linear": 0.0005442404,
+        "temp_difference_quadratic": -3.372524e-5,
+        "mean_state_offset_linear": 0.01472927,
+        "mean_state_offset_quadratic": -0.008655094,
+        "mean_state_vs_temperature_crossover": -0.001087891
+      },
+      "active_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00284,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99287,
+          "t_vs_r_intercept": 13994.86349,
+          "t_vs_r_slope": 44.98048
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00633,
+          "leg_trace_fraction": 0.01038,
+          "meander_trace_fraction": 0.98329,
+          "t_vs_r_intercept": 5947.26459,
+          "t_vs_r_slope": 19.12521
+        },
+        "top_resistance": 15745.8,
+        "bridge_resistance": 6565.2,
+        "vos": -1.1e-5,
+        "conductive_constant": 2.4239,
+        "radiative_constant": 3.5107
+      },
+      "reference_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00263,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99307,
+          "t_vs_r_intercept": 13840.06425,
+          "t_vs_r_slope": 44.45106
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00454,
+          "leg_trace_fraction": 0.0104,
+          "meander_trace_fraction": 0.98506,
+          "t_vs_r_intercept": 5875.5534,
+          "t_vs_r_slope": 18.88432
+        },
+        "top_resistance": 25007.5,
+        "bridge_resistance": 6489.6,
+        "vos": -4e-6,
+        "conductive_constant": 2.32109,
+        "radiative_constant": 3.48308
+      }
+    },
+    "total": {
+      "name": "total",
+      "channel_enum": 1,
+      "module_sn": 8,
+      "carrier_sn": 22,
+      "chip_sn": "6g.02",
+      "detector_pcb": "sn01",
+      "collection_area": 0.00016084,
+      "collection_area_sd": 5.4e-7,
+      "solid_angle": 0.00076986,
+      "solid_angle_sd": 1.16e-5,
+      "substrate_temp_offset": 0,
+      "t0": 32,
+      "radiance_coefficients": {
+        "t0_per_dn": 34.0,
+        "constant_offset": 32.092187,
+        "temp_difference_linear": 0.0005312841,
+        "temp_difference_quadratic": -3.491208e-5,
+        "mean_state_offset_linear": 0.01384798,
+        "mean_state_offset_quadratic": -0.008083757,
+        "mean_state_vs_temperature_crossover": -0.001069344
+      },
+      "active_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00284,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99287,
+          "t_vs_r_intercept": 14013.94592,
+          "t_vs_r_slope": 44.9026
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00633,
+          "leg_trace_fraction": 0.01038,
+          "meander_trace_fraction": 0.98329,
+          "t_vs_r_intercept": 5942.78421,
+          "t_vs_r_slope": 19.04861
+        },
+        "top_resistance": 15690.1,
+        "bridge_resistance": 6530.0,
+        "vos": 2e-6,
+        "conductive_constant": 2.62552,
+        "radiative_constant": 3.69861
+      },
+      "reference_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00263,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99307,
+          "t_vs_r_intercept": 13942.59016,
+          "t_vs_r_slope": 44.61951
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00454,
+          "leg_trace_fraction": 0.0104,
+          "meander_trace_fraction": 0.98506,
+          "t_vs_r_intercept": 5904.42164,
+          "t_vs_r_slope": 18.89952
+        },
+        "top_resistance": 25008.6,
+        "bridge_resistance": 6489.9,
+        "vos": 1e-6,
+        "conductive_constant": 2.62675,
+        "radiative_constant": 3.67364
+      }
+    },
+    "lw": {
+      "name": "lw",
+      "channel_enum": 2,
+      "module_sn": 3,
+      "carrier_sn": 21,
+      "chip_sn": "6g.04",
+      "detector_pcb": "sn02",
+      "collection_area": 0.00016107,
+      "collection_area_sd": 1e-6,
+      "solid_angle": 0.00076212,
+      "solid_angle_sd": 1.16e-5,
+      "substrate_temp_offset": 0,
+      "t0": 32,
+      "radiance_coefficients": {
+        "t0_per_dn": 34.0,
+        "constant_offset": 32.82866,
+        "temp_difference_linear": 0.000569387,
+        "temp_difference_quadratic": -3.700489e-5,
+        "mean_state_offset_linear": 0.01422352,
+        "mean_state_offset_quadratic": -0.00816794,
+        "mean_state_vs_temperature_crossover": -0.001107112
+      },
+      "active_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00284,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99287,
+          "t_vs_r_intercept": 13742.37024,
+          "t_vs_r_slope": 43.93335
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00633,
+          "leg_trace_fraction": 0.01038,
+          "meander_trace_fraction": 0.98329,
+          "t_vs_r_intercept": 5802.1895,
+          "t_vs_r_slope": 18.55332
+        },
+        "top_resistance": 15337.9,
+        "bridge_resistance": 6521.0,
+        "vos": 4e-6,
+        "conductive_constant": 3.33427,
+        "radiative_constant": 3.78767
+      },
+      "reference_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00263,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99307,
+          "t_vs_r_intercept": 13705.19585,
+          "t_vs_r_slope": 43.82074
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00454,
+          "leg_trace_fraction": 0.0104,
+          "meander_trace_fraction": 0.98506,
+          "t_vs_r_intercept": 5773.88277,
+          "t_vs_r_slope": 18.46568
+        },
+        "top_resistance": 23999.7,
+        "bridge_resistance": 6490.4,
+        "vos": 3e-5,
+        "conductive_constant": 3.01156,
+        "radiative_constant": 3.75859
+      }
+    },
+    "ssw": {
+      "name": "ssw",
+      "channel_enum": 3,
+      "module_sn": 5,
+      "carrier_sn": 23,
+      "chip_sn": "6g.05",
+      "detector_pcb": "sn03",
+      "collection_area": 0.00016056,
+      "collection_area_sd": 5e-7,
+      "solid_angle": 0.00076785,
+      "solid_angle_sd": 1.16e-5,
+      "substrate_temp_offset": 0,
+      "t0": 32,
+      "radiance_coefficients": {
+        "t0_per_dn": 34.0,
+        "constant_offset": 32.655269,
+        "temp_difference_linear": 0.0005476286,
+        "temp_difference_quadratic": -3.411099e-5,
+        "mean_state_offset_linear": 0.01501601,
+        "mean_state_offset_quadratic": -0.008908572,
+        "mean_state_vs_temperature_crossover": -0.001109455
+      },
+      "active_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00284,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99287,
+          "t_vs_r_intercept": 13713.65487,
+          "t_vs_r_slope": 43.82566
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00633,
+          "leg_trace_fraction": 0.01038,
+          "meander_trace_fraction": 0.98329,
+          "t_vs_r_intercept": 5801.17262,
+          "t_vs_r_slope": 18.54555
+        },
+        "top_resistance": 15419.2,
+        "bridge_resistance": 6489.9,
+        "vos": -1.1e-5,
+        "conductive_constant": 2.50584,
+        "radiative_constant": 3.54371
+      },
+      "reference_detector": {
+        "heater": {
+          "silicone_trace_fraction": 0.00263,
+          "leg_trace_fraction": 0.0043,
+          "meander_trace_fraction": 0.99307,
+          "t_vs_r_intercept": 13719.78568,
+          "t_vs_r_slope": 43.8451
+        },
+        "thermistor": {
+          "silicone_trace_fraction": 0.00454,
+          "leg_trace_fraction": 0.0104,
+          "meander_trace_fraction": 0.98506,
+          "t_vs_r_intercept": 5804.44376,
+          "t_vs_r_slope": 18.55665
+        },
+        "top_resistance": 23998.0,
+        "bridge_resistance": 6492.8,
+        "vos": -6e-5,
+        "conductive_constant": 2.35927,
+        "radiative_constant": 3.5187
+      }
+    }
+  },
+  "housekeeping_temperature_coefficients": {
+    "bench_coefficients": {
+      "constant": 115.309,
+      "linear": -0.0685359,
+      "quadratic": 1.94817e-5,
+      "cubic": -3.07771e-9
+    },
+    "lt1000_coefficients": {
+      "constant": 115.309,
+      "linear": -0.0685359,
+      "quadratic": 1.94817e-5,
+      "cubic": -3.07771e-9
+    },
+    "caes_coefficients": {
+      "constant": 115.309,
+      "linear": -0.0685359,
+      "quadratic": 1.94817e-5,
+      "cubic": -3.07771e-9
+    },
+    "heater_adc_coefficients": {
+      "constant": -0.375,
+      "linear": 0.002989,
+      "quadratic": 0.0,
+      "cubic": 0.0
+    }
+  },
+  "calibration_source": "ground",
+  "calibration_version": "0.0.2",
+  "calibration_notes": "First draft made from detector team's IDL code and CSV files. Updated from CSV on 2024-11-01 Updated from CSV on 2024-11-01 Updated from CSV on 2024-11-01 Updated from CSV on 2024-11-01",
+  "calibration_author": "Matt Watwood",
+  "calibration_author_email": "matt.watwood@lasp.colorado.edu"
 }

@@ -16,5 +16,3 @@ heater_hk,316,fpec,,"heater Housekeeping Packet",,,,
 adc_hk,315,fpec,,"ADC HK Packet",,,,
 hw_stat,302,fpec,,"Hardware Status Packet",,,,
 sw_stat,1006,fpec,,"Software Status Packet",,,,
-
-

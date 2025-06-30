@@ -57,29 +57,17 @@ pipeline {
                 }
             }
         }
-        stage('Build Test Docker Image') {
-            steps {
-                sh 'docker-compose build --no-cache tests'
-            }
-        }
-        stage('Run Pylint') {
+        stage('Ruff Check') {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    sh 'docker-compose run -T linting'
-                }
-            }
-        }
-        stage('Run Bandit') {
-            steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    sh 'docker-compose run -T ast'
+                    sh 'docker-compose up --build --exit-code-from linting linting'
                 }
             }
         }
         stage('Run Tests') {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    sh 'docker-compose run -T tests'
+                    sh 'docker-compose up --build --exit-code-from tests tests'
                 }
             }
         }
@@ -93,7 +81,7 @@ pipeline {
             emailext attachLog: true,
             body: 'Log is attached',
             subject: 'libera_rad PR Tests Failed',
-            to: 'gavin.medley@lasp.colorado.edu,matt.watwood@lasp.colorado.edu,kim.kokkonen@lasp.colorado.edu'
+            to: 'libera.sdp.dev.cicd@lists.lasp.colorado.edu'
 
             slackSend color: "bad", message: """libera_rad PR tests FAILED for PR #${env.pr_id}
             Source branch: ${env.pr_from_ref}

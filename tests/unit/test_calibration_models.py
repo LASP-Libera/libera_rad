@@ -1,5 +1,4 @@
 # Tests for the calibration models
-from libera_rad.calibration.calibration_models import LiberaGroundCalibration
 
 
 def test_calibration_model_from_json(calibration_data):

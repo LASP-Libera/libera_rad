@@ -1,5 +1,4 @@
 services:
-
   # Runs program inside a docker container. Not used in Jenkins.
   rad:
     platform: linux/amd64
@@ -15,21 +14,11 @@ services:
       context: .
       target: libera-rad-test
 
-  # Runs pylint inside a testing docker container.
-  # This will lint the `libera_rad` directory and automatically pick up our `pylintrc`
+  # Runs ruff in a docker container to check code style and formatting.
   # configuration file.
   linting:
     image: libera-rad-test:latest
     build:
       context: .
       target: libera-rad-test
-    entrypoint: ["pylint", "libera_rad"]
-
-  # Runs bandit inside a testing docker container.
-  # This will recursively (`-r`) analyze the `libera_rad` directory and report results.
-  ast:
-    image: libera-rad-test:latest
-    build:
-      context: .
-      target: libera-rad-test
-    entrypoint: [ "bandit", "-r", "libera_rad" ]
+    entrypoint: ["ruff", "check"]

@@ -36,6 +36,8 @@ ENV PATH="$PATH:/root/.local/bin"
 # Copy necessary files over (except for dockerignore-d files)
 COPY libera_rad $LIBERA_RAD_DIRECTORY/libera_rad
 COPY pyproject.toml $LIBERA_RAD_DIRECTORY
+COPY README.md $LIBERA_RAD_DIRECTORY
+COPY LICENSE.txt $LIBERA_RAD_DIRECTORY
 
 # This is so stupid but it fixes known a bug in docker build
 # https://github.com/moby/moby/issues/37965
@@ -57,7 +59,6 @@ RUN poetry install
 
 # Copy tests over
 COPY tests $LIBERA_RAD_DIRECTORY/tests
-COPY pylintrc $LIBERA_RAD_DIRECTORY
 
 # Set entrypoint
 ENTRYPOINT ["pytest", "--cov=libera_rad", "--cov-report=xml:coverage.xml", "--junit-xml=junit.xml"]

@@ -1,10 +1,12 @@
-""" Pydantic models for the calibration data to simplify their usage in the libera_rad package"""
+"""Pydantic models for the calibration data to simplify their usage in the libera_rad package"""
+
 # Installed
 from pydantic import BaseModel
 
 
 class BoardCalibrations(BaseModel):
-    """ Pydantic model for the calibration data for the PCBs used with the detectors """
+    """Pydantic model for the calibration data for the PCBs used with the detectors"""
+
     name: str
     voltage_reference: float
     vrms_per_vamp: float
@@ -13,7 +15,8 @@ class BoardCalibrations(BaseModel):
 
 
 class TraceCalibrations(BaseModel):
-    """ Pydantic model for the calibration data for the detector traces (heater vs thermistor) for a given detector """
+    """Pydantic model for the calibration data for the detector traces (heater vs thermistor) for a given detector"""
+
     silicone_trace_fraction: float
     leg_trace_fraction: float
     meander_trace_fraction: float
@@ -22,7 +25,8 @@ class TraceCalibrations(BaseModel):
 
 
 class DetectorCalibrations(BaseModel):
-    """ Pydantic model for the calibration data for the detectors """
+    """Pydantic model for the calibration data for the detectors"""
+
     heater: TraceCalibrations
     thermistor: TraceCalibrations
     top_resistance: float
@@ -33,7 +37,8 @@ class DetectorCalibrations(BaseModel):
 
 
 class RadianceCoefficients(BaseModel):
-    """ Pydantic model for the radiance coefficients for the detectors for the numeric calculations """
+    """Pydantic model for the radiance coefficients for the detectors for the numeric calculations"""
+
     t0_per_dn: float
     constant_offset: float
     temp_difference_linear: float
@@ -44,7 +49,8 @@ class RadianceCoefficients(BaseModel):
 
 
 class ChannelCalibrations(BaseModel):
-    """ Pydantic model for the calibration data for the channels used with the detectors """
+    """Pydantic model for the calibration data for the channels used with the detectors"""
+
     name: str
     channel_enum: int
     module_sn: int
@@ -63,8 +69,9 @@ class ChannelCalibrations(BaseModel):
 
 
 class TemperatureCoefficients(BaseModel):
-    """ Pydantic model for the temperature coefficients for the housekeeping information to convert from dn to
-    temperature in Celsius """
+    """Pydantic model for the temperature coefficients for the housekeeping information to convert from dn to
+    temperature in Celsius"""
+
     constant: float
     linear: float
     quadratic: float
@@ -72,7 +79,8 @@ class TemperatureCoefficients(BaseModel):
 
 
 class LiberaGroundCalibration(BaseModel):
-    """ Pydantic model for all the calibration data from the Libera ground calibration for radiance calculations """
+    """Pydantic model for all the calibration data from the Libera ground calibration for radiance calculations"""
+
     boards: dict[str, BoardCalibrations]
     channels: dict[str, ChannelCalibrations]
     housekeeping_temperature_coefficients: dict[str, TemperatureCoefficients]
