@@ -1,6 +1,6 @@
 [project]
 name = "libera_rad"
-version = "0.4.0"
+version = "0.4.1"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
     { name = "Stephane Beland" },
@@ -8,12 +8,12 @@ authors = [
     { name = "Kim Kokkonen" },
     { name = "Gavin Medley" },
     { name = "Laura Sandoval" },
-    { name = "Matt Watwood" }
+    { name = "Matt Watwood" },
 ]
 maintainers = [
     { name = "Gavin Medley" },
     { name = "Matt Watwood" },
-    { name = "Libera Science Data Center", email = "libera.sdp.support@lists.lasp.colorado.edu" }
+    { name = "Libera Science Data Center", email = "libera.sdp.support@lists.lasp.colorado.edu" },
 ]
 license = { text = "BSD-3-Clause" }
 readme = "README.md"
@@ -25,7 +25,7 @@ keywords = [
     "lasp",
     "university of colorado",
     "bolometer",
-    "radiometer"
+    "radiometer",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -35,33 +35,24 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
-    "License :: OSI Approved :: BSD License"
 ]
-# These are the dependencies used in the package metadata when building the project
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
-    "urllib3 <2",  # To reduce dependency solving time related to AWS libraries
-    "libera-utils >= 3.1.0",
-    #libera-utils = { path="../libera_utils", develop=true }
+    "libera-utils >= 4.0, <5.0",
     "xarray >= 2023.1.0",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",
     "scipy >= 1.7.0, <2.0",
     "pydantic >2.0.3, <3.0",
-    "matplotlib >=3.5.0, <4.0",
-]
+    "matplotlib >=3.5.0, <4.0"
+] # These are the dependencies used in the package metadata when building the project
 
 [project.scripts]
 libera-rad = 'libera_rad.cli:main'
 
 [tool.poetry]
-packages = [
-    { include = "libera_rad" }
-]
-include = [
-    "LICENSE.txt",
-    "README.md"
-]
+packages = [{ include = "libera_rad" }]
+include = ["LICENSE.txt", "README.md"]
 
 [tool.poetry.group.dev.dependencies]
 bandit = "*"
@@ -77,10 +68,10 @@ jupyter = "^1.0.0"
 
 [tool.pytest.ini_options]
 markers = [
-    "integration: mark a test as an integration test. Skip these tests with `pytest -m 'not integration' tests`"
+    "integration: mark a test as an integration test. Skip these tests with `pytest -m 'not integration' tests`",
 ]
 addopts = [
-    "-s"  # Don't capture output (print it)
+    "-s", # Don't capture output (print it)
 ]
 minversion = 6.0
 xfail_strict = true
@@ -91,10 +82,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 line-length = 120
-extend-include = [
-    "libera_rad/**/*.py",
-    "tests/**/*.py"
-]
+extend-include = ["libera_rad/**/*.py", "tests/**/*.py"]
 extend-exclude = [
     "tests/test_data/**",
     "libera_rad/data/**",
@@ -109,7 +97,7 @@ select = [
     "F",  # pyflakes
     "I",  # isort import sorting
     "S",  # flake8-bandit security
-    "PT",  # flake8-pytest-style
-    "UP"  # pyupgrade syntax upgrader
+    "PT", # flake8-pytest-style
+    "UP", # pyupgrade syntax upgrader
 ]
 per-file-ignores = { "tests/*" = ["S"] }

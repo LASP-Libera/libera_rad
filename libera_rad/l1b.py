@@ -5,20 +5,28 @@ import argparse
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 # installed
 import xarray as xr
-from cloudpathlib import S3Path
-from libera_utils.aws.constants import DataLevel
-from libera_utils.io.filenaming import AbstractValidFilename, ManifestFilename
+from cloudpathlib import AnyPath, S3Path
+from libera_utils.constants import DataProductIdentifier
+from libera_utils.io.filenaming import (
+    LiberaDataProductFilename,
+    ManifestFilename,
+    format_semantic_version,
+)
 from libera_utils.io.manifest import Manifest
-from libera_utils.io.smart_open import smart_open
+from libera_utils.io.smart_open import smart_copy_file, smart_open
+
+from libera_rad.version import version
 
 logger = logging.getLogger(__name__)
 
 
+# TODO [LIBSDC-660]: Update this method with proper error handling when reading the
+#  expected L1A files as input
 def algorithm(parsed_cli_args: argparse.Namespace) -> Path | S3Path:
     """
 
@@ -35,35 +43,33 @@ def algorithm(parsed_cli_args: argparse.Namespace) -> Path | S3Path:
 
     """
 
-    logger.info("Reading the input manifest file")
+    logger.info(f"Reading the input manifest file: {parsed_cli_args.manifest}")
     input_manifest = Manifest.from_file(parsed_cli_args.manifest)
 
-    logger.info("Creating output manifest")
     output_manifest = Manifest.output_manifest_from_input_manifest(input_manifest)
 
-    logger.info("Reading each file in the manifest")
     for file in input_manifest.files:
         try:
             incoming_file = file.filename
             with smart_open(incoming_file):
-                logger.info("Successfully opened file")
+                logger.info(f"Successfully opened file: {incoming_file}")
         except Exception as excep:
-            logger.info("Unsuccessfully opened the file")
+            logger.info(f"Unsuccessfully opened the file {file.filename}")
             raise excep
 
-        logger.info("Writing the new netcdf4 file to the output manifest")
         data_product_file = write_data_product(file.filename, input_manifest.filename)
 
         output_manifest.add_files(data_product_file)
         time.sleep(1)
 
-    logger.info("Writing the physical output manifest")
     dropbox_path = os.getenv("PROCESSING_PATH")
     output_manifest_filepath = output_manifest.write(dropbox_path)
+    logger.info(f"Wrote the output manifest to {dropbox_path}")
 
     return output_manifest_filepath
 
 
+# TODO [LIBSDC-662]: Update this using libera_utils DataProductDefinition
 def write_data_product(incoming_file: str, input_man: str | ManifestFilename) -> str:
     """
     Takes a file named in the input manifest and generates the output nectdf4 file, with tags and correct output name
@@ -83,23 +89,37 @@ def write_data_product(incoming_file: str, input_man: str | ManifestFilename) ->
         the file path of the data product filename
     """
 
-    logger.info("Opening the file ")
-    incoming_data = xr.open_dataset(incoming_file)
+    logger.info(f"Opening the file {incoming_file}")
+    with smart_open(incoming_file) as file_handle:
+        byte_data = file_handle.read()
+        incoming_data = xr.open_dataset(byte_data, engine="netcdf4")
 
-    logger.info("Adding tags to the netcdf4 dataset")
-    incoming_data.attrs["Incoming_Process_Date(UTC)"] = str(datetime.utcnow())
-    if not isinstance(input_man, ManifestFilename):
-        input_man = AbstractValidFilename.from_file_path(input_man)
-    incoming_data.attrs["Incoming_manifest_name"] = str(input_man.path.name)
+        incoming_data.attrs["Incoming_Process_Date(UTC)"] = str(datetime.now(UTC))
+        if not isinstance(input_man, ManifestFilename):
+            input_man = ManifestFilename.from_file_path(input_man)
+        incoming_data.attrs["Incoming_manifest_name"] = str(input_man.path.name)
 
-    timestamp = datetime.utcnow().strftime("%Y%m%dt%H%M%S")
+        timestamp = datetime.now(UTC)
 
-    dropbox_path = os.getenv("PROCESSING_PATH")
-    data_product_filename = (
-        f"{dropbox_path}/libera_cam_{DataLevel['L1B']}_ThisIsARandDesc_{timestamp}_vM1m2p3_r27002112233.h5"
-    )
+        data_id = DataProductIdentifier.l1b_rad
+        dropbox_path = AnyPath(os.getenv("PROCESSING_PATH"))
+        data_product_filename = LiberaDataProductFilename.from_filename_parts(
+            data_level=data_id.data_level,
+            product_name=data_id.product_name,
+            version=format_semantic_version(version()),
+            utc_start=datetime(2027, 1, 1, 00, 00, 00, tzinfo=UTC),
+            utc_end=datetime(2027, 1, 1, 23, 59, 59, tzinfo=UTC),
+            revision=timestamp,
+        )
 
-    logger.info("Writing the new netcdf4 file to the output manifest")
-    incoming_data.to_netcdf(data_product_filename)
+        incoming_data.to_netcdf(
+            data_product_filename.path.name,
+            mode="w",
+            engine="netcdf4",
+        )
+        output_location = dropbox_path / data_product_filename.path.name
+        smart_copy_file(data_product_filename.path.name, output_location, delete=True)
 
-    return data_product_filename
+        logger.info(f"Wrote output file to dropbox at {output_location}")
+
+        return output_location

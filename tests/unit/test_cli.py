@@ -13,10 +13,10 @@ from libera_rad import cli, l1b
     ("cli_args", "parsed"),
     [
         (
-            ["l1b-rad", "-v", "input_manifest.json"],
+            ["-v", "input_manifest.json"],
             argparse.Namespace(func=l1b.algorithm, manifest="input_manifest.json", verbose=True),
         ),
-        (["--version"], argparse.Namespace(func=cli.print_version_info)),
+        (["--version"], argparse.Namespace(func=cli.print_version_info, manifest=None, verbose=False)),
     ],
 )
 def test_parse_cli_args(cli_args, parsed):

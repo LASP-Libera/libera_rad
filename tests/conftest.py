@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import xarray as xr
 from libera_utils.io.manifest import Manifest, ManifestType
 
 # Local
@@ -41,17 +42,22 @@ def test_data_path():
 
 
 @pytest.fixture
-def generate_input_manifest(tmp_path, test_data_path):
+def generate_input_manifest(tmp_path):
     """Generating test manifest from the data in test_data"""
 
-    filenames = (
-        test_data_path / "libera_rad_l1b_descriptor_20220909t000000_20220910t000000.h5",
-        test_data_path / "libera_rad_l1b_descriptor_20221010t000000_20221011t000000.h5",
+    test_file = tmp_path / "libera_rad_test_data.nc"
+
+    # Make a simple xarray dataset and save it to the test_file
+    data = xr.Dataset(
+        {
+            "sensor_reading": (["time"], list(range(24))),  # Note: need dimension name and list
+        }
     )
+    data.to_netcdf(test_file, engine="netcdf4")
 
     input_manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
 
-    input_manifest.add_files(filenames[0], filenames[1])
+    input_manifest.add_files(test_file)
     input_manifest.add_desired_time_range(
         start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC),
         end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=UTC),

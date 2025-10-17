@@ -7,8 +7,6 @@ libera-cam
 import argparse
 
 # Installed
-from libera_utils.aws.constants import ProcessingStepIdentifier
-
 # Local
 from libera_rad import l1b
 from libera_rad.version import version as libera_rad_version
@@ -47,15 +45,22 @@ def parse_cli_args(cli_args: list):
         help="print current version of the CLI",
     )
 
-    subparsers = parser.add_subparsers(description="sub-commands for libera-rad CLI")
-
-    l1b_parser = subparsers.add_parser(
-        ProcessingStepIdentifier.l1b_rad.value,  # l1b-rad
-        help="generate L1b data products",
+    parser.add_argument(
+        "manifest",
+        type=str,
+        nargs="?",  # Makes manifest optional when --version is used
+        help="input manifest file",
     )
-    l1b_parser.set_defaults(func=l1b.algorithm)
-    l1b_parser.add_argument("manifest", type=str, help="input manifest file")
-    l1b_parser.add_argument("-v", "--verbose", action="store_true", help="set DEBUG level logging output")
+
+    parser.add_argument("-v", "--verbose", action="store_true", help="set DEBUG level logging output")
+
+    # Set default function to l1b processing
+    parser.set_defaults(func=l1b.algorithm)
 
     parsed_args = parser.parse_args(cli_args)
+
+    # If --version wasn't used but no manifest provided, show error
+    if parsed_args.func == l1b.algorithm and not parsed_args.manifest:
+        parser.error("manifest file is required")
+
     return parsed_args

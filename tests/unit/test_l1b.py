@@ -17,6 +17,8 @@ def test_algorithm(generate_input_manifest, monkeypatch, tmp_path):
 
     monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
     algo_inputs = Namespace(manifest=str(generate_input_manifest))
+
+    # Run the algorithm
     output_manifest_path = algorithm(algo_inputs)
 
     output_manifest_obj = Manifest.from_file(output_manifest_path)
