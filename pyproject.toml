@@ -1,6 +1,6 @@
 [project]
 name = "libera_rad"
-version = "0.4.1"
+version = "0.4.2"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
     { name = "Stephane Beland" },

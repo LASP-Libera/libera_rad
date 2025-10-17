@@ -1,5 +1,10 @@
 # Version Changes
 
+## 0.4.2
+
+- Add baseline product definition for the L1B Radiometer 4-channel product, which will
+  serve as the ERB continuity product during Y1 of Libera operations.
+
 ## 0.4.1
 
 - Update dependencies to latest version of libera_utils (4.0.0)

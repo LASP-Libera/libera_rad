@@ -1,0 +1,361 @@
+static_product_metadata:
+  ProductID: L1B_RAD-4CH
+  version: 0.0.1
+
+# TODO[LIBSDC-621]: Implement handling of dynamic product metadata in libera_utils
+dynamic_product_metadata:
+  Earth_Sun_Distance_AU:
+
+variables:
+  ############
+  # Datetime #
+  ############
+  Time: # TODO[LIBSDC-622]: Validate that time is unique for each footprint and can be used as the UID
+    long_name: >-
+      Time of each measurement (UTC) against a base reference of the CCSDS Epoch (January 1, 1958).
+      Uniquely identifies each sample.
+    dimensions: ["n_samples"]
+    units: seconds since 1958-01-01 00:00:00
+    dtype: float64
+
+  ###############
+  # Geolocation #
+  ###############
+  Latitude:
+    long_name: Geodetic latitude. Coordinate Reference System WGS84
+    dimensions: ["n_samples"]
+    units: degrees_north
+    valid_range: [-90, 90]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Terrain_Corrected_Latitude:
+    long_name: Terrain corrected latitude
+    dimensions: ["n_samples"]
+    units: degrees_north
+    valid_range: [-90, 90]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Colatitude:
+    long_name: >-
+      Geodetic colatitude. This is the the angle between the geodetic zenith
+      at the Earth point and a vector normal to the Earth equator toward the North
+      pole as defined in the Earth equator, Greenwich meridian system
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 180]
+    missing_value: -999
+    dtype: float32
+  Longitude:
+    long_name: Longitude. Coordinate Reference System WGS84
+    dimensions: ["n_samples"]
+    units: degrees_east
+    valid_range: [-180, 180]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Terrain_Corrected_Longitude:
+    long_name: Terrain corrected longitude
+    dimensions: ["n_samples"]
+    units: degrees_east
+    valid_range: [-180, 180]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Altitude:
+    long_name: Height above the WGS84 ellipsoid. EPSG:4979
+    dimensions: ["n_samples"]
+    units: meters
+    valid_range: [-1000, 30000]
+    missing_value: -9999
+    dtype: float32
+  Terrain_Corrected_Altitude:
+    long_name: Terrain corrected altitude
+    dimensions: ["n_samples"]
+    units: meters
+    valid_range: [-1000, 30000]
+    missing_value: -9999
+    dtype: float32
+  Subsatellite_Latitude:
+    long_name: Latitude of subsatellite point at observation
+    dimensions: ["n_samples"]
+    units: degrees_north
+    valid_range: [-90, 90]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Subsolar_Latitude:
+    long_name: Latitude of subsolar point at observation
+    dimensions: ["n_samples"]
+    units: degrees_north
+    valid_range: [-90, 90]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Subsatellite_Colatitude:
+    long_name: Colatitude of subsatellite point at observation
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 180]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Subsolar_Colatitude:
+    long_name: Colatitude of subsolar point at observation
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 180]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Subsatellite_Longitude:
+    long_name: Longitude of subsatellite point at observation
+    dimensions: ["n_samples"]
+    units: degrees_east
+    valid_range: [-180, 180]
+    missing_value: -999 #off Earth
+    dtype: float32
+  Subsolar_Longitude:
+    long_name: Longitude of subsolar point at observation
+    dimensions: ["n_samples"]
+    units: degrees_east
+    valid_range: [-180, 180]
+    missing_value: -999 #off Earth
+    dtype: float32
+
+  ############
+  # Geometry #
+  ############
+  # TODO[LIBSDC-623]: Add hourly, euclidean, and quaternion dimensions to libera_utils dimensions.yml
+  Along_Track_Angle:
+    long_name: Along-track angle of the Libera field of view at the surface.
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [-90, 90]
+    missing_value: -999
+    dtype: float32
+  Cross_Track_Angle:
+    long_name: Along-track angle of the Libera field of view at the surface.
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [-90, 90]
+    missing_value: -999
+    dtype: float32
+  Solar_Zenith_Surface:
+    long_name: Geodetic zenith angle at the Earth point of the Sun
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 180]
+    missing_value: -999
+    dtype: float32
+  Relative_Azimuth_Surface:
+    long_name: >-
+      Geodetic azimuth angle at the Earth point of the satellite relative to
+      the solar plane (measured clockwise in the plane normal to the geodetic zenith)
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 360]
+    missing_value: -999
+    dtype: float32
+  Viewing_Zenith_Surface:
+    long_name: Geodetic angle at the Earth point to the satellite
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 180]
+    missing_value: -999
+    dtype: float32
+  Viewing_Azimuth_Surface_WRT_North:
+    long_name: Libera viewing azimuth angle at the surface with respect to North
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 360]
+    missing_value: -999
+    dtype: float32
+  Satellite_Position:
+    long_name: >-
+      X, Y, and Z components of the satellite inertial position in J2000 Earth-centered inertial reference frame
+    dimensions: ["n_samples", "euclidean_dim"]
+    units: kilometers
+    valid_range: [-8000.0, 8000.0]
+    missing_value: -9999
+    dtype: float64
+  Satellite_Postion_Start_Of_Hour:
+    long_name: >-
+      X, Y, and Z components of the satellite inertial position at the start of the hour (time-based) in
+      J2000 Earth-centered inertial reference frame
+    dimensions: ["n_hours", "euclidean_dim"]
+    units: kilometers
+    valid_range: [-8000.0, 8000.0]
+    missing_value: -9999
+    dtype: float64
+  Satellite_Velocity:
+    long_name: >-
+      X, Y, and Z components of the satellite inertial velocity in J2000 Earth-centered inertial reference frame
+    dimensions: ["n_samples", "euclidean_dim"]
+    units: km/s
+    valid_range: [-10, 10]
+    missing_value: -999
+    dtype: float64
+  Satellite_Velocity_Start_Of_Hour:
+    long_name: >-
+      X, Y, and Z components of the satellite inertial velocity at the start of the hour (time-based) in
+      J2000 Earth-centered inertial reference frame
+    dimensions: ["n_hours", "euclidean_dim"]
+    units: km/s
+    valid_range: [-10, 10]
+    missing_value: -999
+    dtype: float64
+  Satellite_Attitude:
+    long_name: Orientation of the spacecraft (quaternions) interpolated to the radiometer measurement time
+    dimensions: ["n_samples", "quaternion_dim"]
+    units: quaternion
+    valid_range: [-1, 1]
+    missing_value: -999
+    dtype: float32
+  Azimuth:
+    long_name: Detector azimuth angle
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 360]
+    missing_value: -999
+    dtype: float32
+  Elevation:
+    long_name: Detector elevation angle (0 represents Nadir)
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [-180, 180]
+    missing_value: -999
+    dtype: float32
+  Line_Of_Sight:
+    long_name: Line of sight unit vector (x,y,z) in J2000 Earth-centered inertial reference frame
+    dimensions: ["n_samples", "euclidean_dim"]
+    valid_range: [-1, 1]
+    missing_value: -999
+    dtype: float32
+  Radius_of_Satellite_from_Center_of_Earth:
+    long_name: Radius of the satellite from the center of the Earth
+    dimensions: ["n_samples"]
+    units: km
+    valid_range: [6000, 8000]
+    missing_value: -9999
+    dtype: float64
+  Cone_Angle:
+    long_name: >-
+      Angle between a vector from the satellite to the center of the Earth and
+      the instrument view vector from the satellite to the Earth point
+      (computed using the orbit vector)
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 90]
+    missing_value: -999
+    dtype: float32
+  Cone_Angle_Rate:
+    long_name: >-
+      Angular velocity of the cone angle. The cone rate is negative when scanning toward Nadir,
+      positive when scanning away from Nadir, and zero when the cone angle is constant.
+      The cone rate is not measured, but is approximated with two consecutive cone angle positions.
+    dimensions: ["n_samples"]
+    units: degrees s-1
+    valid_range: [-100, 100]
+    missing_value: -999
+    dtype: float32
+  Clock_Angle:
+    long_name: >-
+      Azimuth angle of the instrument view vector from the satellite to the Earth point
+      relative to the inertial velocity vector (computed using the orbit vector).
+    dimensions: ["n_samples"]
+    units: degrees
+    valid_range: [0, 360]
+    missing_value: -999
+    dtype: float32
+  Clock_Angle_Rate:
+    long_name: >-
+      Angular velocity of the clock angle. The clock rate is negative when the azimuth angle
+      is decreasing, positive when the azimuth angle is increasing, and zero when the clock angle
+      is constant. However, when the azimuth changes direction, the magnitude of the clock rate
+      will approach 0 deg/sec and then increase before settling back to the nominal magnitude.
+      The clock rate is not measured, but is approximated with two consecutive clock angle positions.
+    dimensions: ["n_samples"]
+    units: degrees s-1
+    valid_range: [-20, 20]
+    missing_value: -999
+    dtype: float32
+
+  ##############
+  # Instrument #
+  ##############
+  Operational_Mode: # Does eclipse indicator go here or in the QF or some other indication?
+    long_name: >-
+      Radiometer operational mode (details TBD; need an indicator for
+      cross-track, along-track, RAPS, Earth Target, GeoScan,
+      shortwave cal, longwave cal, solar cal, gain cal, lunar cal,
+      and maybe something like 'transition' just in case.
+    dimensions: ["n_samples"]
+    valid_range: [0, 10] #TBC
+    missing_value: -128
+    dtype: int8
+
+  ###########
+  # Science #
+  ###########
+  Filtered_Radiance_SW:
+    long_name: >-
+      Measured, spectrally integrated radiance emerging from the TOA, where the spectral
+      integration is weighted by the spectral throughput of the SW channel (0.3-5 um)
+    dimensions: ["n_samples"]
+    units: W/(m^2*sr*nm)
+    valid_range: [0, 1000]
+    missing_value: -999
+    dtype: float32
+  Filtered_Radiance_SW_Uncertainty: # Ask Dave if useful
+    long_name: Uncertainty in the filtered shortwave radiance
+    dimensions: ["n_samples"]
+    units: #TBC percent or absolute if including
+    valid_range: [] #Depends on units
+    missing_value: -999
+    dtype: float32
+  Filtered_Radiance_LW:
+    long_name: >-
+      Measured, spectrally integrated radiance emerging from the TOA, where the spectral
+      integration is weighted by the spectral throughput of the LW channel (5-50 um)
+    dimensions: ["n_samples"]
+    units: W/(m^2*sr*nm)
+    valid_range: [0, 1000]
+    missing_value: -999
+    dtype: float32
+  Filtered_Radiance_LW_Uncertainty: # Ask Dave if useful
+    long_name: Uncertainty in the filtered longwave radiance
+    dimensions: ["n_samples"]
+    units: #TBC percent or absolute if including
+    valid_range: [] #Depends on units
+    missing_value: -999
+    dtype: float32
+  Filtered_Radiance_Tot:
+    long_name: >-
+      Measured, spectrally integrated radiance emerging from the TOA, where the spectral
+      integration is weighted by the spectral throughput of the total channel (0.3-100 um)
+    dimensions: ["n_samples"]
+    units: W/(m^2*sr*nm)
+    valid_range: [0, 1000]
+    missing_value: -999
+    dtype: float32
+  Filtered_Radiance_Tot_Uncertainty: # Ask Dave if useful
+    long_name: Uncertainty in the filtered total radiance
+    dimensions: ["n_samples"]
+    units: #TBC percent or absolute if including
+    valid_range: [] #Depends on units
+    missing_value: -999
+    dtype: float32
+  Filtered_Radiance_SSW:
+    long_name: >-
+      Measured, spectrally integrated radiance emerging from the TOA, where the spectral
+      integration is weighted by the spectral throughput of the SSW channel (0.7-5 um)
+    dimensions: ["n_samples"]
+    units: W/(m^2*sr*nm)
+    valid_range: [0, 1000]
+    missing_value: -999
+    dtype: float32
+  Filtered_Radiance_SSW_Uncertainty: # Ask Dave if useful
+    long_name: Uncertainty in the filtered split-shortwave radiance
+    dimensions: ["n_samples"]
+    units: #TBC percent or absolute if including
+    valid_range: [] #Depends on units
+    missing_value: -999
+    dtype: float32
+  Quality_Flag:
+    long_name: Bit flags indicating the quality of the data (details TBD, assumption 0 means good and 1 means issue present)
+    dimensions: ["n_samples"]
+    dtype: uint32
