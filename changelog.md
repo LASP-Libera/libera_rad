@@ -1,4 +1,6 @@
 # Version Changes
+## 0.4.3
+- Add gain_calibration module and standard transfer function.
 
 ## 0.4.2
 
