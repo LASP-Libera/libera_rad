@@ -1,5 +1,11 @@
 # Version Changes
+
+## 0.4.4
+
+- Update the format of the product definition for the L1B Radiometer 4-channel product to be usable with breaking changes made in libera_utils 5.0.0
+
 ## 0.4.3
+
 - Add gain_calibration module and standard transfer function.
 
 ## 0.4.2
