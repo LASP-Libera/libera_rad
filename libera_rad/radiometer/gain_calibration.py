@@ -15,10 +15,7 @@ from scipy.fft import irfft, rfft
 from libera_rad import config
 
 
-def get_ground_cal_response_function(
-    freqs: np.ndarray,
-    path: str = config.transfer_function_path
-) -> np.ndarray:
+def get_ground_cal_response_function(freqs: np.ndarray, path: str = config.transfer_function_path) -> np.ndarray:
     """
     Load and interpolate a transfer function from a NetCDF file.
 
@@ -46,17 +43,14 @@ def get_ground_cal_response_function(
     - 'freq' : The corresponding frequency values
     """
     transfer_function_data = xr.open_dataset(path)
-    transfer_function = transfer_function_data['transfer']
-    transfer_function_freqs = transfer_function_data['freq']
+    transfer_function = transfer_function_data["transfer"]
+    transfer_function_freqs = transfer_function_data["freq"]
     interp_transfer = np.interp(freqs, transfer_function_freqs, transfer_function)
     return interp_transfer.astype(complex)
 
 
 def downsample_libera_signal(
-    signal_data: np.ndarray,
-    from_rate: float = 200.0,
-    to_rate: float = 100.0,
-    method: str = 'decimate'
+    signal_data: np.ndarray, from_rate: float = 200.0, to_rate: float = 100.0, method: str = "decimate"
 ) -> np.ndarray:
     """
     Downsample a signal from one sampling rate to another.
@@ -86,18 +80,14 @@ def downsample_libera_signal(
     factor = int(from_rate / to_rate)
     if len(signal_data) == 0:
         return signal_data
-    if method == 'decimate':
-        return signal.decimate(signal_data, factor, ftype='iir', zero_phase=True)
+    if method == "decimate":
+        return signal.decimate(signal_data, factor, ftype="iir", zero_phase=True)
     else:
         n_samples_new = int(len(signal_data) * to_rate / from_rate)
         return signal.resample(signal_data, n_samples_new)
 
 
-def apply_gain_calibration(
-    signal_data: np.ndarray,
-    transfer_function: np.ndarray,
-    n_samples: int
-) -> np.ndarray:
+def apply_gain_calibration(signal_data: np.ndarray, transfer_function: np.ndarray, n_samples: int) -> np.ndarray:
     """
     Apply gain calibration to a signal using the FFT method.
 

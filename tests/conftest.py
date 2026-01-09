@@ -42,6 +42,12 @@ def test_data_path():
 
 
 @pytest.fixture
+def test_dynamic_kernels_path(test_data_path):
+    """Returns the Path to the test geolocation kernels directory"""
+    return test_data_path / "dynamic_kernels"
+
+
+@pytest.fixture
 def generate_input_manifest(tmp_path):
     """Generating test manifest from the data in test_data"""
 

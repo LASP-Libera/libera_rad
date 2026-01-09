@@ -1,6 +1,7 @@
 """
 Integration Tests for Gain Calibration Module
 """
+
 import os
 from pathlib import Path
 
@@ -41,22 +42,24 @@ class TestIntegration:
         FileNotFoundError
             If the input signal NetCDF file does not exist.
         """
-        signal_path = os.path.join(test_data_path, 'icie_rad_sample_ccsds_2025_221_17_17_58_l1a.nc')
+        signal_path = os.path.join(test_data_path, "icie_rad_sample_ccsds_2025_221_17_17_58_l1a.nc")
         input_signal = xr.open_dataset(signal_path)
-        rad_ch0 = input_signal['ICIE__RAD_SAMPLE_0'].values  # Channel 0
-        rad_ch1 = input_signal['ICIE__RAD_SAMPLE_1'].values  # Channel 1
-        rad_ch2 = input_signal['ICIE__RAD_SAMPLE_2'].values  # Channel 2
-        rad_ch3 = input_signal['ICIE__RAD_SAMPLE_3'].values  # Channel 3
-        timestamps = pd.to_datetime(input_signal['RAD_SAMPLE_FPE_TIME'].values)
-        df_dn = pd.DataFrame({
-            'time': timestamps,
-            'dn_ch0': rad_ch0,
-            'dn_ch1': rad_ch1,
-            'dn_ch2': rad_ch2,
-            'dn_ch3': rad_ch3,
-        })
+        rad_ch0 = input_signal["ICIE__RAD_SAMPLE_0"].values  # Channel 0
+        rad_ch1 = input_signal["ICIE__RAD_SAMPLE_1"].values  # Channel 1
+        rad_ch2 = input_signal["ICIE__RAD_SAMPLE_2"].values  # Channel 2
+        rad_ch3 = input_signal["ICIE__RAD_SAMPLE_3"].values  # Channel 3
+        timestamps = pd.to_datetime(input_signal["RAD_SAMPLE_FPE_TIME"].values)
+        df_dn = pd.DataFrame(
+            {
+                "time": timestamps,
+                "dn_ch0": rad_ch0,
+                "dn_ch1": rad_ch1,
+                "dn_ch2": rad_ch2,
+                "dn_ch3": rad_ch3,
+            }
+        )
 
-        df_dn.set_index('time', inplace=True)
+        df_dn.set_index("time", inplace=True)
         return df_dn
 
     @pytest.fixture
@@ -79,20 +82,22 @@ class TestIntegration:
         FileNotFoundError
             If expected_signal.nc does not exist.
         """
-        output_path = os.path.join(test_data_path, 'expected_signal.nc')
+        output_path = os.path.join(test_data_path, "expected_signal.nc")
         output_signal = xr.open_dataset(output_path)
-        rad_ch0 = output_signal['ICIE__RAD_SAMPLE_0'].values  # Channel 0
-        rad_ch1 = output_signal['ICIE__RAD_SAMPLE_1'].values  # Channel 1
-        rad_ch2 = output_signal['ICIE__RAD_SAMPLE_2'].values  # Channel 2
-        rad_ch3 = output_signal['ICIE__RAD_SAMPLE_3'].values  # Channel 3
-        timestamps = pd.to_datetime(output_signal['time'].values)
-        df_dn = pd.DataFrame({
-            'time': timestamps,
-            'dn_ch0': rad_ch0,
-            'dn_ch1': rad_ch1,
-            'dn_ch2': rad_ch2,
-            'dn_ch3': rad_ch3,
-        })
+        rad_ch0 = output_signal["ICIE__RAD_SAMPLE_0"].values  # Channel 0
+        rad_ch1 = output_signal["ICIE__RAD_SAMPLE_1"].values  # Channel 1
+        rad_ch2 = output_signal["ICIE__RAD_SAMPLE_2"].values  # Channel 2
+        rad_ch3 = output_signal["ICIE__RAD_SAMPLE_3"].values  # Channel 3
+        timestamps = pd.to_datetime(output_signal["time"].values)
+        df_dn = pd.DataFrame(
+            {
+                "time": timestamps,
+                "dn_ch0": rad_ch0,
+                "dn_ch1": rad_ch1,
+                "dn_ch2": rad_ch2,
+                "dn_ch3": rad_ch3,
+            }
+        )
         return df_dn
 
     @pytest.fixture
@@ -115,27 +120,26 @@ class TestIntegration:
         FileNotFoundError
             If expected_downsampled_signal.nc does not exist.
         """
-        output_path = os.path.join(test_data_path, 'expected_downsampled_signal.nc')
+        output_path = os.path.join(test_data_path, "expected_downsampled_signal.nc")
         output_signal = xr.open_dataset(output_path)
-        rad_ch0 = output_signal['ICIE__RAD_SAMPLE_0'].values  # Channel 0
-        rad_ch1 = output_signal['ICIE__RAD_SAMPLE_1'].values  # Channel 1
-        rad_ch2 = output_signal['ICIE__RAD_SAMPLE_2'].values  # Channel 2
-        rad_ch3 = output_signal['ICIE__RAD_SAMPLE_3'].values  # Channel 3
-        timestamps = pd.to_datetime(output_signal['time'].values)
-        df_dn = pd.DataFrame({
-            'time': timestamps,
-            'dn_ch0': rad_ch0,
-            'dn_ch1': rad_ch1,
-            'dn_ch2': rad_ch2,
-            'dn_ch3': rad_ch3,
-        })
+        rad_ch0 = output_signal["ICIE__RAD_SAMPLE_0"].values  # Channel 0
+        rad_ch1 = output_signal["ICIE__RAD_SAMPLE_1"].values  # Channel 1
+        rad_ch2 = output_signal["ICIE__RAD_SAMPLE_2"].values  # Channel 2
+        rad_ch3 = output_signal["ICIE__RAD_SAMPLE_3"].values  # Channel 3
+        timestamps = pd.to_datetime(output_signal["time"].values)
+        df_dn = pd.DataFrame(
+            {
+                "time": timestamps,
+                "dn_ch0": rad_ch0,
+                "dn_ch1": rad_ch1,
+                "dn_ch2": rad_ch2,
+                "dn_ch3": rad_ch3,
+            }
+        )
         return df_dn
 
     def test_full_pipeline_from_files(
-            self,
-            input_signal: pd.DataFrame,
-            expected_output: pd.DataFrame,
-            expected_downsampled: pd.DataFrame
+        self, input_signal: pd.DataFrame, expected_output: pd.DataFrame, expected_downsampled: pd.DataFrame
     ):
         """
         Test the full pipeline using real data files.
@@ -162,26 +166,22 @@ class TestIntegration:
         # Load and interpolate transfer function
         transfer_function = get_ground_cal_response_function(
             freqs,
-            path=str(config.transfer_function_path)  # Change this to test other transfer functions
+            path=str(config.transfer_function_path),  # Change this to test other transfer functions
         )
 
         calibrated_signal = pd.DataFrame()
         # Step 1: Apply calibration
         for col in input_signal.columns:
-            if col != 'time':
+            if col != "time":
                 continue
             else:
-                calibrated_signal[col] = apply_gain_calibration(
-                    input_signal[col],
-                    transfer_function,
-                    len(input_signal)
-                )
+                calibrated_signal[col] = apply_gain_calibration(input_signal[col], transfer_function, len(input_signal))
                 assert np.equal(calibrated_signal[col], expected_output[col])
 
         # Step 2: Downsample
         downsampled_signal = pd.DataFrame()
         for col in calibrated_signal.columns:
-            if col != 'time':
+            if col != "time":
                 downsampled_signal[col] = calibrated_signal[col]
             else:
                 downsampled_signal[col] = downsample_libera_signal(
@@ -230,7 +230,7 @@ class TestIntegration:
         t = np.linspace(0, n_samples / fs, n_samples, endpoint=False)
         low_signal = 10 * np.sin(2 * np.pi * 2 * t)
         high_signal = 10 * np.sin(2 * np.pi * 77 * t)
-        true_signal = np.concatenate((low_signal[:(n_samples // 2)], high_signal[(n_samples // 2):]), axis=0)
+        true_signal = np.concatenate((low_signal[: (n_samples // 2)], high_signal[(n_samples // 2) :]), axis=0)
 
         # Calibrate
         calibrated = apply_gain_calibration(true_signal, transfer_function, n_samples)

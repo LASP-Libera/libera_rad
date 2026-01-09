@@ -48,6 +48,9 @@ pipeline {
                         branches: [[name: "FETCH_HEAD"]],
                         doGenerateSubmoduleConfigurations: false,
                         gitTool: 'Default',
+                        extensions: [
+                            [$class: 'GitLFSPull'],
+                        ],
                         submoduleCfg: [],
                         userRemoteConfigs: [[credentialsId: '2ba9f035-20ea-4b6d-b541-7378271b199a',
                             refspec: "+refs/pull-requests/${env.pr_id}/from:refs/remotes/origin/pull-requests/${env.pr_id}",

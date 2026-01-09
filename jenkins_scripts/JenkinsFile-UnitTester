@@ -27,6 +27,9 @@ pipeline {
                     branches: [[name: '${GIT_BRANCH}']],
                     doGenerateSubmoduleConfigurations: false,
                     gitTool: 'Default',
+                    extensions: [
+                        [$class: 'GitLFSPull'],
+                    ],
                     submoduleCfg: [],
                     userRemoteConfigs: [[
                         credentialsId: '2ba9f035-20ea-4b6d-b541-7378271b199a',

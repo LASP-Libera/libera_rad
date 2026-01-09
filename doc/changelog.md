@@ -1,5 +1,9 @@
 # Version Changes
 
+## 0.4.5
+
+- Adding the first geolocation calculation. Uses KernelManager from libera_utils and curryer tools.
+
 ## 0.4.4
 
 - Update the format of the product definition for the L1B Radiometer 4-channel product to be usable with breaking changes made in libera_utils 5.0.0

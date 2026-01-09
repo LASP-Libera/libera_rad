@@ -9,6 +9,7 @@ services:
 
   # Runs tests inside a docker container.
   tests:
+    platform: linux/amd64
     image: libera-rad-test:latest
     build:
       context: .
@@ -17,6 +18,7 @@ services:
   # Runs ruff in a docker container to check code style and formatting.
   # configuration file.
   linting:
+    platform: linux/amd64
     image: libera-rad-test:latest
     build:
       context: .

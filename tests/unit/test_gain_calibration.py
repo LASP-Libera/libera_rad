@@ -15,6 +15,7 @@ from libera_rad.radiometer.gain_calibration import (
 
 class TestGetGroundCalResponseFunction:
     """Tests for transfer function loading and interpolation."""
+
     def test_interpolation_on_matching_frequencies(self, tmp_path):
         """Test interpolation at exact stored frequencies."""
         # Create test data
@@ -22,11 +23,8 @@ class TestGetGroundCalResponseFunction:
         test_transfer = np.array([1.0, 0.9, 0.8, 0.7, 0.6])
 
         # Save to NetCDF
-        ds = xr.Dataset({
-            'transfer': (['freq_dim'], test_transfer),
-            'freq': (['freq_dim'], test_freqs)
-        })
-        file_path = tmp_path / 'transfer.nc'
+        ds = xr.Dataset({"transfer": (["freq_dim"], test_transfer), "freq": (["freq_dim"], test_freqs)})
+        file_path = tmp_path / "transfer.nc"
         ds.to_netcdf(file_path)
 
         # Test interpolation at exact frequencies
@@ -39,11 +37,8 @@ class TestGetGroundCalResponseFunction:
         test_freqs = np.array([0.0, 10.0, 20.0])
         test_transfer = np.array([1.0, 0.5, 0.0])
 
-        ds = xr.Dataset({
-            'transfer': (['freq_dim'], test_transfer),
-            'freq': (['freq_dim'], test_freqs)
-        })
-        file_path = tmp_path / 'transfer.nc'
+        ds = xr.Dataset({"transfer": (["freq_dim"], test_transfer), "freq": (["freq_dim"], test_freqs)})
+        file_path = tmp_path / "transfer.nc"
         ds.to_netcdf(file_path)
 
         # Request interpolation at midpoints
@@ -58,11 +53,8 @@ class TestGetGroundCalResponseFunction:
         test_freqs = np.array([10.0, 20.0, 30.0])
         test_transfer = np.array([0.9, 0.8, 0.7])
 
-        ds = xr.Dataset({
-            'transfer': (['freq_dim'], test_transfer),
-            'freq': (['freq_dim'], test_freqs)
-        })
-        file_path = tmp_path / 'transfer.nc'
+        ds = xr.Dataset({"transfer": (["freq_dim"], test_transfer), "freq": (["freq_dim"], test_freqs)})
+        file_path = tmp_path / "transfer.nc"
         ds.to_netcdf(file_path)
 
         # np.interp extrapolates using edge values
@@ -88,7 +80,7 @@ class TestDownsampleSignal:
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method='decimate')
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method="decimate")
 
         # Should have half the samples
         assert len(result) == 100
@@ -100,7 +92,7 @@ class TestDownsampleSignal:
         """Test downsampling by larger factor using decimate method."""
         signal_data = np.random.randn(400)
 
-        result = downsample_libera_signal(signal_data, from_rate=400.0, to_rate=100.0, method='decimate')
+        result = downsample_libera_signal(signal_data, from_rate=400.0, to_rate=100.0, method="decimate")
 
         assert len(result) == 100
 
@@ -111,7 +103,7 @@ class TestDownsampleSignal:
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
         # Downsampling rounds to the nearest integer factor, where factor = from_rate / to_rate.
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=49.9, method='decimate')
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=49.9, method="decimate")
 
         # Factor rounds to 4, so rate = 200 / 4 = 50
         assert len(result) == 50
@@ -121,7 +113,7 @@ class TestDownsampleSignal:
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)
 
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method='resample')
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method="resample")
 
         assert len(result) == 100
 
@@ -130,7 +122,7 @@ class TestDownsampleSignal:
         # Constant signal (DC only)
         signal_data = np.ones(200) * 5.0
 
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method='decimate')
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method="decimate")
 
         # Mean should be approximately preserved
         np.testing.assert_almost_equal(np.mean(result), 5.0, decimal=1)
@@ -140,7 +132,7 @@ class TestDownsampleSignal:
         signal_data = np.random.randn(300)
 
         # 300 Hz -> 100 Hz (factor of 3)
-        result = downsample_libera_signal(signal_data, from_rate=300.0, to_rate=100.0, method='resample')
+        result = downsample_libera_signal(signal_data, from_rate=300.0, to_rate=100.0, method="resample")
 
         assert len(result) == 100
 
@@ -206,9 +198,7 @@ class TestApplyGainCalibration:
         transfer_function = np.ones(n_samples // 2 + 1, dtype=complex) * 2.0
 
         # Calibrate combined signal
-        result_combined = apply_gain_calibration(
-            signal1 + signal2, transfer_function, n_samples
-        )
+        result_combined = apply_gain_calibration(signal1 + signal2, transfer_function, n_samples)
 
         # Calibrate separately and add
         result1 = apply_gain_calibration(signal1, transfer_function, n_samples)
