@@ -38,7 +38,7 @@ classifiers = [
 ]
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
-    "libera-utils >=5.4.1, <6.0",
+    "libera-utils >=5.4.1,<5.4.4",
     "xarray >= 2023.1.0",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",

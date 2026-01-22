@@ -63,6 +63,7 @@ Thumbs.db
 .project
 *.iml
 .run
+.vscode
 
 # Virtual environment #
 #######################
