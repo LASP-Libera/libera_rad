@@ -1,10 +1,11 @@
 [project]
 name = "libera_rad"
-version = "0.4.5"
+version = "0.5.0"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
     { name = "Stephane Beland" },
     { name = "Heather Cronk" },
+    { name = "Caitlin Kessler"},
     { name = "Kim Kokkonen" },
     { name = "Gavin Medley" },
     { name = "Laura Sandoval" },
@@ -38,13 +39,14 @@ classifiers = [
 ]
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
-    "libera-utils >=5.4.1,<5.4.4",
-    "xarray >= 2023.1.0",
+    "libera-utils >=5.4.4, <6.0",
+    "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",
     "scipy >= 1.7.0, <2.0",
     "pydantic >2.0.3, <3.0",
-    "matplotlib >=3.5.0, <4.0"
+    "matplotlib >=3.5.0, <4.0",
+    "astropy (>=7.2.0,<8.0.0)"
 ] # These are the dependencies used in the package metadata when building the project
 
 [project.scripts]

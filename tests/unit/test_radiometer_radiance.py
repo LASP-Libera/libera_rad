@@ -1,21 +1,32 @@
+import json
+from pathlib import Path
+from unittest.mock import patch
+
 import numpy as np
+import pandas as pd
 import pytest
+import xarray as xr
 
 from libera_rad.calibration.constants import BoardName, ChannelName, DetectorTracePath
+from libera_rad.config import l1b_ground_calibration_path
 
 # Local
 from libera_rad.radiometer.radiance import (
     GeometricResistance,
+    _load_calibration_data,
     calculate_geometric_resistance,
     calculate_heater_current,
     calculate_heater_max_power,
     calculate_numerical_nanowatts_per_dn,
     calculate_physical_nanowatts_per_dn,
     calculate_radiance_from_dn,
+    calculate_radiances,
     calculate_resistance_from_temp,
     calculate_temperature_from_dn,
     calculate_thermistor_power,
+    calibrate_and_downsample_radiometer_data,
     create_emitted_power_interpolation,
+    interpolate_temperatures,
 )
 
 
@@ -340,3 +351,130 @@ def test_create_emitted_power_interpolation(calibration_data, channel, emitted_p
     assert np.abs(emitted_power_range[0] - emitted_power_first) < 1e-2
     assert np.abs(emitted_power_range[-1] - emitted_power_last) < 1e-2
     assert len(emitted_power_range) == 2000
+
+
+class TestLoadCalibrationData:
+    """Tests for _load_calibration_data function."""
+
+    def test_load_calibration_data_success(self):
+        """Test successful loading of calibration data."""
+        calibration_data = _load_calibration_data()
+        expected = json.load(open(l1b_ground_calibration_path))
+        for channel in calibration_data.channels:
+            assert channel in expected["channels"]
+        for board in calibration_data.boards:
+            assert board in expected["boards"]
+        for coefficients in calibration_data.housekeeping_temperature_coefficients:
+            assert coefficients in expected["housekeeping_temperature_coefficients"]
+
+    def test_load_calibration_data_file_not_found(self):
+        """Test error when calibration file is not found."""
+        with pytest.raises(FileNotFoundError, match="Calibration file not found"):
+            _load_calibration_data(Path('not/a/path'))
+
+
+class TestCalibrateAndDownsampleRadiometerData:
+    """Tests for _calibrate_and_downsample_radiometer_data function."""
+
+    @pytest.fixture
+    def mock_rad_data(self):
+        """Create mock radiometer dataset."""
+        return xr.Dataset({
+            "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
+            "ICIE__RAD_SAMPLE_0": (["time"], np.random.rand(1000)),
+            "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
+            "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
+            "ICIE__RAD_SAMPLE_3": (["time"], np.random.rand(1000))
+        })
+
+    @pytest.fixture
+    def mock_rad_data_missing_channel(self):
+        """Create mock radiometer dataset."""
+        return xr.Dataset({
+            "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
+            "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
+            "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
+            "ICIE__RAD_SAMPLE_3": (["time"], np.random.rand(1000))
+        })
+
+    def test_calibrate_and_downsample_success(self, mock_rad_data):
+        """Test successful calibration and downsampling."""
+        with patch("libera_rad.radiometer.gain_calibration.downsample_libera_signal") as mock_downsample, \
+                patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate, \
+                patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response:
+            mock_downsample.side_effect = lambda x: x[::10]
+            mock_calibrate.return_value = np.random.rand(1000)
+            mock_response.return_value = np.ones(501)
+
+            timestamps, calibrated_data = calibrate_and_downsample_radiometer_data(mock_rad_data)
+
+            assert len(timestamps) == 500  # Downsampled from 1000
+            assert "total" in calibrated_data
+            assert "lw" in calibrated_data
+
+    def test_calibrate_and_downsample_missing_channel(self, mock_rad_data_missing_channel, caplog):
+        """Test warning when channel variable is not found."""
+
+        with patch("libera_rad.radiometer.gain_calibration.downsample_libera_signal") as mock_downsample, \
+                patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate, \
+                patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response:
+            mock_downsample.side_effect = lambda x: x[::10]
+            mock_calibrate.return_value = np.random.rand(1000)
+            mock_response.return_value = np.ones(501)
+
+            timestamps, calibrated_data = calibrate_and_downsample_radiometer_data(mock_rad_data_missing_channel)
+
+            assert "sw" not in calibrated_data
+            assert "No variable found for channel sw" in caplog.text
+
+
+class TestInterpolateTemperatures:
+    """Tests for interpolate_temperatures function."""
+
+    def test_interpolate_temperatures(self):
+        """Test temperature interpolation."""
+        timestamps = np.array([100, 200, 300, 400, 500], dtype=np.float64)
+
+        nom_hk_data = xr.Dataset({
+            "PACKET_ICIE_TIME": (["time"], np.array([0, 250, 500], dtype=np.float64)),
+            "ICIE__FPE_TSCOPE_TEMP": (["time"], np.array([20.0, 25.0, 30.0]))
+        })
+
+        result = interpolate_temperatures(timestamps, nom_hk_data)
+        expected = pd.Series([22.0, 24.0, 26.0, 28.0, 30.0])
+        assert isinstance(result, pd.Series)
+        assert result.equals(expected)
+
+
+class TestCalculateRadiances:
+    """Tests for calculate_radiances function."""
+
+    def test_calculate_radiances_success(self):
+        """Test radiance calculation."""
+        calibrated_data = {
+            "sw": np.random.rand(100),
+            "lw": np.random.rand(100)
+        }
+        temperatures = pd.Series(np.full(100, 25.0))
+
+        with patch("libera_rad.calibration.constants.get_channel_name_enum") as mock_get_enum, \
+                patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_calc_rad:
+            mock_get_enum.side_effect = [ChannelName.SHORTWAVE, ChannelName.LONGWAVE]
+            mock_calc_rad.return_value = np.random.rand(100)
+
+            result = calculate_radiances(calibrated_data, temperatures)
+
+            assert "sw" in result
+            assert "lw" in result
+            assert len(result["sw"]) == 100
+
+    def test_calculate_radiances_invalid_channel(self, caplog):
+        """Test handling of invalid channel names."""
+        calibrated_data = {"invalid": np.random.rand(100)}
+        temperatures = pd.Series(np.full(100, 25.0))
+
+        with patch("libera_rad.calibration.constants.get_channel_name_enum", return_value=None):
+            result = calculate_radiances(calibrated_data, temperatures)
+
+            assert "invalid" not in result
+            assert "Could not convert channel string 'invalid' to enum" in caplog.text

@@ -1,6 +1,6 @@
 attributes:
   ProductID: RAD-4CH
-  algorithm_version: 0.4.4
+  algorithm_version: 0.5.0
   Earth_Sun_Distance_AU:
 
 coordinates:
@@ -191,7 +191,7 @@ variables:
       units: kilometers
       valid_range: [-8000.0, 8000.0]
       _FillValue: -9999
-  Satellite_Postion_Start_Of_Hour:
+  Satellite_Position_Start_Of_Hour:
     dtype: float64
     dimensions: ["n_hours", "euclidean_dim"]
     attributes:
@@ -358,7 +358,7 @@ variables:
     dimensions: ["radiometer_time"]
     attributes:
       long_name: Uncertainty in the filtered shortwave radiance
-      units: #TBC percent or absolute if including
+      units: None # Placeholder: TBC percent or absolute if including
       valid_range: [] #Depends on units
       _FillValue: -999
   Filtered_Radiance_LW:
@@ -376,7 +376,7 @@ variables:
     dimensions: ["radiometer_time"]
     attributes:
       long_name: Uncertainty in the filtered longwave radiance
-      units: #TBC percent or absolute if including
+      units: None # Placeholder: TBC percent or absolute if including
       valid_range: [] #Depends on units
       _FillValue: -999
   Filtered_Radiance_Tot:
@@ -394,7 +394,7 @@ variables:
     dimensions: ["radiometer_time"]
     attributes:
       long_name: Uncertainty in the filtered total radiance
-      units: #TBC percent or absolute if including
+      units: None # Placeholder: TBC percent or absolute if including
       valid_range: [] #Depends on units
       _FillValue: -999
   Filtered_Radiance_SSW:
@@ -412,7 +412,7 @@ variables:
     dimensions: ["radiometer_time"]
     attributes:
       long_name: Uncertainty in the filtered split-shortwave radiance
-      units: #TBC percent or absolute if including
+      units: None # Placeholder: TBC percent or absolute if including
       valid_range: [] #Depends on units
       _FillValue: -999
   Quality_Flag:

@@ -1,11 +1,11 @@
 """Module for calculating the radiance of a detector for the Libera mission"""
-
-# Standard
+import json
 import logging
+from pathlib import Path
 
-# Installed
 import numpy as np
 import pandas as pd
+import xarray as xr
 from scipy import constants
 
 from libera_rad.calibration.calibration_models import (
@@ -14,20 +14,60 @@ from libera_rad.calibration.calibration_models import (
     LiberaGroundCalibration,
     TemperatureCoefficients,
 )
-
-# Local
 from libera_rad.calibration.constants import (
     BoardName,
     ChannelName,
     DetectorTracePath,
     DetectorType,
     RadianceMethod,
+    find_channel_variable,
+    get_channel_name_enum,
 )
 from libera_rad.calibration.constants import (
     HousekeepingTemperatureCoefficient as TemperatureCoefficient,
 )
+from libera_rad.config import l1b_ground_calibration_path
+from libera_rad.radiometer.gain_calibration import (
+    apply_gain_calibration,
+    downsample_libera_signal,
+    get_ground_cal_response_function,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _load_calibration_data(calibration_data_path: Path = l1b_ground_calibration_path) -> LiberaGroundCalibration:
+    """
+    Load ground calibration data from JSON file.
+
+    Reads the L1B ground calibration parameters from a JSON configuration file located in the data directory.
+    Parameters
+    ----------
+    calibration_data_path : Path
+        Path to JSON configuration file containing L1B ground calibration parameters.
+
+    Returns
+    -------
+    LiberaGroundCalibration
+        Calibration data object containing channel-specific calibration parameters, response functions, and other
+        calibration coefficients.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the calibration file 'l1b_ground_calibration.json' is not found in the data directory.
+    json.JSONDecodeError
+        If the calibration file contains invalid JSON.
+    """
+    if not calibration_data_path.exists():
+        raise FileNotFoundError(f"Calibration file not found: {calibration_data_path}")
+
+    with open(calibration_data_path) as f:
+        ground_calibration = json.load(f)
+        return LiberaGroundCalibration(**ground_calibration)
+
+
+CALIBRATION_DATA = _load_calibration_data()
 
 
 def calculate_radiance(
@@ -61,7 +101,7 @@ def calculate_radiance(
         The calibration data for the detector. This includes the radiance coefficients, temperature coefficients, and
         other relevant calibration information stored in the LiberaGroundCalibration object
     radiance_method : RadianceMethod, optional
-        The method used to calculate the radiance. Options are PHYSICAL and NUMERICAL. Default is PHYSICAL
+        The method used to calculate the radiance. Options are PHYSICAL and NUMERICAL. Default is NUMERICAL
     electronics_board_name : BoardName, optional
         The name of the electronics board used for the detector. Default is EMFPE
     temperature_coefficient_name : HousekeepingTemperatureCoefficient, optional
@@ -684,3 +724,148 @@ def create_emitted_power_interpolation(
     power_emitted_range_W = power_emitted_range_uW / 1e6
 
     return power_emitted_range_W
+
+
+def calibrate_and_downsample_radiometer_data(
+    rad_data: xr.Dataset
+) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+    """
+    Apply gain calibration and downsample radiometer data.
+
+    For each radiometer channel, this function:
+    1. Extracts the raw digital number (DN) measurements
+    2. Applies gain calibration using ground calibration response functions
+    3. Downsamples the calibrated data to 100Hz
+
+    Parameters
+    ----------
+    rad_data : xr.Dataset
+        Radiometer sample dataset containing raw measurements and timestamps.
+
+    Returns
+    -------
+    np.ndarray
+        Timestamps downsampled to 100Hz.
+    dict[str, np.ndarray]
+        Dictionary mapping channel names (e.g., 'sw', 'lw', 'total', 'ssw') to
+        calibrated and downsampled radiometer data arrays.
+
+    Warnings
+    --------
+    Logs a warning if no variable is found matching a channel's enum identifier.
+    """
+    raw_times = rad_data["RAD_SAMPLE_FPE_TIME"].values.astype(np.float64)
+
+    calibrated_data_by_channel = {}
+    calibrated_data_points = 0
+
+    for channel_name, channel_properties in CALIBRATION_DATA.channels.items():
+        channel_variable = find_channel_variable(rad_data, channel_properties.channel_enum)
+
+        if channel_variable is None:
+            logger.warning(f"No variable found for channel {channel_name}")
+            continue
+
+        channel_dns = rad_data[channel_variable].to_numpy()
+
+        # Apply gain calibration
+        channel_calibrated_rad_data = apply_gain_calibration(
+            channel_dns,
+            get_ground_cal_response_function(freqs=np.arange(0, len(channel_dns) / 2 + 1)),
+            len(channel_dns),
+        )
+
+        # Downsample to 100Hz
+        calibrated_100hz_rad_data = downsample_libera_signal(channel_calibrated_rad_data)
+        calibrated_data_by_channel[channel_name] = calibrated_100hz_rad_data
+        if not calibrated_data_points:
+            calibrated_data_points = len(calibrated_100hz_rad_data)
+
+    # TODO[LIBSDC-720]: double check with Dave on timestamp downsampling
+    first_time = raw_times[0]
+    last_time = raw_times[-1]
+    timestamps = np.linspace(first_time, last_time, num=calibrated_data_points)
+    return timestamps, calibrated_data_by_channel
+
+
+def interpolate_temperatures(
+    timestamps: np.ndarray,
+    nom_hk_data: xr.Dataset
+) -> pd.Series:
+    """
+    Interpolate temperature data to radiometer sampling frequency.
+
+    Housekeeping temperature measurements are sampled at a lower frequency than radiometer data (1Hz vs. 100Hz after
+    downsampling). This function interpolates temperatures to match the radiometer timestamps.
+
+    Parameters
+    ----------
+    timestamps : np.ndarray
+        Target timestamps at radiometer sampling frequency (100Hz).
+    nom_hk_data : xr.Dataset
+        Nominal housekeeping dataset containing temperature measurements.
+
+    Returns
+    -------
+    pd.Series
+        Temperature values interpolated to match radiometer timestamps.
+
+    Notes
+    -----
+    Linear interpolation is used, with 'PACKET_ICIE_TIME' and 'ICIE__FPE_TSCOPE_TEMP' from housekeeping data.
+    """
+    # TODO[LIBSDC-713]: Compare interpolation of temperature data with average temperature for period
+    #     and consult IE team with results.
+    return pd.Series(np.interp(
+        timestamps,
+        nom_hk_data["PACKET_ICIE_TIME"].to_series(),
+        nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series()
+    ))
+
+
+def calculate_radiances(
+    calibrated_data_by_channel: dict[str, np.ndarray],
+    interpolated_temperatures: pd.Series
+) -> dict[str, np.ndarray]:
+    """
+    Calculate radiance from calibrated and downsampled dns.
+
+    Parameters
+    ----------
+    calibrated_data_by_channel : dict[str, np.ndarray]
+        Dictionary of calibrated radiometer data by channel name.
+    interpolated_temperatures : pd.Series
+        Temperature measurements at radiometer sampling frequency.
+    calibration_data : LiberaGroundCalibration
+        Ground calibration parameters containing conversion coefficients.
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        Dictionary mapping channel names to calculated radiance arrays in W/m²/sr.
+
+    Warnings
+    --------
+    Logs a warning if a channel string cannot be converted to a ChannelName enum.
+    """
+    calculated_radiance_by_channel = {}
+
+    for channel, dataset in calibrated_data_by_channel.items():
+        channel_enum = get_channel_name_enum(channel)
+        if channel_enum is None:
+            logger.warning(f"Could not convert channel string '{channel}' to enum")
+            continue
+
+        calculated_radiance = calculate_radiance(
+            pd.Series(dataset),
+            interpolated_temperatures,
+            channel_name=channel_enum,
+            calibration_data=CALIBRATION_DATA,
+        )
+        if isinstance(calculated_radiance, np.ndarray):
+            calculated_radiance_by_channel[channel] = calculated_radiance
+        else:
+            calculated_radiance_by_channel[channel] = calculated_radiance.to_numpy()
+
+    return calculated_radiance_by_channel
+

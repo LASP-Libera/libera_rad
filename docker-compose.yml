@@ -2,7 +2,7 @@ services:
   # Runs program inside a docker container. Not used in Jenkins.
   rad:
     platform: linux/amd64
-    image: libera-rad:latest
+    image: libera-radiometer:latest
     build:
       context: .
       target: libera-rad
