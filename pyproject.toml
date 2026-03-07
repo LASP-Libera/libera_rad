@@ -72,9 +72,6 @@ jupyter = "^1.0.0"
 markers = [
     "integration: mark a test as an integration test. Skip these tests with `pytest -m 'not integration' tests`",
 ]
-addopts = [
-    "-s", # Don't capture output (print it)
-]
 minversion = 6.0
 xfail_strict = true
 

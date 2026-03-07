@@ -1,4 +1,5 @@
 """Module for calculating the radiance of a detector for the Libera mission"""
+
 import json
 import logging
 from pathlib import Path
@@ -726,9 +727,7 @@ def create_emitted_power_interpolation(
     return power_emitted_range_W
 
 
-def calibrate_and_downsample_radiometer_data(
-    rad_data: xr.Dataset
-) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """
     Apply gain calibration and downsample radiometer data.
 
@@ -788,10 +787,7 @@ def calibrate_and_downsample_radiometer_data(
     return timestamps, calibrated_data_by_channel
 
 
-def interpolate_temperatures(
-    timestamps: np.ndarray,
-    nom_hk_data: xr.Dataset
-) -> pd.Series:
+def interpolate_temperatures(timestamps: np.ndarray, nom_hk_data: xr.Dataset) -> pd.Series:
     """
     Interpolate temperature data to radiometer sampling frequency.
 
@@ -816,16 +812,15 @@ def interpolate_temperatures(
     """
     # TODO[LIBSDC-713]: Compare interpolation of temperature data with average temperature for period
     #     and consult IE team with results.
-    return pd.Series(np.interp(
-        timestamps,
-        nom_hk_data["PACKET_ICIE_TIME"].to_series(),
-        nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series()
-    ))
+    return pd.Series(
+        np.interp(
+            timestamps, nom_hk_data["PACKET_ICIE_TIME"].to_series(), nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series()
+        )
+    )
 
 
 def calculate_radiances(
-    calibrated_data_by_channel: dict[str, np.ndarray],
-    interpolated_temperatures: pd.Series
+    calibrated_data_by_channel: dict[str, np.ndarray], interpolated_temperatures: pd.Series
 ) -> dict[str, np.ndarray]:
     """
     Calculate radiance from calibrated and downsampled dns.
@@ -868,4 +863,3 @@ def calculate_radiances(
             calculated_radiance_by_channel[channel] = calculated_radiance.to_numpy()
 
     return calculated_radiance_by_channel
-

@@ -45,6 +45,7 @@ def test_dynamic_kernels_path(test_data_path):
     """Returns the Path to the test geolocation kernels directory"""
     return test_data_path / "dynamic_kernels"
 
+
 @pytest.fixture
 def test_integration_data_path(test_data_path):
     """Returns the Path to the integration test l1b directory"""
@@ -55,34 +56,43 @@ def test_integration_data_path(test_data_path):
 def generate_input_manifest(tmp_path, test_integration_data_path):
     """Generating test manifest from the data in test_data"""
     # Radiometer L1A data
-    l1a_radiometer_test_file = (test_integration_data_path /
-                                "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc")
+    l1a_radiometer_test_file = (
+        test_integration_data_path
+        / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+    )
 
     # Housekeeping L1A Data
-    l1a_housekeeping_test_file = (test_integration_data_path /
-                                  "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc")
+    l1a_housekeeping_test_file = (
+        test_integration_data_path / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+    )
 
     # SPICE Kernels - elevation
-    spice_kernel_elevation_file = (test_integration_data_path /
-                                   "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26016220328.bc")
+    spice_kernel_elevation_file = (
+        test_integration_data_path / "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26016220328.bc"
+    )
     # SPICE Kernels - azimuth
-    spice_kernel_azimuth_file = (test_integration_data_path /
-                                 "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26016220138.bc")
+    spice_kernel_azimuth_file = (
+        test_integration_data_path / "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26016220138.bc"
+    )
     # SPICE Kernels - jpss spk
-    spice_kernel_jpss_spk_file = (test_integration_data_path /
-                                  "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp")
+    spice_kernel_jpss_spk_file = (
+        test_integration_data_path / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp"
+    )
     # SPICE Kernels - jpss ck
-    spice_kernel_jpss_ck_file = (test_integration_data_path /
-                                 "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc")
+    spice_kernel_jpss_ck_file = (
+        test_integration_data_path / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc"
+    )
 
     input_manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
 
-    input_manifest.add_files(l1a_radiometer_test_file,
-                             l1a_housekeeping_test_file,
-                             spice_kernel_elevation_file,
-                             spice_kernel_azimuth_file,
-                             spice_kernel_jpss_spk_file,
-                             spice_kernel_jpss_ck_file)
+    input_manifest.add_files(
+        l1a_radiometer_test_file,
+        l1a_housekeeping_test_file,
+        spice_kernel_elevation_file,
+        spice_kernel_azimuth_file,
+        spice_kernel_jpss_spk_file,
+        spice_kernel_jpss_ck_file,
+    )
     input_manifest.add_desired_time_range(
         start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC),
         end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=UTC),

@@ -370,7 +370,7 @@ class TestLoadCalibrationData:
     def test_load_calibration_data_file_not_found(self):
         """Test error when calibration file is not found."""
         with pytest.raises(FileNotFoundError, match="Calibration file not found"):
-            _load_calibration_data(Path('not/a/path'))
+            _load_calibration_data(Path("not/a/path"))
 
 
 class TestCalibrateAndDownsampleRadiometerData:
@@ -379,29 +379,35 @@ class TestCalibrateAndDownsampleRadiometerData:
     @pytest.fixture
     def mock_rad_data(self):
         """Create mock radiometer dataset."""
-        return xr.Dataset({
-            "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
-            "ICIE__RAD_SAMPLE_0": (["time"], np.random.rand(1000)),
-            "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
-            "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
-            "ICIE__RAD_SAMPLE_3": (["time"], np.random.rand(1000))
-        })
+        return xr.Dataset(
+            {
+                "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
+                "ICIE__RAD_SAMPLE_0": (["time"], np.random.rand(1000)),
+                "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
+                "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
+                "ICIE__RAD_SAMPLE_3": (["time"], np.random.rand(1000)),
+            }
+        )
 
     @pytest.fixture
     def mock_rad_data_missing_channel(self):
         """Create mock radiometer dataset."""
-        return xr.Dataset({
-            "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
-            "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
-            "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
-            "ICIE__RAD_SAMPLE_3": (["time"], np.random.rand(1000))
-        })
+        return xr.Dataset(
+            {
+                "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
+                "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
+                "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
+                "ICIE__RAD_SAMPLE_3": (["time"], np.random.rand(1000)),
+            }
+        )
 
     def test_calibrate_and_downsample_success(self, mock_rad_data):
         """Test successful calibration and downsampling."""
-        with patch("libera_rad.radiometer.gain_calibration.downsample_libera_signal") as mock_downsample, \
-                patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate, \
-                patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response:
+        with (
+            patch("libera_rad.radiometer.gain_calibration.downsample_libera_signal") as mock_downsample,
+            patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
+            patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
+        ):
             mock_downsample.side_effect = lambda x: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
@@ -415,9 +421,11 @@ class TestCalibrateAndDownsampleRadiometerData:
     def test_calibrate_and_downsample_missing_channel(self, mock_rad_data_missing_channel, caplog):
         """Test warning when channel variable is not found."""
 
-        with patch("libera_rad.radiometer.gain_calibration.downsample_libera_signal") as mock_downsample, \
-                patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate, \
-                patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response:
+        with (
+            patch("libera_rad.radiometer.gain_calibration.downsample_libera_signal") as mock_downsample,
+            patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
+            patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
+        ):
             mock_downsample.side_effect = lambda x: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
@@ -435,10 +443,12 @@ class TestInterpolateTemperatures:
         """Test temperature interpolation."""
         timestamps = np.array([100, 200, 300, 400, 500], dtype=np.float64)
 
-        nom_hk_data = xr.Dataset({
-            "PACKET_ICIE_TIME": (["time"], np.array([0, 250, 500], dtype=np.float64)),
-            "ICIE__FPE_TSCOPE_TEMP": (["time"], np.array([20.0, 25.0, 30.0]))
-        })
+        nom_hk_data = xr.Dataset(
+            {
+                "PACKET_ICIE_TIME": (["time"], np.array([0, 250, 500], dtype=np.float64)),
+                "ICIE__FPE_TSCOPE_TEMP": (["time"], np.array([20.0, 25.0, 30.0])),
+            }
+        )
 
         result = interpolate_temperatures(timestamps, nom_hk_data)
         expected = pd.Series([22.0, 24.0, 26.0, 28.0, 30.0])
@@ -451,14 +461,13 @@ class TestCalculateRadiances:
 
     def test_calculate_radiances_success(self):
         """Test radiance calculation."""
-        calibrated_data = {
-            "sw": np.random.rand(100),
-            "lw": np.random.rand(100)
-        }
+        calibrated_data = {"sw": np.random.rand(100), "lw": np.random.rand(100)}
         temperatures = pd.Series(np.full(100, 25.0))
 
-        with patch("libera_rad.calibration.constants.get_channel_name_enum") as mock_get_enum, \
-                patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_calc_rad:
+        with (
+            patch("libera_rad.calibration.constants.get_channel_name_enum") as mock_get_enum,
+            patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_calc_rad,
+        ):
             mock_get_enum.side_effect = [ChannelName.SHORTWAVE, ChannelName.LONGWAVE]
             mock_calc_rad.return_value = np.random.rand(100)
 

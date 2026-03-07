@@ -1,4 +1,5 @@
 """L1b processing code libera RAD camera"""
+
 import argparse
 import logging
 import os
@@ -80,9 +81,8 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     # Steps 4: Store data with metadata and write to output folder
     logger.info("Step 4: Creating and writing data product")
     output_data_file_path = create_and_write_data_product(
-        processed_data=processed_data,
-        dynamic_attributes=dynamic_product_attributes,
-        output_path=dropbox_path)
+        processed_data=processed_data, dynamic_attributes=dynamic_product_attributes, output_path=dropbox_path
+    )
 
     # Step 6: Create output manifest
     logger.info("Step 5: Creating output manifest")
@@ -165,8 +165,9 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     return all_data, spice_directory
 
 
-def process_l1a_to_l1b(all_input_data: dict[str, xr.Dataset], spice_directory: Path) \
-        -> tuple[dict[str, np.ndarray], dict[str, str]]:
+def process_l1a_to_l1b(
+    all_input_data: dict[str, xr.Dataset], spice_directory: Path
+) -> tuple[dict[str, np.ndarray], dict[str, str]]:
     """
     Process L1A data and SPICE Kernels to L1B product.
 
@@ -208,11 +209,7 @@ def process_l1a_to_l1b(all_input_data: dict[str, xr.Dataset], spice_directory: P
 
     # Initialize SPICE kernels
     km = KernelManager()
-    km.load_libera_dynamic_kernels(
-        str(spice_directory),
-        needs_naif_kernels=True,
-        needs_static_kernels=True
-    )
+    km.load_libera_dynamic_kernels(str(spice_directory), needs_naif_kernels=True, needs_static_kernels=True)
 
     # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
@@ -231,16 +228,12 @@ def process_l1a_to_l1b(all_input_data: dict[str, xr.Dataset], spice_directory: P
     calculated_radiance_by_channel = radiance.calculate_radiances(calibrated_data_by_channel, interpolated_temperatures)
 
     # Package output product
-    l1b_product, attributes = _package_l1b_product(
-        timestamps, lat_lon_alt, calculated_radiance_by_channel
-    )
+    l1b_product, attributes = _package_l1b_product(timestamps, lat_lon_alt, calculated_radiance_by_channel)
 
     return l1b_product, attributes
 
 
-def _extract_radiometer_datasets(
-    all_input_data: dict[str, xr.Dataset]
-) -> tuple[xr.Dataset, xr.Dataset]:
+def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple[xr.Dataset, xr.Dataset]:
     """
     Extract radiometer and housekeeping datasets from input data.
 
@@ -289,9 +282,7 @@ def _extract_radiometer_datasets(
 
 
 def _package_l1b_product(
-    timestamps: np.ndarray,
-    lat_lon_alt: pd.DataFrame,
-    calculated_radiance_by_channel: dict[str, np.ndarray]
+    timestamps: np.ndarray, lat_lon_alt: pd.DataFrame, calculated_radiance_by_channel: dict[str, np.ndarray]
 ) -> tuple[dict[str, ndarray], dict[str, str]]:
     """
     Package L1B product according to product definition.
@@ -320,7 +311,7 @@ def _package_l1b_product(
     placeholder_neg999 = np.full(shape=data_length, fill_value=-999)
     placeholder_2d_neg999 = np.full(shape=[data_length, 2], fill_value=-999)
     placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999)
-    radiometer_time = timestamps.astype('datetime64[ns]')
+    radiometer_time = timestamps.astype("datetime64[ns]")
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
@@ -362,18 +353,16 @@ def _package_l1b_product(
         "Clock_Angle": placeholder_neg999,
         "Clock_Angle_Rate": placeholder_neg999,
         # Instrument
-        "Operational_Mode": np.full(shape=data_length, fill_value=-128, dtype=np.int8), # radiometer OBSID?
-        "Filtered_Radiance_SW": calculated_radiance_by_channel.get(
-            ChannelName.SHORTWAVE.value, placeholder_neg999),
+        "Operational_Mode": np.full(shape=data_length, fill_value=-128, dtype=np.int8),  # radiometer OBSID?
+        "Filtered_Radiance_SW": calculated_radiance_by_channel.get(ChannelName.SHORTWAVE.value, placeholder_neg999),
         "Filtered_Radiance_SW_Uncertainty": placeholder_neg999,
-        "Filtered_Radiance_LW": calculated_radiance_by_channel.get(
-            ChannelName.LONGWAVE.value, placeholder_neg999),
+        "Filtered_Radiance_LW": calculated_radiance_by_channel.get(ChannelName.LONGWAVE.value, placeholder_neg999),
         "Filtered_Radiance_LW_Uncertainty": placeholder_neg999,
-        "Filtered_Radiance_Tot": calculated_radiance_by_channel.get(
-            ChannelName.TOTAL.value, placeholder_neg999),
+        "Filtered_Radiance_Tot": calculated_radiance_by_channel.get(ChannelName.TOTAL.value, placeholder_neg999),
         "Filtered_Radiance_Tot_Uncertainty": placeholder_neg999,
         "Filtered_Radiance_SSW": calculated_radiance_by_channel.get(
-            ChannelName.SPLIT_SHORTWAVE.value, placeholder_neg999),
+            ChannelName.SPLIT_SHORTWAVE.value, placeholder_neg999
+        ),
         "Filtered_Radiance_SSW_Uncertainty": placeholder_neg999,
         "Quality_Flag": placeholder_zeros,
     }
@@ -413,9 +402,7 @@ def calculate_data_quality_flags(data_length: int) -> np.ndarray:
 
 
 def create_and_write_data_product(
-    processed_data: dict[str, np.ndarray],
-    dynamic_attributes: dict[str, str],
-    output_path: str | Path | S3Path
+    processed_data: dict[str, np.ndarray], dynamic_attributes: dict[str, str], output_path: str | Path | S3Path
 ) -> LiberaDataProductFilename:
     """
     Store science data with metadata and write to output folder.
@@ -470,7 +457,7 @@ def create_and_write_data_product(
         output_path=output_path,
         time_variable="radiometer_time",
         strict=False,
-        dynamic_product_attributes=dynamic_attributes
+        dynamic_product_attributes=dynamic_attributes,
     )
     logger.info(f"Saving to {output_file_path}")
     return output_file_path

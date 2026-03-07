@@ -8,19 +8,14 @@ class TestFindChannelVariable:
 
     def test_find_channel_variable_found(self):
         """Test finding a channel variable that exists."""
-        rad_data = xr.Dataset({
-            "RADIOMETER_CH_1": (["time"], [1, 2, 3]),
-            "RADIOMETER_CH_2": (["time"], [4, 5, 6])
-        })
+        rad_data = xr.Dataset({"RADIOMETER_CH_1": (["time"], [1, 2, 3]), "RADIOMETER_CH_2": (["time"], [4, 5, 6])})
 
         result = find_channel_variable(rad_data, "1")
         assert result == "RADIOMETER_CH_1"
 
     def test_find_channel_variable_not_found(self):
         """Test when channel variable is not found."""
-        rad_data = xr.Dataset({
-            "RADIOMETER_CH_1": (["time"], [1, 2, 3])
-        })
+        rad_data = xr.Dataset({"RADIOMETER_CH_1": (["time"], [1, 2, 3])})
 
         result = find_channel_variable(rad_data, "9")
         assert result is None

@@ -1,5 +1,6 @@
 # Version Changes
-## 0.5.0 
+
+## 0.5.0
 
 - Initial l1b production algorithm, including gain calibration, geolocation, and radiance calculation.
 
