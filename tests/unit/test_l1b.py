@@ -47,9 +47,11 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), \
-                patch("libera_rad.l1b.smart_copy_file"), \
-                patch("xarray.open_dataset") as mock_open_dataset:
+        with (
+            patch("libera_rad.l1b.smart_open", return_value=mock_file),
+            patch("libera_rad.l1b.smart_copy_file"),
+            patch("xarray.open_dataset") as mock_open_dataset,
+        ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
 
             all_data, spice_directory = l1b.read_all_input_data(mock_manifest)
@@ -65,9 +67,11 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), \
-                patch("libera_rad.l1b.smart_copy_file"), \
-                patch("xarray.open_dataset") as mock_open_dataset:
+        with (
+            patch("libera_rad.l1b.smart_open", return_value=mock_file),
+            patch("libera_rad.l1b.smart_copy_file"),
+            patch("xarray.open_dataset") as mock_open_dataset,
+        ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
 
             all_data, _ = l1b.read_all_input_data(mock_manifest)
@@ -83,9 +87,11 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), \
-                patch("libera_rad.l1b.smart_copy_file") as mock_copy, \
-                patch("xarray.open_dataset") as mock_open_dataset:
+        with (
+            patch("libera_rad.l1b.smart_open", return_value=mock_file),
+            patch("libera_rad.l1b.smart_copy_file") as mock_copy,
+            patch("xarray.open_dataset") as mock_open_dataset,
+        ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
 
             all_data, _ = l1b.read_all_input_data(mock_manifest)
@@ -102,8 +108,7 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(side_effect=FileNotFoundError("File not found"))
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), \
-                patch("libera_rad.l1b.smart_copy_file"):
+        with patch("libera_rad.l1b.smart_open", return_value=mock_file), patch("libera_rad.l1b.smart_copy_file"):
             with pytest.raises(FileNotFoundError):
                 l1b.read_all_input_data(mock_manifest)
 
@@ -130,9 +135,11 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), \
-                patch("libera_rad.l1b.smart_copy_file"), \
-                patch("xarray.open_dataset", side_effect=Exception("Processing error")):
+        with (
+            patch("libera_rad.l1b.smart_open", return_value=mock_file),
+            patch("libera_rad.l1b.smart_copy_file"),
+            patch("xarray.open_dataset", side_effect=Exception("Processing error")),
+        ):
             with pytest.raises(Exception, match="Processing error"):
                 l1b.read_all_input_data(mock_manifest)
 
@@ -155,9 +162,11 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), \
-                patch("libera_rad.l1b.smart_copy_file") as mock_copy, \
-                patch("xarray.open_dataset") as mock_open_dataset:
+        with (
+            patch("libera_rad.l1b.smart_open", return_value=mock_file),
+            patch("libera_rad.l1b.smart_copy_file") as mock_copy,
+            patch("xarray.open_dataset") as mock_open_dataset,
+        ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
 
             all_data, _ = l1b.read_all_input_data(manifest)
@@ -174,9 +183,11 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), \
-                patch("libera_rad.l1b.smart_copy_file"), \
-                patch("xarray.open_dataset") as mock_open_dataset:
+        with (
+            patch("libera_rad.l1b.smart_open", return_value=mock_file),
+            patch("libera_rad.l1b.smart_copy_file"),
+            patch("xarray.open_dataset") as mock_open_dataset,
+        ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
 
             all_data, spice_directory = l1b.read_all_input_data(mock_manifest)
@@ -197,7 +208,7 @@ class TestExtractRadiometerDatasets:
 
         all_input_data = {
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": rad_dataset,
-            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": hk_dataset
+            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": hk_dataset,
         }
 
         rad_data, nom_hk_data = l1b._extract_radiometer_datasets(all_input_data)
@@ -217,8 +228,9 @@ class TestExtractRadiometerDatasets:
     def test_extract_radiometer_datasets_missing_hk_data(self):
         """Test error when housekeeping data is missing."""
         all_input_data = {
-            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc":
-                xr.Dataset({"var": (["time"], [1, 2, 3])})
+            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": xr.Dataset(
+                {"var": (["time"], [1, 2, 3])}
+            )
         }
 
         with pytest.raises(ValueError, match="No nominal housekeeping data found"):
@@ -249,19 +261,23 @@ class TestProcessL1aToL1b:
     @pytest.fixture
     def mock_input_data(self):
         """Create mock input data."""
-        rad_data = xr.Dataset({
-            "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, dtype=np.float64)),
-            "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000))
-        })
+        rad_data = xr.Dataset(
+            {
+                "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, dtype=np.float64)),
+                "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
+            }
+        )
 
-        nom_hk_data = xr.Dataset({
-            "PACKET_ICIE_TIME": (["time"], np.arange(0, 1000, 10, dtype=np.float64)),
-            "ICIE__FPE_TSCOPE_TEMP": (["time"], np.full(100, 25.0))
-        })
+        nom_hk_data = xr.Dataset(
+            {
+                "PACKET_ICIE_TIME": (["time"], np.arange(0, 1000, 10, dtype=np.float64)),
+                "ICIE__FPE_TSCOPE_TEMP": (["time"], np.full(100, 25.0)),
+            }
+        )
 
         return {
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": rad_data,
-            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": nom_hk_data
+            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": nom_hk_data,
         }
 
     def test_process_l1a_to_l1b(self, mock_input_data, tmp_path):
@@ -269,13 +285,15 @@ class TestProcessL1aToL1b:
         spice_dir = tmp_path / "spice"
         spice_dir.mkdir()
 
-        with patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal, \
-                patch("libera_utils.libera_spice.kernel_manager.KernelManager.load_libera_dynamic_kernels"), \
-                patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample, \
-                patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate, \
-                patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response, \
-                patch("libera_rad.geolocation.calculate_lat_lon_altitude") as mock_geoloc, \
-                patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance:
+        with (
+            patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
+            patch("libera_utils.libera_spice.kernel_manager.KernelManager.load_libera_dynamic_kernels"),
+            patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
+            patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
+            patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
+            patch("libera_rad.geolocation.calculate_lat_lon_altitude") as mock_geoloc,
+            patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
+        ):
             # Setup mocks
             mock_cal = Mock()
             channel_prop = Mock()
@@ -286,11 +304,9 @@ class TestProcessL1aToL1b:
             mock_downsample.side_effect = lambda x: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
-            mock_geoloc.return_value = pd.DataFrame({
-                "lat": np.random.rand(100),
-                "lon": np.random.rand(100),
-                "alt": np.random.rand(100)
-            })
+            mock_geoloc.return_value = pd.DataFrame(
+                {"lat": np.random.rand(100), "lon": np.random.rand(100), "alt": np.random.rand(100)}
+            )
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, spice_dir)
@@ -332,10 +348,12 @@ class TestAlgorithm:
     def test_algorithm_missing_processing_path(self, tmp_path, monkeypatch):
         """Test error when PROCESSING_PATH is not set."""
         manifest_path = tmp_path / "manifest.json"
-        with patch.dict(os.environ, {}, clear=True), \
-                patch("libera_utils.Manifest.from_file") as mock_from_file, \
-                patch("libera_rad.l1b.read_all_input_data") as mock_read_all, \
-                patch("libera_rad.l1b.process_l1a_to_l1b"):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("libera_utils.Manifest.from_file") as mock_from_file,
+            patch("libera_rad.l1b.read_all_input_data") as mock_read_all,
+            patch("libera_rad.l1b.process_l1a_to_l1b"),
+        ):
             mock_from_file.return_value = Mock(files=[manifest_path])
             mock_read_all.return_value = ({"foo": xr.Dataset()}, tmp_path)
 
