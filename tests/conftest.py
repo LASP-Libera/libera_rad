@@ -13,14 +13,14 @@ from libera_utils.io.manifest import Manifest, ManifestType
 from libera_rad.calibration.calibration_models import LiberaGroundCalibration
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def ground_data(test_data_path):
     """Returns a pandas DataFrame of ground data from Dave 11/1"""
     dave_ground_data = test_data_path / "ground_calibration_test_data.csv"
     return pd.read_csv(dave_ground_data)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def calibration_data(calibration_data_path):
     """Returns a dictionary of calibration data"""
     with open(calibration_data_path / "l1b_ground_calibration.json") as f:
@@ -28,25 +28,25 @@ def calibration_data(calibration_data_path):
     return LiberaGroundCalibration(**ground_calibration)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def calibration_data_path():
     """Returns the Path to the calibration_data directory"""
     return Path(sys.modules[__name__.split(".")[0]].__file__).parent.parent / "libera_rad" / "data"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_data_path():
     """Returns the Path to the test_data directory"""
     return Path(sys.modules[__name__.split(".")[0]].__file__).parent / "test_data"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_dynamic_kernels_path(test_data_path):
     """Returns the Path to the test geolocation kernels directory"""
     return test_data_path / "dynamic_kernels"
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_integration_data_path(test_data_path):
     """Returns the Path to the integration test l1b directory"""
     return test_data_path / "l1b_integration_data"

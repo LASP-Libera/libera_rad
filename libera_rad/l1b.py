@@ -309,10 +309,12 @@ def _package_l1b_product(
     data_length = len(timestamps)
     placeholder_zeros = calculate_data_quality_flags(data_length)
     placeholder_neg999 = np.full(shape=data_length, fill_value=-999, dtype=np.float32)
+    placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999, dtype=np.float32)
     placeholder_3d_neg999 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float64)
+    placeholder_3d_neg9999 = np.full(shape=[data_length, 3], fill_value=-9999, dtype=np.float64)
     placeholder_3d_neg999_f32 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float32)
-    placeholder_hourly_3d_neg999 = np.full(shape=[24, 3], fill_value=-999, dtype=np.float64)
-    placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999, dtype=np.float64)
+    placeholder_hourly_3d_neg999 = np.full(shape=[24, 3], fill_value=-999, dtype=np.float64)  # 24 hours per day
+    placeholder_hourly_3d_neg9999 = np.full(shape=[24, 3], fill_value=-9999, dtype=np.float64)  # 24 hours per day
     radiometer_time = timestamps.astype("datetime64[ns]")
 
     l1b_dataset = {
@@ -324,7 +326,7 @@ def _package_l1b_product(
         "Longitude": lat_lon_alt["lon"].to_numpy().astype(np.float32),
         "Terrain_Corrected_Longitude": placeholder_neg999,
         "Altitude": lat_lon_alt["alt"].to_numpy().astype(np.float32),
-        "Terrain_Corrected_Altitude": placeholder_neg999,
+        "Terrain_Corrected_Altitude": placeholder_neg9999,
         "Subsatellite_Latitude": placeholder_neg999,
         "Subsolar_Latitude": placeholder_neg999,
         "Subsatellite_Colatitude": placeholder_neg999,
@@ -338,8 +340,8 @@ def _package_l1b_product(
         "Relative_Azimuth_Surface": placeholder_neg999,
         "Viewing_Zenith_Surface": placeholder_neg999,
         "Viewing_Azimuth_Surface_WRT_North": placeholder_neg999,
-        "Satellite_Position": placeholder_3d_neg999,
-        "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg999,
+        "Satellite_Position": placeholder_3d_neg9999,
+        "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,
         "Satellite_Velocity": placeholder_3d_neg999,
         "Satellite_Velocity_Start_Of_Hour": placeholder_hourly_3d_neg999,
         "Satellite_Attitude_Q0": placeholder_neg999,
