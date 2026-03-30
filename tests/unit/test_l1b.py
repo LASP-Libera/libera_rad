@@ -247,6 +247,7 @@ class TestCalculateDataQualityFlags:
         assert isinstance(result, np.ndarray)
         assert len(result) == 100
         assert np.all(result == 0)
+        assert result.dtype == np.uint32
 
     def test_calculate_data_quality_flags_empty(self):
         """Test with zero length."""

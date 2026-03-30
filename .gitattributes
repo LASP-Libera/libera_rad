@@ -5,6 +5,6 @@
 **/test_data/**/*.bsp filter=lfs diff=lfs merge=lfs -text
 **/test_data/**/*.bc filter=lfs diff=lfs merge=lfs -text
 **/test_data/**/*.bpc filter=lfs diff=lfs merge=lfs -text
-
+**/test_data/**/*.nc filter=lfs diff=lfs merge=lfs -text
 # Ground Calibration data files
 **/test_data/ground_calibration*.csv filter=lfs diff=lfs merge=lfs -text

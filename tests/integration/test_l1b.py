@@ -24,7 +24,7 @@ class TestL1b:
         monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
         output_manifest_path = l1b.algorithm(generate_input_manifest)
         expected_dataset_path = (
-            test_integration_data_path / "LIBERA_L1B_RAD-4CH_V0-4-4_20251120T175950_20251120T190549_R26019201635.nc"
+            test_integration_data_path / "LIBERA_L1B_RAD-4CH_V0-5-0_20251120T175950_20251120T180020_R26086185931.nc"
         )
         expected_libera_file_name = LiberaDataProductFilename.from_file_path(expected_dataset_path)
 
