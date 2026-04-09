@@ -76,4 +76,14 @@ venv
 pytest.ini
 
 # Dev Container #
+#################
 .devcontainer
+
+# AI Tooling #
+##############
+# Always ignore user local settings
+.claude/settings.local.json
+# remove .claude/* from ignore if we ever want to add agents or standard settings.json
+.claude/*
+# Never ignore CLAUDE.md
+!.claude/CLAUDE.md
