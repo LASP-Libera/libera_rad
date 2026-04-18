@@ -310,6 +310,7 @@ def _package_l1b_product(
     placeholder_zeros = calculate_data_quality_flags(data_length)
     placeholder_neg999 = np.full(shape=data_length, fill_value=-999, dtype=np.float32)
     placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999, dtype=np.float32)
+    placeholder_neg9999_f64 = np.full(shape=data_length, fill_value=-9999, dtype=np.float64)
     placeholder_3d_neg999 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float64)
     placeholder_3d_neg9999 = np.full(shape=[data_length, 3], fill_value=-9999, dtype=np.float64)
     placeholder_3d_neg999_f32 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float32)
@@ -351,7 +352,7 @@ def _package_l1b_product(
         "Azimuth": placeholder_neg999,
         "Elevation": placeholder_neg999,
         "Line_Of_Sight": placeholder_3d_neg999_f32,
-        "Radius_of_Satellite_from_Center_of_Earth": placeholder_neg9999,
+        "Radius_of_Satellite_from_Center_of_Earth": placeholder_neg9999_f64,
         "Cone_Angle": placeholder_neg999,
         "Cone_Angle_Rate": placeholder_neg999,
         "Clock_Angle": placeholder_neg999,

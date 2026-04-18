@@ -8,3 +8,5 @@
 **/test_data/**/*.nc filter=lfs diff=lfs merge=lfs -text
 # Ground Calibration data files
 **/test_data/ground_calibration*.csv filter=lfs diff=lfs merge=lfs -text
+# Notebook sample data files
+**/sample_data/*.nc filter=lfs diff=lfs merge=lfs -text
