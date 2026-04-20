@@ -1,5 +1,9 @@
 # Version Changes
 
+## 0.5.1
+
+- Update the L1B Radiometer 4-channel product definition to be compatible with the latest version of libera_utils with dimension and type enforcement
+
 ## 0.5.0
 
 - Initial l1b production algorithm, including gain calibration, geolocation, and radiance calculation.

@@ -308,21 +308,26 @@ def _package_l1b_product(
     """
     data_length = len(timestamps)
     placeholder_zeros = calculate_data_quality_flags(data_length)
-    placeholder_neg999 = np.full(shape=data_length, fill_value=-999)
-    placeholder_2d_neg999 = np.full(shape=[data_length, 2], fill_value=-999)
-    placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999)
+    placeholder_neg999 = np.full(shape=data_length, fill_value=-999, dtype=np.float32)
+    placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999, dtype=np.float32)
+    placeholder_neg9999_f64 = np.full(shape=data_length, fill_value=-9999, dtype=np.float64)
+    placeholder_3d_neg999 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float64)
+    placeholder_3d_neg9999 = np.full(shape=[data_length, 3], fill_value=-9999, dtype=np.float64)
+    placeholder_3d_neg999_f32 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float32)
+    placeholder_hourly_3d_neg999 = np.full(shape=[24, 3], fill_value=-999, dtype=np.float64)  # 24 hours per day
+    placeholder_hourly_3d_neg9999 = np.full(shape=[24, 3], fill_value=-9999, dtype=np.float64)  # 24 hours per day
     radiometer_time = timestamps.astype("datetime64[ns]")
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
         # Position
-        "Latitude": lat_lon_alt["lat"].to_numpy(),
+        "Latitude": lat_lon_alt["lat"].to_numpy().astype(np.float32),
         "Terrain_Corrected_Latitude": placeholder_neg999,
         "Colatitude": placeholder_neg999,
-        "Longitude": lat_lon_alt["lon"].to_numpy(),
+        "Longitude": lat_lon_alt["lon"].to_numpy().astype(np.float32),
         "Terrain_Corrected_Longitude": placeholder_neg999,
-        "Altitude": lat_lon_alt["alt"].to_numpy(),
-        "Terrain_Corrected_Altitude": placeholder_neg999,
+        "Altitude": lat_lon_alt["alt"].to_numpy().astype(np.float32),
+        "Terrain_Corrected_Altitude": placeholder_neg9999,
         "Subsatellite_Latitude": placeholder_neg999,
         "Subsolar_Latitude": placeholder_neg999,
         "Subsatellite_Colatitude": placeholder_neg999,
@@ -336,33 +341,39 @@ def _package_l1b_product(
         "Relative_Azimuth_Surface": placeholder_neg999,
         "Viewing_Zenith_Surface": placeholder_neg999,
         "Viewing_Azimuth_Surface_WRT_North": placeholder_neg999,
-        "Satellite_Position": placeholder_2d_neg999,
-        "Satellite_Position_Start_Of_Hour": placeholder_2d_neg999,
-        "Satellite_Velocity": placeholder_2d_neg999,
-        "Satellite_Velocity_Start_Of_Hour": placeholder_2d_neg999,
+        "Satellite_Position": placeholder_3d_neg9999,
+        "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,
+        "Satellite_Velocity": placeholder_3d_neg999,
+        "Satellite_Velocity_Start_Of_Hour": placeholder_hourly_3d_neg999,
         "Satellite_Attitude_Q0": placeholder_neg999,
         "Satellite_Attitude_Q1": placeholder_neg999,
         "Satellite_Attitude_Q2": placeholder_neg999,
         "Satellite_Attitude_Q3": placeholder_neg999,
         "Azimuth": placeholder_neg999,
         "Elevation": placeholder_neg999,
-        "Line_Of_Sight": placeholder_2d_neg999,
-        "Radius_of_Satellite_from_Center_of_Earth": placeholder_neg9999,
+        "Line_Of_Sight": placeholder_3d_neg999_f32,
+        "Radius_of_Satellite_from_Center_of_Earth": placeholder_neg9999_f64,
         "Cone_Angle": placeholder_neg999,
         "Cone_Angle_Rate": placeholder_neg999,
         "Clock_Angle": placeholder_neg999,
         "Clock_Angle_Rate": placeholder_neg999,
         # Instrument
         "Operational_Mode": np.full(shape=data_length, fill_value=-128, dtype=np.int8),  # radiometer OBSID?
-        "Filtered_Radiance_SW": calculated_radiance_by_channel.get(ChannelName.SHORTWAVE.value, placeholder_neg999),
+        "Filtered_Radiance_SW": calculated_radiance_by_channel.get(
+            ChannelName.SHORTWAVE.value, placeholder_neg999
+        ).astype(np.float32),
         "Filtered_Radiance_SW_Uncertainty": placeholder_neg999,
-        "Filtered_Radiance_LW": calculated_radiance_by_channel.get(ChannelName.LONGWAVE.value, placeholder_neg999),
+        "Filtered_Radiance_LW": calculated_radiance_by_channel.get(
+            ChannelName.LONGWAVE.value, placeholder_neg999
+        ).astype(np.float32),
         "Filtered_Radiance_LW_Uncertainty": placeholder_neg999,
-        "Filtered_Radiance_Tot": calculated_radiance_by_channel.get(ChannelName.TOTAL.value, placeholder_neg999),
+        "Filtered_Radiance_Tot": calculated_radiance_by_channel.get(ChannelName.TOTAL.value, placeholder_neg999).astype(
+            np.float32
+        ),
         "Filtered_Radiance_Tot_Uncertainty": placeholder_neg999,
         "Filtered_Radiance_SSW": calculated_radiance_by_channel.get(
             ChannelName.SPLIT_SHORTWAVE.value, placeholder_neg999
-        ),
+        ).astype(np.float32),
         "Filtered_Radiance_SSW_Uncertainty": placeholder_neg999,
         "Quality_Flag": placeholder_zeros,
     }
@@ -397,7 +408,7 @@ def calculate_data_quality_flags(data_length: int) -> np.ndarray:
         Array of quality flags with shape (data_length,). Currently all zeros.
     """
     # TODO[LIBSDC-712]: Create function for assigning data quality flags
-    placeholder_zeros = np.zeros(data_length)
+    placeholder_zeros = np.zeros(data_length, dtype=np.uint32)
     return placeholder_zeros
 
 
@@ -450,13 +461,12 @@ def create_and_write_data_product(
     # Step 5: Write the data product file
     logger.info("Step 5: Writing data product to environment specified file")
 
-    # TODO[LIBSDC-689]: Ensure write_libera_data_product uses the default variable encoding if none specified
     output_file_path = write_libera_data_product(
         data_product_definition=product_config_path,
         data=processed_data,
         output_path=output_path,
         time_variable="radiometer_time",
-        strict=False,
+        strict=True,
         dynamic_product_attributes=dynamic_attributes,
     )
     logger.info(f"Saving to {output_file_path}")

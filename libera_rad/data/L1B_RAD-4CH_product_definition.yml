@@ -1,12 +1,12 @@
 attributes:
   ProductID: RAD-4CH
-  algorithm_version: 0.5.0
+  algorithm_version: 0.5.1
   Earth_Sun_Distance_AU:
 
 coordinates:
   radiometer_time: # TODO[LIBSDC-707]: Validate that time is unique for each image and can be used as a UID
     dtype: datetime64[ns]
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Time of each measurement (UTC) against a base reference of the CCSDS Epoch (January 1, 1958).
@@ -22,7 +22,7 @@ variables:
   ###############
   Latitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Geodetic latitude. Coordinate Reference System WGS84
       units: degrees_north
@@ -30,7 +30,7 @@ variables:
       _FillValue: -999 #off Earth
   Terrain_Corrected_Latitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Terrain corrected latitude
       units: degrees_north
@@ -38,7 +38,7 @@ variables:
       _FillValue: -999 #off Earth
   Colatitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Geodetic colatitude. This is the the angle between the geodetic zenith
@@ -49,7 +49,7 @@ variables:
       _FillValue: -999
   Longitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Longitude. Coordinate Reference System WGS84
       units: degrees_east
@@ -57,7 +57,7 @@ variables:
       _FillValue: -999 #off Earth
   Terrain_Corrected_Longitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Terrain corrected longitude
       units: degrees_east
@@ -65,7 +65,7 @@ variables:
       _FillValue: -999 #off Earth
   Altitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Height above the WGS84 ellipsoid. EPSG:4979
       units: meters
@@ -73,7 +73,7 @@ variables:
       _FillValue: -9999
   Terrain_Corrected_Altitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Terrain corrected altitude
       units: meters
@@ -81,7 +81,7 @@ variables:
       _FillValue: -9999
   Subsatellite_Latitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Latitude of subsatellite point at observation
       units: degrees_north
@@ -89,7 +89,7 @@ variables:
       _FillValue: -999 #off Earth
   Subsolar_Latitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Latitude of subsolar point at observation
       units: degrees_north
@@ -97,7 +97,7 @@ variables:
       _FillValue: -999 #off Earth
   Subsatellite_Colatitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Colatitude of subsatellite point at observation
       units: degrees
@@ -105,7 +105,7 @@ variables:
       _FillValue: -999 #off Earth
   Subsolar_Colatitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Colatitude of subsolar point at observation
       units: degrees
@@ -113,7 +113,7 @@ variables:
       _FillValue: -999 #off Earth
   Subsatellite_Longitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Longitude of subsatellite point at observation
       units: degrees_east
@@ -121,7 +121,7 @@ variables:
       _FillValue: -999 #off Earth
   Subsolar_Longitude:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Longitude of subsolar point at observation
       units: degrees_east
@@ -131,10 +131,9 @@ variables:
   ############
   # Geometry #
   ############
-  # TODO[LIBSDC-623]: Add radiometer_time, hourly, and euclidean, dimensions to libera_utils dimensions.yml
   Along_Track_Angle:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Along-track angle of the Libera field of view at the surface.
       units: degrees
@@ -142,7 +141,7 @@ variables:
       _FillValue: -999
   Cross_Track_Angle:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Along-track angle of the Libera field of view at the surface.
       units: degrees
@@ -150,7 +149,7 @@ variables:
       _FillValue: -999
   Solar_Zenith_Surface:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Geodetic zenith angle at the Earth point of the Sun
       units: degrees
@@ -158,7 +157,7 @@ variables:
       _FillValue: -999
   Relative_Azimuth_Surface:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Geodetic azimuth angle at the Earth point of the satellite relative to
@@ -168,7 +167,7 @@ variables:
       _FillValue: -999
   Viewing_Zenith_Surface:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Geodetic angle at the Earth point to the satellite
       units: degrees
@@ -176,7 +175,7 @@ variables:
       _FillValue: -999
   Viewing_Azimuth_Surface_WRT_North:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Libera viewing azimuth angle at the surface with respect to North
       units: degrees
@@ -184,7 +183,7 @@ variables:
       _FillValue: -999
   Satellite_Position:
     dtype: float64
-    dimensions: ["radiometer_time", "euclidean_dim"]
+    dimensions: ["RADIOMETER_TIME", "EUCLIDEAN_DIM"]
     attributes:
       long_name: >-
         X, Y, and Z components of the satellite inertial position in J2000 Earth-centered inertial reference frame
@@ -193,7 +192,7 @@ variables:
       _FillValue: -9999
   Satellite_Position_Start_Of_Hour:
     dtype: float64
-    dimensions: ["n_hours", "euclidean_dim"]
+    dimensions: ["N_HOURS", "EUCLIDEAN_DIM"]
     attributes:
       long_name: >-
         X, Y, and Z components of the satellite inertial position at the start of the hour (time-based) in
@@ -203,7 +202,7 @@ variables:
       _FillValue: -9999
   Satellite_Velocity:
     dtype: float64
-    dimensions: ["radiometer_time", "euclidean_dim"]
+    dimensions: ["RADIOMETER_TIME", "EUCLIDEAN_DIM"]
     attributes:
       long_name: >-
         X, Y, and Z components of the satellite inertial velocity in J2000 Earth-centered inertial reference frame
@@ -212,7 +211,7 @@ variables:
       _FillValue: -999
   Satellite_Velocity_Start_Of_Hour:
     dtype: float64
-    dimensions: ["n_hours", "euclidean_dim"]
+    dimensions: ["N_HOURS", "EUCLIDEAN_DIM"]
     attributes:
       long_name: >-
         X, Y, and Z components of the satellite inertial velocity at the start of the hour (time-based) in
@@ -222,35 +221,35 @@ variables:
       _FillValue: -999
   Satellite_Attitude_Q0:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: The scalar component of the quaternion describing the attitude of the spacecraft interpolated to the radiometer measurement time in ECEF
       valid_range: [-1, 1]
       _FillValue: -999
   Satellite_Attitude_Q1:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: First component in the quaternion vector describing the attitude of the spacecraft interpolated to the radiometer measurement time in ECEF
       valid_range: [-1, 1]
       _FillValue: -999
   Satellite_Attitude_Q2:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Second component in the quaternion vector describing the attitude of the spacecraft interpolated to the radiometer measurement time in ECEF
       valid_range: [-1, 1]
       _FillValue: -999
   Satellite_Attitude_Q3:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Third component in the quaternion vector describing the attitude of the spacecraft interpolated to the radiometer measurement time in ECEF
       valid_range: [-1, 1]
       _FillValue: -999
   Azimuth:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Detector azimuth angle
       units: degrees
@@ -258,7 +257,7 @@ variables:
       _FillValue: -999
   Elevation:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Detector elevation angle (0 represents Nadir)
       units: degrees
@@ -266,14 +265,14 @@ variables:
       _FillValue: -999
   Line_Of_Sight:
     dtype: float32
-    dimensions: ["radiometer_time", "euclidean_dim"]
+    dimensions: ["RADIOMETER_TIME", "EUCLIDEAN_DIM"]
     attributes:
       long_name: Line of sight unit vector (x,y,z) in J2000 Earth-centered inertial reference frame
       valid_range: [-1, 1]
       _FillValue: -999
   Radius_of_Satellite_from_Center_of_Earth:
     dtype: float64
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Radius of the satellite from the center of the Earth
       units: km
@@ -281,7 +280,7 @@ variables:
       _FillValue: -9999
   Cone_Angle:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Angle between a vector from the satellite to the center of the Earth and
@@ -292,7 +291,7 @@ variables:
       _FillValue: -999
   Cone_Angle_Rate:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Angular velocity of the cone angle. The cone rate is negative when scanning toward Nadir,
@@ -303,7 +302,7 @@ variables:
       _FillValue: -999
   Clock_Angle:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Azimuth angle of the instrument view vector from the satellite to the Earth point
@@ -313,7 +312,7 @@ variables:
       _FillValue: -999
   Clock_Angle_Rate:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Angular velocity of the clock angle. The clock rate is negative when the azimuth angle
@@ -330,7 +329,7 @@ variables:
   ##############
   Operational_Mode: # Does eclipse indicator go here or in the QF or some other indication?
     dtype: int8
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Radiometer operational mode (details TBD; need an indicator for
@@ -345,7 +344,7 @@ variables:
   ###########
   Filtered_Radiance_SW:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Measured, spectrally integrated radiance emerging from the TOA, where the spectral
@@ -355,7 +354,7 @@ variables:
       _FillValue: -999
   Filtered_Radiance_SW_Uncertainty: # Ask Dave if useful
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Uncertainty in the filtered shortwave radiance
       units: None # Placeholder: TBC percent or absolute if including
@@ -363,7 +362,7 @@ variables:
       _FillValue: -999
   Filtered_Radiance_LW:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Measured, spectrally integrated radiance emerging from the TOA, where the spectral
@@ -373,7 +372,7 @@ variables:
       _FillValue: -999
   Filtered_Radiance_LW_Uncertainty: # Ask Dave if useful
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Uncertainty in the filtered longwave radiance
       units: None # Placeholder: TBC percent or absolute if including
@@ -381,7 +380,7 @@ variables:
       _FillValue: -999
   Filtered_Radiance_Tot:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Measured, spectrally integrated radiance emerging from the TOA, where the spectral
@@ -391,7 +390,7 @@ variables:
       _FillValue: -999
   Filtered_Radiance_Tot_Uncertainty: # Ask Dave if useful
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Uncertainty in the filtered total radiance
       units: None # Placeholder: TBC percent or absolute if including
@@ -399,7 +398,7 @@ variables:
       _FillValue: -999
   Filtered_Radiance_SSW:
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
         Measured, spectrally integrated radiance emerging from the TOA, where the spectral
@@ -409,7 +408,7 @@ variables:
       _FillValue: -999
   Filtered_Radiance_SSW_Uncertainty: # Ask Dave if useful
     dtype: float32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Uncertainty in the filtered split-shortwave radiance
       units: None # Placeholder: TBC percent or absolute if including
@@ -417,7 +416,7 @@ variables:
       _FillValue: -999
   Quality_Flag:
     dtype: uint32
-    dimensions: ["radiometer_time"]
+    dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: Bit flags indicating the quality of the data
       value_meaning: TBD. Example file from PREFIRE has this information laid out per-bit using [b0], [b1], etc.
