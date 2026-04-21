@@ -9,7 +9,6 @@ This module provides functions to:
 
 import numpy as np
 import xarray as xr
-from scipy import signal
 from scipy.fft import irfft, rfft
 
 from libera_rad import config
@@ -49,9 +48,7 @@ def get_ground_cal_response_function(freqs: np.ndarray, path: str = config.trans
     return interp_transfer.astype(complex)
 
 
-def downsample_libera_signal(
-    signal_data: np.ndarray, from_rate: float = 200.0, to_rate: float = 100.0, method: str = "decimate"
-) -> np.ndarray:
+def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, to_rate: float = 100.0) -> np.ndarray:
     """
     Downsample a signal from one sampling rate to another.
 
@@ -63,28 +60,18 @@ def downsample_libera_signal(
         Original sampling rate in Hz. Default is 200.0.
     to_rate : float, optional
         Target sampling rate in Hz. Default is 100.0.
-    method : str, optional
-        Downsampling method to use. Options are:
-        - 'decimate' : Uses scipy.signal.decimate with IIR filtering and zero-phase processing (default)
-        - Any other value : Uses scipy.signal.resample for Fourier-domain resampling
 
     Returns
     -------
     np.ndarray
         Downsampled signal at the target sampling rate.
-
-    Notes
-    -----
-    TODO: LIBSDC-710 Compare this method to the downsampling method used by the IE team.
     """
     factor = int(from_rate / to_rate)
     if len(signal_data) == 0:
         return signal_data
-    if method == "decimate":
-        return signal.decimate(signal_data, factor, ftype="iir", zero_phase=True)
-    else:
-        n_samples_new = int(len(signal_data) * to_rate / from_rate)
-        return signal.resample(signal_data, n_samples_new)
+    # Decimate without filter (slice syntax: [start:stop:step])
+    decimated_signal = signal_data[::factor]
+    return decimated_signal
 
 
 def apply_gain_calibration(signal_data: np.ndarray, transfer_function: np.ndarray, n_samples: int) -> np.ndarray:

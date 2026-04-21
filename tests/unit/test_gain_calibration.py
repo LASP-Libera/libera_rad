@@ -74,13 +74,13 @@ class TestGetGroundCalResponseFunction:
 class TestDownsampleSignal:
     """Tests for signal downsampling functionality."""
 
-    def test_downsample_by_factor_of_2_decimate(self):
+    def test_downsample_by_factor_of_2(self):
         """Test downsampling by factor of 2 using decimate method."""
         # Create a simple signal
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method="decimate")
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0)
 
         # Should have half the samples
         assert len(result) == 100
@@ -88,56 +88,38 @@ class TestDownsampleSignal:
         # Signal should still be smooth (no major artifacts)
         assert np.all(np.abs(result) <= 1.1)  # Allow small overshoot from filtering
 
-    def test_downsample_by_factor_of_4_decimate(self):
+    def test_downsample_by_factor_of_4(self):
         """Test downsampling by larger factor using decimate method."""
         signal_data = np.random.randn(400)
 
-        result = downsample_libera_signal(signal_data, from_rate=400.0, to_rate=100.0, method="decimate")
+        result = downsample_libera_signal(signal_data, from_rate=400.0, to_rate=100.0)
 
         assert len(result) == 100
 
-    def test_downsample_non_integere(self):
+    def test_downsample_non_integer(self):
         """Test downsampling with a non-integer factor."""
         # Create a simple signal
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
         # Downsampling rounds to the nearest integer factor, where factor = from_rate / to_rate.
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=49.9, method="decimate")
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=49.9)
 
         # Factor rounds to 4, so rate = 200 / 4 = 50
         assert len(result) == 50
-
-    def test_downsample_resample_method(self):
-        """Test downsampling using resample method."""
-        t = np.linspace(0, 1, 200, endpoint=False)
-        signal_data = np.sin(2 * np.pi * 5 * t)
-
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method="resample")
-
-        assert len(result) == 100
 
     def test_downsample_preserves_dc_component(self):
         """Test that DC (zero frequency) component is preserved."""
         # Constant signal (DC only)
         signal_data = np.ones(200) * 5.0
 
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0, method="decimate")
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0)
 
         # Mean should be approximately preserved
         np.testing.assert_almost_equal(np.mean(result), 5.0, decimal=1)
 
-    def test_downsample_non_integer_factor_resample(self):
-        """Test downsampling with non-integer factor using resample."""
-        signal_data = np.random.randn(300)
-
-        # 300 Hz -> 100 Hz (factor of 3)
-        result = downsample_libera_signal(signal_data, from_rate=300.0, to_rate=100.0, method="resample")
-
-        assert len(result) == 100
-
-    def test_downsample_non_integer_factor_default(self):
-        """Test downsampling with non-integer factor using default decimate method."""
+    def test_downsample_non_integer_factor(self):
+        """Test downsampling with non-integer factor."""
         signal_data = np.random.randn(300)
 
         # 300 Hz -> 100 Hz (factor of 3)
