@@ -75,8 +75,10 @@ def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, 
     -----
     If from_rate / to_rate is not an integer, it is rounded to the nearest whole number.
     """
-    if from_rate <= 0 or to_rate <= 0:
-        raise ValueError("from_rate and to_rate must positive")
+    if from_rate <= 0:
+        raise ValueError("from_rate must be positive")
+    if to_rate <= 0:
+        raise ValueError("to_rate must be positive")
     if from_rate < to_rate:
         raise ValueError("from_rate must be greater than to_rate")
     factor = int(round(from_rate / to_rate, 0))

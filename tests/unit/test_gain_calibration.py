@@ -156,6 +156,30 @@ class TestDownsampleSignal:
         result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0)
         assert len(result) == 0
 
+    def test_negative_from_rate(self):
+        """Test behavior with negative from_rate input."""
+        signal_data = np.random.randn(200)
+
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="from_rate must be positive"):
+            downsample_libera_signal(signal_data, from_rate=-200.0, to_rate=100.0)
+
+    def test_negative_to_rate(self):
+        """Test behavior with negative to_rate input."""
+        signal_data = np.random.randn(200)
+
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="to_rate must be positive"):
+            downsample_libera_signal(signal_data, from_rate=200.0, to_rate=-100.0)
+
+    def test_from_rate_less_than_to_rate(self):
+        """Test behavior with to_rate higher than from_rate input."""
+        signal_data = np.random.randn(200)
+
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="from_rate must be greater than to_rate"):
+            downsample_libera_signal(signal_data, from_rate=100.0, to_rate=200.0)
+
 
 class TestApplyGainCalibration:
     """Tests for FFT-based gain calibration."""
