@@ -75,7 +75,7 @@ class TestDownsampleSignal:
     """Tests for signal downsampling functionality."""
 
     def test_downsample_by_factor_of_2(self):
-        """Test downsampling by factor of 2 using decimate method."""
+        """Test downsampling by factor of 2."""
         # Create a simple signal
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
@@ -89,21 +89,33 @@ class TestDownsampleSignal:
         assert np.all(np.abs(result) <= 1.1)  # Allow small overshoot from filtering
 
     def test_downsample_by_factor_of_4(self):
-        """Test downsampling by larger factor using decimate method."""
+        """Test downsampling by larger factor."""
         signal_data = np.random.randn(400)
 
         result = downsample_libera_signal(signal_data, from_rate=400.0, to_rate=100.0)
 
         assert len(result) == 100
 
-    def test_downsample_non_integer(self):
-        """Test downsampling with a non-integer factor."""
+    def test_downsample_non_integer_round_up(self):
+        """Test downsampling with a non-integer factor, rounded up to the nearest whole number."""
         # Create a simple signal
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
         # Downsampling rounds to the nearest integer factor, where factor = from_rate / to_rate.
         result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=49.9)
+
+        # Factor rounds to 4, so rate = 200 / 4 = 50
+        assert len(result) == 50
+
+    def test_downsample_non_integer_round_down(self):
+        """Test downsampling with a non-integer factor, rounded down to the nearest whole number"""
+        # Create a simple signal
+        t = np.linspace(0, 1, 200, endpoint=False)
+        signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
+
+        # Downsampling rounds to the nearest integer factor, where factor = from_rate / to_rate.
+        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=50.1)
 
         # Factor rounds to 4, so rate = 200 / 4 = 50
         assert len(result) == 50

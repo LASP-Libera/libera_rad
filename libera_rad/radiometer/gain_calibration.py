@@ -50,7 +50,7 @@ def get_ground_cal_response_function(freqs: np.ndarray, path: str = config.trans
 
 def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, to_rate: float = 100.0) -> np.ndarray:
     """
-    Downsample a signal from one sampling rate to another.
+    Downsample a signal from one sampling rate to another with pure decimation (take every Nth sample).
 
     Parameters
     ----------
@@ -65,8 +65,21 @@ def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, 
     -------
     np.ndarray
         Downsampled signal at the target sampling rate.
+
+    Raises
+    ------
+    ValueError
+        If from_rate or to rate is zero, from_rate or to rate is negative, or if from_rate is less than to_rate.
+
+    Notes
+    -----
+    If from_rate / to_rate is not an integer, it is rounded to the nearest whole number.
     """
-    factor = int(from_rate / to_rate)
+    if from_rate <= 0 or to_rate <= 0:
+        raise ValueError("from_rate and to_rate must positive")
+    if from_rate < to_rate:
+        raise ValueError("from_rate must be greater than to_rate")
+    factor = int(round(from_rate / to_rate, 0))
     if len(signal_data) == 0:
         return signal_data
     # Decimate without filter (slice syntax: [start:stop:step])
