@@ -1,5 +1,9 @@
 # Version Changes
 
+## 0.5.2
+
+- Correct the downsampling method in gain calibration so that no additional filtering occurs after calibration.
+
 ## 0.5.1
 
 - Update the L1B Radiometer 4-channel product definition to be compatible with the latest version of libera_utils with dimension and type enforcement
