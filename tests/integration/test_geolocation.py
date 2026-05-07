@@ -4,6 +4,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from libera_utils.libera_spice import spice_utils
 from libera_utils.libera_spice.kernel_manager import KernelManager
 
 from libera_rad.geolocation import calculate_lat_lon_altitude
@@ -44,3 +45,22 @@ def test_geolocation_from_kernels(test_dynamic_kernels_path):
     )
     assert ix == hist.shape[0] // 2, ix
     assert iy == hist.shape[0] // 2, iy
+
+
+def test_dynamic_kernels_materialize_into_cache(monkeypatch, tmp_path, test_dynamic_kernels_path):
+    """Dynamic kernels should be materialized into the user cache via KernelFileCache."""
+    monkeypatch.setattr(spice_utils.caching, "get_local_cache_dir", lambda: tmp_path)
+
+    kernel_files = sorted(
+        [p for p in test_dynamic_kernels_path.iterdir() if p.is_file() and p.suffix in {".bc", ".bsp"}],
+        key=lambda p: p.name,
+    )
+    assert kernel_files, f"No dynamic kernels found under {test_dynamic_kernels_path}"
+    sources = kernel_files[:2]
+
+    km = KernelManager(cache_timeout_days=7)
+    km.load_libera_dynamic_kernels(test_dynamic_kernels_path, needs_naif_kernels=True, needs_static_kernels=True)
+    km.load_libera_dynamic_kernels(sources, needs_naif_kernels=True, needs_static_kernels=True)
+
+    for src in sources:
+        assert (tmp_path / src.name).is_file(), f"Expected cached kernel missing: {src.name}"

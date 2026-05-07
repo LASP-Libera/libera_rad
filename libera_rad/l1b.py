@@ -3,6 +3,7 @@
 import argparse
 import logging
 import os
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import xarray as xr
 from astropy.coordinates import get_sun
 from astropy.time import Time
 from cloudpathlib import AnyPath, S3Path
-from libera_utils import Manifest, smart_copy_file, smart_open
+from libera_utils import Manifest, smart_open
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.filenaming import LiberaDataProductFilename
 from libera_utils.io.netcdf import write_libera_data_product
@@ -72,11 +73,11 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
 
     # Step 2: Read and store ALL input data from manifest files
     logger.info("Step 2: Reading all input data from manifest files")
-    all_input_data, spice_directory = read_all_input_data(input_manifest)
+    all_input_data, dynamic_kernel_sources = read_all_input_data(input_manifest)
 
     # Step 3: Calculate radiometer data variables
     logger.info("Step 3: Calculating radiometer data variables")
-    processed_data, dynamic_product_attributes = process_l1a_to_l1b(all_input_data, spice_directory)
+    processed_data, dynamic_product_attributes = process_l1a_to_l1b(all_input_data, dynamic_kernel_sources)
 
     # Steps 4: Store data with metadata and write to output folder
     logger.info("Step 4: Creating and writing data product")
@@ -100,12 +101,14 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     return output_manifest_filepath
 
 
-def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset], Path]:
+def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset], list[str]]:
     """
     Read and store all input data from manifest files.
 
     This function opens and validates all input NetCDF files from the manifest and stores them in a dictionary keyed by
-    filename. SPICE kernel files (.bc, .bsp) are copied to a local directory for processing.
+    filename. SPICE kernel paths (.bc, .bsp) are collected in manifest order for
+    :meth:`KernelManager.load_libera_dynamic_kernels`, which materializes each file via
+    :class:`~libera_utils.libera_spice.spice_utils.KernelFileCache` (local or S3).
 
     Parameters
     ----------
@@ -116,8 +119,8 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     -------
     dict[str, xr.Dataset]
         Dictionary with filenames as keys and loaded xarray datasets as values.
-    Path
-        Path to the directory of SPICE files copied to local filesystem.
+    list[str]
+        Manifest paths for dynamic SPICE kernels, in manifest order.
 
     Raises
     ------
@@ -130,23 +133,16 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     """
     logger.info("Step 2: Reading all input data from manifest files")
 
-    # TODO[LIBSDC-722]: Use either the KernelCache in libera_utils,
-    #  or a Curryer mechanism to handle this caching of kernels locally
-    spice_directory = Path(__file__).parent / "spice_files"
-    spice_directory.mkdir(exist_ok=True)
-
-    all_data = {}
-    spice_files_copied = []
+    all_data: dict[str, xr.Dataset] = {}
+    dynamic_kernel_sources: list[str] = []
 
     for i, file_info in enumerate(input_manifest.files):
         logger.info(f"Reading file {i + 1}/{len(input_manifest.files)}: {file_info.filename}")
 
         try:
             if file_info.filename.endswith((".bc", ".bsp")):
-                local_file_destination = spice_directory / Path(file_info.filename).name
-                smart_copy_file(file_info.filename, str(local_file_destination))
-                spice_files_copied.append(local_file_destination)
-                logger.info(f"Successfully copied SPICE file to: {local_file_destination}")
+                dynamic_kernel_sources.append(file_info.filename)
+                logger.info("Recorded SPICE kernel for KernelManager: %s", file_info.filename)
             else:
                 with smart_open(file_info.filename) as file_handle:
                     LiberaDataProductFilename.from_file_path(file_info.filename)  # Ensure file is Libera Data Product
@@ -157,16 +153,16 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
             logger.error(f"Failed to process file {file_info.filename}: {e}", exc_info=True)
             raise
 
-    logger.info(f"Successfully loaded {len(all_data)} datasets and {len(spice_files_copied)} SPICE files")
+    logger.info(f"Successfully loaded {len(all_data)} datasets and {len(dynamic_kernel_sources)} SPICE kernel paths")
 
     if not all_data:
         logger.warning("No data files were loaded from manifest")
 
-    return all_data, spice_directory
+    return all_data, dynamic_kernel_sources
 
 
 def process_l1a_to_l1b(
-    all_input_data: dict[str, xr.Dataset], spice_directory: Path
+    all_input_data: dict[str, xr.Dataset], dynamic_kernel_sources: Sequence[str | Path | S3Path]
 ) -> tuple[dict[str, np.ndarray], dict[str, str]]:
     """
     Process L1A data and SPICE Kernels to L1B product.
@@ -187,9 +183,10 @@ def process_l1a_to_l1b(
     all_input_data : dict[str, xr.Dataset]
         Dictionary of input datasets keyed by filename. Expected to contain radiometer sample data ('rad_sample') and
         nominal housekeeping data ('nom_hk').
-    spice_directory : Path
-        Path to directory containing SPICE kernel files (.bc, .bsp) for spacecraft positioning and attitude
-        calculations.
+    dynamic_kernel_sources : sequence of str, pathlib.Path, or cloudpathlib.S3Path
+        Manifest-ordered paths to SPICE kernel files (.bc, .bsp). Each entry is materialized through
+        :class:`~libera_utils.libera_spice.spice_utils.KernelFileCache` inside
+        :meth:`KernelManager.load_libera_dynamic_kernels`.
 
     Returns
     -------
@@ -209,7 +206,7 @@ def process_l1a_to_l1b(
 
     # Initialize SPICE kernels
     km = KernelManager()
-    km.load_libera_dynamic_kernels(str(spice_directory), needs_naif_kernels=True, needs_static_kernels=True)
+    km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
 
     # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)

@@ -1,5 +1,9 @@
 # Version Changes
 
+## 0.5.3
+
+- Use libera_utils `KernelFileCache`/`KernelManager.load_libera_dynamic_kernels` for dynamic kernel materialization and add an integration assertion that dynamic kernel loads populate the user cache.
+
 ## 0.5.2
 
 - Correct the downsampling method in gain calibration so that no additional filtering occurs after calibration.
