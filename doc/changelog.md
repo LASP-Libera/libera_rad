@@ -2,7 +2,7 @@
 
 ## 0.5.3
 
-- Use libera_utils `KernelFileCache`/`KernelManager.load_libera_dynamic_kernels` for dynamic kernel materialization and add an integration assertion that dynamic kernel loads populate the user cache.
+- Use libera_utils `KernelFileCache`/`KernelManager.load_libera_dynamic_kernels` for dynamic kernel materialization and add an integration assertion that dynamic kernel loads populate the user cache. Callers must pass a **sequence** of kernel paths; integration tests and learning notebooks build an explicit sorted path list from test data directories.
 
 ## 0.5.2
 

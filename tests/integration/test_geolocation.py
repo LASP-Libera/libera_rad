@@ -1,6 +1,7 @@
 """Integration tests for geolocation using static and geolocation kernels."""
 
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,10 @@ from libera_utils.libera_spice import spice_utils
 from libera_utils.libera_spice.kernel_manager import KernelManager
 
 from libera_rad.geolocation import calculate_lat_lon_altitude
+
+
+def _dynamic_kernel_paths(kernel_dir: Path) -> list[Path]:
+    return sorted(f for f in kernel_dir.iterdir() if f.is_file())
 
 
 def test_geolocation_from_kernels(test_dynamic_kernels_path):
@@ -18,7 +23,9 @@ def test_geolocation_from_kernels(test_dynamic_kernels_path):
     end_time = datetime(2028, 1, 2, 0, 29, 12)
 
     km = KernelManager()
-    km.load_libera_dynamic_kernels(test_dynamic_kernels_path, needs_naif_kernels=True, needs_static_kernels=True)
+    km.load_libera_dynamic_kernels(
+        _dynamic_kernel_paths(test_dynamic_kernels_path), needs_naif_kernels=True, needs_static_kernels=True
+    )
 
     print(f"Calculating lat/lon/alt from {start_time} to {end_time}")
     time_range = pd.date_range(start_time, end_time, freq="10ms", inclusive="left")
@@ -59,7 +66,6 @@ def test_dynamic_kernels_materialize_into_cache(monkeypatch, tmp_path, test_dyna
     sources = kernel_files[:2]
 
     km = KernelManager(cache_timeout_days=7)
-    km.load_libera_dynamic_kernels(test_dynamic_kernels_path, needs_naif_kernels=True, needs_static_kernels=True)
     km.load_libera_dynamic_kernels(sources, needs_naif_kernels=True, needs_static_kernels=True)
 
     for src in sources:
