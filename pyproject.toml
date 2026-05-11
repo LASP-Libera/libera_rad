@@ -46,7 +46,8 @@ dependencies = [
     "scipy >= 1.7.0, <2.0",
     "pydantic >2.0.3, <3.0",
     "matplotlib >=3.5.0, <4.0",
-    "astropy (>=7.2.0,<8.0.0)"
+    "astropy (>=7.2.0,<8.0.0)",
+    "libera-utils @ git+https://github.com//LASP-Libera/libera_utils.git@feature/cal-tier-0-products"
 ] # These are the dependencies used in the package metadata when building the project
 
 [project.scripts]
@@ -58,6 +59,7 @@ include = ["LICENSE.txt", "README.md"]
 
 [tool.poetry.group.dev.dependencies]
 bandit = "*"
+moto = {extras = ["s3"], version = "*"}
 pre-commit = "*"
 pytest-cov = "*"
 pytest-randomly = "*"

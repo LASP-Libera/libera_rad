@@ -1,6 +1,7 @@
 """Conftest for Libera Rad unit tests"""
 
 import json
+import logging
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -11,6 +12,26 @@ from libera_utils.io.manifest import Manifest, ManifestType
 
 # Local
 from libera_rad.calibration.calibration_models import LiberaGroundCalibration
+
+pytest_plugins = ["tests.plugins.aws_fixtures"]
+
+
+@pytest.fixture(scope="session")
+def monkeypatch_session():
+    """Provides a monkeypatch that applies for an entire pytest session."""
+    from _pytest.monkeypatch import MonkeyPatch
+
+    monkeypatch = MonkeyPatch()
+    yield monkeypatch
+    monkeypatch.undo()
+
+
+@pytest.fixture
+def cleanup_loggers():
+    """Ensures that root logging handlers are removed after a test."""
+    yield
+    root = logging.getLogger()
+    root.handlers = []
 
 
 @pytest.fixture(scope="session")
@@ -38,6 +59,12 @@ def calibration_data_path():
 def test_data_path():
     """Returns the Path to the test_data directory"""
     return Path(sys.modules[__name__.split(".")[0]].__file__).parent / "test_data"
+
+
+@pytest.fixture(scope="session")
+def test_l1a_cal_data_path(test_data_path):
+    """Returns the Path to the test_l1a_cal_data directory"""
+    return test_data_path / "cal_l1a_data"
 
 
 @pytest.fixture(scope="session")

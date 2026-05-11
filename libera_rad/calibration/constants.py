@@ -60,8 +60,8 @@ def find_channel_variable(rad_data: xr.Dataset, channel_enum: ChannelName) -> st
     Find the variable name in radiometer data corresponding to a channel enum.
     This function maps the last character of a variable in rad_data:
     0 = sw
-    1 = lw
-    2 = total
+    1 = total
+    2 = lw
     3 = ssw
 
     Parameters
