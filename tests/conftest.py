@@ -41,6 +41,12 @@ def test_data_path():
 
 
 @pytest.fixture(scope="session")
+def test_l1a_cal_data_path(test_data_path):
+    """Returns the Path to the test_l1a_cal_data directory"""
+    return test_data_path / "cal_l1a_data"
+
+
+@pytest.fixture(scope="session")
 def test_dynamic_kernels_path(test_data_path):
     """Returns the Path to the test geolocation kernels directory"""
     return test_data_path / "dynamic_kernels"
