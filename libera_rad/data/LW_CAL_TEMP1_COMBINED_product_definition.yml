@@ -48,48 +48,6 @@ variables:
   # ===========================================================
   # AXIS SAMPLE variables (dimension: AXIS_SAMPLE_PACKET)
   # ===========================================================
-  AXIS_SAMPLE_PACKET_VERSION:
-    dtype: uint8
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Packet version
-      valid_range: [0, 7]
-  AXIS_SAMPLE_PACKET_TYPE:
-    dtype: uint8
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Packet type
-      valid_range: [0, 1]
-  AXIS_SAMPLE_PACKET_SEC_HDR_FLAG:
-    dtype: uint8
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Secondary header flag
-      valid_range: [0, 1]
-  AXIS_SAMPLE_PACKET_PKT_APID:
-    dtype: uint16
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Packet application ID
-      valid_range: [0, 2047]
-  AXIS_SAMPLE_PACKET_SEQ_FLGS:
-    dtype: uint8
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Sequence flags
-      valid_range: [0, 3]
-  AXIS_SAMPLE_PACKET_SRC_SEQ_CTR:
-    dtype: uint16
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Source sequence counter
-      valid_range: [0, 16383]
-  AXIS_SAMPLE_PACKET_PKT_LEN:
-    dtype: uint16
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Packet length
-      units: bytes
   ICIE__TM_DAY_AXIS_SAMPLE:
     dtype: uint16
     dimensions: [AXIS_SAMPLE_PACKET]
@@ -110,11 +68,6 @@ variables:
       long_name: ICIE telemetry microseconds for packet
       units: integer microseconds
       valid_range: [0, 999]
-  AXIS_SAMPLE_PACKET_REUSABLE_SPARE_8:
-    dtype: uint8
-    dimensions: [AXIS_SAMPLE_PACKET]
-    attributes:
-      long_name: Reusable spare field (8 bits)
   ICIE__AXIS_OBSID_RAD:
     dtype: uint16
     dimensions: [AXIS_SAMPLE_PACKET]
@@ -151,48 +104,6 @@ variables:
   # ===========================================================
   # NOM HK variables (dimension: NOM_HK_PACKET)
   # ===========================================================
-  NOM_HK_PACKET_VERSION:
-    dtype: uint8
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: Packet version
-      valid_range: [0, 7]
-  NOM_HK_PACKET_TYPE:
-    dtype: uint8
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: Packet type
-      valid_range: [0, 1]
-  NOM_HK_PACKET_SEC_HDR_FLAG:
-    dtype: uint8
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: Secondary header flag
-      valid_range: [0, 1]
-  NOM_HK_PACKET_PKT_APID:
-    dtype: uint16
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: Packet application ID
-      valid_range: [0, 2047]
-  NOM_HK_PACKET_SEQ_FLGS:
-    dtype: uint8
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: Sequence flags
-      valid_range: [0, 3]
-  NOM_HK_PACKET_SRC_SEQ_CTR:
-    dtype: uint16
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: Source sequence counter
-      valid_range: [0, 16383]
-  NOM_HK_PACKET_PKT_LEN:
-    dtype: uint16
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: Packet length
-      units: bytes
   ICIE__TM_DAY_NOM_HK:
     dtype: uint16
     dimensions: [NOM_HK_PACKET]
@@ -968,59 +879,12 @@ variables:
     dimensions: [NOM_HK_PACKET]
   REUSABLE_SPARE_2:
     dtype: uint8
-    dimensions: [NOM_HK_PACKET]
+    dimensions: [NOM_HK_PACKET, PEV_SW_STAT_PACKET]
     attributes:
       long_name: REUSABLE_SPARE_2
-  NOM_HK_PACKET_REUSABLE_SPARE_8:
-    dtype: uint8
-    dimensions: [NOM_HK_PACKET]
-    attributes:
-      long_name: REUSABLE_SPARE_8
   # ===========================================================
   # PEV SW STAT variables (dimension: PEV_SW_STAT_PACKET)
   # ===========================================================
-  PEV_SW_STAT_PACKET_VERSION:
-    dtype: uint8
-    dimensions: [PEV_SW_STAT_PACKET]
-    attributes:
-      long_name: Packet version
-      valid_range: [0, 7]
-  PEV_SW_STAT_PACKET_TYPE:
-    dtype: uint8
-    dimensions: [PEV_SW_STAT_PACKET]
-    attributes:
-      long_name: Packet type
-      valid_range: [0, 1]
-  PEV_SW_STAT_PACKET_SEC_HDR_FLAG:
-    dtype: uint8
-    dimensions: [PEV_SW_STAT_PACKET]
-    attributes:
-      long_name: Secondary header flag
-      valid_range: [0, 1]
-  PEV_SW_STAT_PACKET_PKT_APID:
-    dtype: uint16
-    dimensions: [PEV_SW_STAT_PACKET]
-    attributes:
-      long_name: Packet application ID
-      valid_range: [0, 2047]
-  PEV_SW_STAT_PACKET_SEQ_FLGS:
-    dtype: uint8
-    dimensions: [PEV_SW_STAT_PACKET]
-    attributes:
-      long_name: Sequence flags
-      valid_range: [0, 3]
-  PEV_SW_STAT_PACKET_SRC_SEQ_CTR:
-    dtype: uint16
-    dimensions: [PEV_SW_STAT_PACKET]
-    attributes:
-      long_name: Source sequence counter
-      valid_range: [0, 16383]
-  PEV_SW_STAT_PACKET_PKT_LEN:
-    dtype: uint16
-    dimensions: [PEV_SW_STAT_PACKET]
-    attributes:
-      long_name: Packet length
-      units: bytes
   PEV__TM_DAY_SW_STAT:
     dtype: uint16
     dimensions: [PEV_SW_STAT_PACKET]
@@ -1036,9 +900,6 @@ variables:
     dimensions: [PEV_SW_STAT_PACKET]
     attributes:
       long_name: Time Us
-  PEV_SW_STAT_PACKET_REUSABLE_SPARE_8:
-    dtype: uint8
-    dimensions: [PEV_SW_STAT_PACKET]
   PEV__SW_CMD_SUCC_CNT:
     dtype: uint8
     dimensions: [PEV_SW_STAT_PACKET]

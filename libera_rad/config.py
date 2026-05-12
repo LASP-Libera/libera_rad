@@ -17,12 +17,12 @@ product_config_path = Path(
 
 cal_lw_cal_product_definitions = {
     DataProductIdentifier.cal_lw_cal_temp1_combined: Path(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "CAL_LW_CAL_TEMP1_product_definition.yml")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "LW_CAL_TEMP1_COMBINED_product_definition.yml")
     ),
     DataProductIdentifier.cal_lw_cal_temp2_combined: Path(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "CAL_LW_CAL_TEMP2_product_definition.yml")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "LW_CAL_TEMP2_COMBINED_product_definition.yml")
     ),
     DataProductIdentifier.cal_lw_cal_temp3_combined: Path(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "CAL_LW_CAL_TEMP3_product_definition.yml")
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "LW_CAL_TEMP3_COMBINED_product_definition.yml")
     ),
 }

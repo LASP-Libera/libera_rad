@@ -39,7 +39,7 @@ def generate_input_manifest(data_dir: Path):
 
 
 if __name__ == "__main__":
-    test_path = Path("~/Desktop/lw_cal_files")
+    test_path = os.path.expanduser("~") / Path("Desktop/lw_cal_files")
     os.environ["PROCESSING_PATH"] = str(test_path)
     manifest = generate_input_manifest(test_path)
     algorithm(manifest)
