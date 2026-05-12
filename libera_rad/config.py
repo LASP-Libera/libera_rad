@@ -26,3 +26,7 @@ cal_lw_cal_product_definitions = {
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "LW_CAL_TEMP3_COMBINED_product_definition.yml")
     ),
 }
+
+cal_gain_product_config_path = Path(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "GAIN_CAL_COMBINED_product_definition.yml")
+)
