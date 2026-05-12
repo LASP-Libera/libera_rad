@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 import spiceypy as sp
 import xarray as xr
+from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.manifest import Manifest
 
 from libera_rad import l1b
@@ -198,10 +199,10 @@ class TestReadAllInputData:
             assert "libera_rad" in str(spice_directory.parent)
 
 
-class TestExtractRadiometerDatasets:
-    """Tests for _extract_radiometer_datasets function."""
+class TestExtractInputDataset:
+    """Tests for extract_input_dataset function."""
 
-    def test_extract_radiometer_datasets_success(self):
+    def test_extract_input_dataset_success(self):
         """Test successful extraction of radiometer and housekeeping datasets."""
         rad_dataset = xr.Dataset({"rad_var": (["time"], np.array([1, 2, 3]))})
         hk_dataset = xr.Dataset({"hk_var": (["time"], np.array([4, 5, 6]))})
@@ -211,30 +212,20 @@ class TestExtractRadiometerDatasets:
             "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": hk_dataset,
         }
 
-        rad_data, nom_hk_data = l1b._extract_radiometer_datasets(all_input_data)
+        rad_data = l1b.extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_rad_sample_decoded)
+        nom_hk_data = l1b.extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_nom_hk_decoded)
 
         assert "rad_var" in rad_data
         assert "hk_var" in nom_hk_data
 
-    def test_extract_radiometer_datasets_missing_rad_data(self):
-        """Test error when radiometer data is missing."""
+    def test_extract_input_dataset_missing_data(self):
+        """Test error when  data is missing."""
         all_input_data = {
             "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": xr.Dataset()
         }
 
-        with pytest.raises(ValueError, match="No radiometer sample data found"):
-            l1b._extract_radiometer_datasets(all_input_data)
-
-    def test_extract_radiometer_datasets_missing_hk_data(self):
-        """Test error when housekeeping data is missing."""
-        all_input_data = {
-            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": xr.Dataset(
-                {"var": (["time"], [1, 2, 3])}
-            )
-        }
-
-        with pytest.raises(ValueError, match="No nominal housekeeping data found"):
-            l1b._extract_radiometer_datasets(all_input_data)
+        with pytest.raises(ValueError, match="No dataset not found in input files: RAD-SAMPLE-DECODED"):
+            l1b.extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_rad_sample_decoded)
 
 
 class TestCalculateDataQualityFlags:

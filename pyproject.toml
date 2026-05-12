@@ -39,14 +39,14 @@ classifiers = [
 ]
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
-    "libera-utils @ file:../libera_utils",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",
     "scipy >= 1.7.0, <2.0",
     "pydantic >2.0.3, <3.0",
     "matplotlib >=3.5.0, <4.0",
-    "astropy (>=7.2.0,<8.0.0)"
+    "astropy (>=7.2.0,<8.0.0)",
+    "libera-utils @ git+ssh://git@github.com/LASP-Libera/libera_utils.git@27ca620f140427c0a256fbc637400ec81f2fec18"
 ] # These are the dependencies used in the package metadata when building the project
 
 [project.scripts]

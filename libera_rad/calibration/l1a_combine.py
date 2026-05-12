@@ -1,21 +1,18 @@
 import xarray as xr
 from libera_utils.constants import LiberaApid
 
-CCSDS_KEEP_FIELDS = [
-    "PACKET", "PACKET_ICIE_TIME", "SRC_SEQ_CTR", "PKT_LEN", "PKT_APID"
-]
+CCSDS_KEEP_FIELDS = ["PACKET", "PACKET_ICIE_TIME", "SRC_SEQ_CTR", "PKT_LEN", "PKT_APID"]
 
-CCSDS_DROP_FIELDS = [
-    "VERSION", "TYPE", "SEC_HDR_FLAG", "SEQ_FLGS"
-]
+CCSDS_DROP_FIELDS = ["VERSION", "TYPE", "SEC_HDR_FLAG", "SEQ_FLGS"]
+
 
 def merge_l1a_decoded_datasets(
-    datasets: list[xr.Dataset], 
+    datasets: list[xr.Dataset],
     ccsds_header_keep_fields: list[str] = CCSDS_KEEP_FIELDS,
-    ccsds_header_drop_fields: list[str] = CCSDS_DROP_FIELDS
-    ) -> xr.Dataset:
+    ccsds_header_drop_fields: list[str] = CCSDS_DROP_FIELDS,
+) -> xr.Dataset:
     """
-    Takes a list of L1A decoded Xarray Datasets and merges them into a single 
+    Takes a list of L1A decoded Xarray Datasets and merges them into a single
     flat dataset with the CCSDS header variables kept and dropped as specified.
 
     Parameters
@@ -62,6 +59,6 @@ def merge_l1a_decoded_datasets(
         prepared_datasets.append(ds_prep)
 
     # Merge into a single overarching dataset
-    merged_ds = xr.merge(prepared_datasets, compat='no_conflicts')
+    merged_ds = xr.merge(prepared_datasets, compat="no_conflicts")
 
     return merged_ds

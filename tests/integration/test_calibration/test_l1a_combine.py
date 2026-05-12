@@ -1,5 +1,7 @@
 import xarray as xr
+
 from libera_rad.calibration.l1a_combine import merge_l1a_decoded_datasets
+
 
 def test_sw_cal_l1a_combine(test_l1a_cal_data_path):
     # Load the test data
@@ -73,4 +75,3 @@ def test_solar_cal_combine(test_l1a_cal_data_path):
     assert merged_ds.sizes["RAD_SAMPLE_PACKET"] == 10
     assert merged_ds.sizes["NOM_HK_PACKET"] == 10
     assert merged_ds.sizes["PEV_SW_STAT_PACKET"] == 10
-    
