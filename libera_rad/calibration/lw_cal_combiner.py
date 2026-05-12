@@ -83,7 +83,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         data_product_definition=product_config_path,
         data=lw_cal_event,
         output_path=dropbox_path,
-        time_variable="radiometer_time",
+        time_variable="AXIS_SAMPLE_PACKET_ICIE_TIME",
         strict=True,
     )
 
