@@ -39,13 +39,6 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     ------
     ValueError
         If the ``PROCESSING_PATH`` environment variable is not set.
-    ValueError
-        If the input data contains zero or more than one LW calibration
-        event type, as determined by ``get_lw_event_type``.
-    ValueError
-        If no product definition is found for the detected LW calibration
-        event identifier, as determined by
-        ``get_product_definition_for_lw_cal_event``.
     """
     now = datetime.now(UTC)
     configure_task_logging(f"l1b_{now}")
