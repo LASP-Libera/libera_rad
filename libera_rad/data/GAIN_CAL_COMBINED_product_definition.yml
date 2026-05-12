@@ -4,7 +4,7 @@ attributes:
 
 coordinates:
   # --- CAL-FULL packet timestamps ---
-  PACKET_ICIE_TIME_CAL:
+  CAL_FULL_PACKET_ICIE_TIME:
     dtype: datetime64[ns]
     dimensions: ["CAL_FULL_PACKET"]
     attributes:
@@ -15,7 +15,7 @@ coordinates:
       dtype: int64
 
   # --- RAD-SAMPLE packet timestamps ---
-  PACKET_ICIE_TIME_RAD:
+  RAD_SAMPLE_PACKET_ICIE_TIME:
     dtype: datetime64[ns]
     dimensions: ["RAD_SAMPLE_PACKET"]
     attributes:
@@ -26,7 +26,7 @@ coordinates:
       dtype: int64
 
   # --- NOM-HK packet timestamps ---
-  PACKET_ICIE_TIME_HK:
+  NOM_HK_PACKET_ICIE_TIME:
     dtype: datetime64[ns]
     dimensions: ["NOM_HK_PACKET"]
     attributes:
@@ -63,48 +63,6 @@ variables:
   # =========================================================================
   # CAL-FULL packet-level variables  (dimension: CAL_FULL_PACKET)
   # =========================================================================
-  VERSION:
-    dtype: uint8
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Packet version
-      valid_range: [0, 7]
-  TYPE:
-    dtype: uint8
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Packet type
-      valid_range: [0, 1]
-  SEC_HDR_FLAG:
-    dtype: uint8
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Secondary header flag
-      valid_range: [0, 1]
-  PKT_APID:
-    dtype: uint16
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Packet application ID
-      valid_range: [0, 2047]
-  SEQ_FLGS:
-    dtype: uint8
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Sequence flags
-      valid_range: [0, 3]
-  SRC_SEQ_CTR:
-    dtype: uint16
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Source sequence counter
-      valid_range: [0, 16383]
-  PKT_LEN:
-    dtype: uint16
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Packet length
-      units: bytes
   ICIE__TM_DAY_CAL_FULL:
     dtype: uint16
     dimensions: ["CAL_FULL_PACKET"]
@@ -125,11 +83,6 @@ variables:
       long_name: ICIE telemetry microseconds for packet
       units: integer microseconds
       valid_range: [0, 999]
-  REUSABLE_SPARE_8:
-    dtype: uint8
-    dimensions: ["CAL_FULL_PACKET"]
-    attributes:
-      long_name: Reusable spare field (8 bits)
   ICIE__CAL_FULL_CHECKSUM:
     dtype: uint32
     dimensions: ["CAL_FULL_PACKET"]
@@ -152,48 +105,6 @@ variables:
   # =========================================================================
   # RAD-SAMPLE packet-level variables  (dimension: RAD_SAMPLE_PACKET)
   # =========================================================================
-  VERSION_RAD:
-    dtype: uint8
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Packet version
-      valid_range: [0, 7]
-  TYPE_RAD:
-    dtype: uint8
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Packet type
-      valid_range: [0, 1]
-  SEC_HDR_FLAG_RAD:
-    dtype: uint8
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Secondary header flag
-      valid_range: [0, 1]
-  PKT_APID_RAD:
-    dtype: uint16
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Packet application ID
-      valid_range: [0, 2047]
-  SEQ_FLGS_RAD:
-    dtype: uint8
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Sequence flags
-      valid_range: [0, 3]
-  SRC_SEQ_CTR_RAD:
-    dtype: uint16
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Source sequence counter
-      valid_range: [0, 16383]
-  PKT_LEN_RAD:
-    dtype: uint16
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Packet length
-      units: bytes
   ICIE__TM_DAY_RAD_SAMPLE:
     dtype: uint16
     dimensions: ["RAD_SAMPLE_PACKET"]
@@ -214,11 +125,6 @@ variables:
       long_name: ICIE telemetry microseconds for packet
       units: integer microseconds
       valid_range: [0, 999]
-  REUSABLE_SPARE_8_RAD:
-    dtype: uint8
-    dimensions: ["RAD_SAMPLE_PACKET"]
-    attributes:
-      long_name: Reusable spare field (8 bits)
   ICIE__RAD_OBSID_RAD:
     dtype: uint16
     dimensions: ["RAD_SAMPLE_PACKET"]
@@ -270,48 +176,6 @@ variables:
   # =========================================================================
   # NOM-HK packet-level variables  (dimension: NOM_HK_PACKET)
   # =========================================================================
-  VERSION_HK:
-    dtype: uint8
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: Packet version
-      valid_range: [0, 7]
-  TYPE_HK:
-    dtype: uint8
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: Packet type
-      valid_range: [0, 1]
-  SEC_HDR_FLAG_HK:
-    dtype: uint8
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: Secondary header flag
-      valid_range: [0, 1]
-  PKT_APID_HK:
-    dtype: uint16
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: Packet application ID
-      valid_range: [0, 2047]
-  SEQ_FLGS_HK:
-    dtype: uint8
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: Sequence flags
-      valid_range: [0, 3]
-  SRC_SEQ_CTR_HK:
-    dtype: uint16
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: Source sequence counter
-      valid_range: [0, 16383]
-  PKT_LEN_HK:
-    dtype: uint16
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: Packet length
-      units: bytes
   ICIE__TM_DAY_NOM_HK:
     dtype: uint16
     dimensions: ["NOM_HK_PACKET"]
@@ -1066,8 +930,3 @@ variables:
     dimensions: ["NOM_HK_PACKET"]
     attributes:
       long_name: REUSABLE_SPARE_2
-  REUSABLE_SPARE_8_HK:
-    dtype: uint8
-    dimensions: ["NOM_HK_PACKET"]
-    attributes:
-      long_name: REUSABLE_SPARE_8

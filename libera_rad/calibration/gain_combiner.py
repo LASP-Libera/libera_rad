@@ -79,7 +79,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         data_product_definition=product_config_path,
         data=gain_event,
         output_path=dropbox_path,
-        time_variable="PACKET_ICIE_TIME_RAD",
+        time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
         strict=True,
     )
 
