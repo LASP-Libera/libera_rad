@@ -1,9 +1,22 @@
+import logging
+
 import xarray as xr
 from libera_utils.constants import LiberaApid
 
+logger = logging.getLogger(__name__)
+
 CCSDS_KEEP_FIELDS = ["PACKET", "PACKET_ICIE_TIME", "SRC_SEQ_CTR", "PKT_LEN", "PKT_APID"]
 
-CCSDS_DROP_FIELDS = ["VERSION", "TYPE", "SEC_HDR_FLAG", "SEQ_FLGS"]
+CCSDS_DROP_FIELDS = [
+    "VERSION",
+    "TYPE",
+    "SEC_HDR_FLAG",
+    "SEQ_FLGS",
+    "REUSABLE_SPARE_2",   # NOM-HK + PEV-SW-STAT
+    "REUSABLE_SPARE_4",   # PEV-SW-STAT + RAD-SAMPLE
+    "REUSABLE_SPARE_8",   # NOM-HK + PEV-SW-STAT + RAD-SAMPLE
+    "REUSABLE_SPARE_16",  # PEV-SW-STAT + RAD-SAMPLE
+]
 
 
 def merge_l1a_decoded_datasets(
@@ -43,8 +56,18 @@ def merge_l1a_decoded_datasets(
         # Create a copy to avoid mutating the inputs directly
         ds_prep = ds.copy()
 
-        # Remove the CCSDS header variables in the drop list
-        ds_prep = ds_prep.drop_vars(ccsds_header_drop_fields)
+        # Clear stale NetCDF encoding metadata (chunksizes, fletcher32, source, etc.)
+        # carried over from the source file; downstream product_definition enforcement
+        # will warn/fail on any encoding keys it does not expect.
+        for var in ds_prep.variables.values():
+            var.encoding.clear()
+
+        # Remove the CCSDS header variables in the drop list (only those present)
+        vars_to_drop = [v for v in ccsds_header_drop_fields if v in ds_prep]
+        missing_drop_vars = [v for v in ccsds_header_drop_fields if v not in ds_prep]
+        if missing_drop_vars:
+            logger.debug("Variables not found in dataset and will not be dropped: %s", missing_drop_vars)
+        ds_prep = ds_prep.drop_vars(vars_to_drop)
 
         # Prefix them so they don't collide (e.g., RAD_SAMPLE_SRC_SEQ_CTR)
         rename_dict = {v: f"{prefix}_{v}" for v in ccsds_header_keep_fields if v in ds_prep}
