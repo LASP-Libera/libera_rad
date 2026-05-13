@@ -43,7 +43,7 @@ from libera_utils import Manifest, ManifestType
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.filenaming import LiberaDataProductFilename
 
-from libera_rad.calibration import l1a_event_utils
+from libera_rad.calibration import l1a_cal_event_utils
 from libera_rad.calibration.solar_cal_combiner import (
     FACE_IDENTIFIER_TO_FACE_NUM,
     OBSID_TO_FACE_IDENTIFIER,
@@ -134,7 +134,7 @@ def detect_solar_cal_events(
     all_solar_cal_obsids = list(OBSID_TO_FACE_IDENTIFIER.keys())
 
     # Fast scan: read only the OBSID + time columns across all NOM-HK files
-    all_windows = l1a_event_utils.scan_files_for_field_windows(
+    all_windows = l1a_cal_event_utils.scan_files_for_field_windows(
         data_dir=data_dir,
         product_token="NOM-HK-DECODED",
         target_values=all_solar_cal_obsids,
@@ -147,7 +147,7 @@ def detect_solar_cal_events(
     logger.info("Detected %d raw OBSID window(s) across all faces.", len(all_windows))
 
     # Load the NOM-HK subset needed to refine per-face run detection
-    nom_hk_scan = l1a_event_utils.load_l1a_product(
+    nom_hk_scan = l1a_cal_event_utils.load_l1a_product(
         data_dir, "NOM-HK-DECODED", filter_windows=all_windows
     )
     hk_obsids = nom_hk_scan["ICIE__SW_OBSID_RAD"].values
@@ -165,7 +165,7 @@ def detect_solar_cal_events(
         face_windows: list[tuple[np.datetime64, np.datetime64]] = []
         for obsid in obsids_for_face:
             face_windows.extend(
-                l1a_event_utils.detect_value_runs(hk_obsids, hk_times, obsid, min_packets)
+                l1a_cal_event_utils.detect_value_runs(hk_obsids, hk_times, obsid, min_packets)
             )
         if not face_windows:
             logger.warning("Face %d: no windows detected — skipping.", face_num)
@@ -383,7 +383,7 @@ def _write_windowed_product(
 
     Selects source files from *data_dir* whose filename time range overlaps
     ``[t0, t1]``, opens and concatenates them, slices to ``[t0, t1]`` via
-    :func:`~libera_rad.calibration.l1a_event_utils.slice_dataset_to_time_window`,
+    :func:`~libera_rad.calibration.l1a_cal_event_utils.slice_dataset_to_time_window`,
     clears stale NetCDF encodings, and writes with a valid Libera filename.
 
     Parameters
@@ -415,7 +415,7 @@ def _write_windowed_product(
         logger.warning("%s: no files found in %s", product_token, data_dir)
         return None
 
-    selected = l1a_event_utils.filter_files_by_time_window(
+    selected = l1a_cal_event_utils.filter_files_by_time_window(
         all_files, [(t0, t1)], pad=np.timedelta64(0, "s")
     )
     if not selected:
@@ -423,9 +423,9 @@ def _write_windowed_product(
         return None
 
     logger.info("%s (%s): loading %d / %d file(s) ...", product_token, label, len(selected), len(all_files))
-    ds = l1a_event_utils.open_and_sort_l1a_files(selected)
+    ds = l1a_cal_event_utils.open_and_sort_l1a_files(selected)
 
-    ds = l1a_event_utils.slice_dataset_to_time_window(
+    ds = l1a_cal_event_utils.slice_dataset_to_time_window(
         ds, t0, t1, secondary_time_dim=secondary_time_dim
     )
 
