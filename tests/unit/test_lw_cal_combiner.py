@@ -129,15 +129,15 @@ class TestGetProductDefinitionForLwCalEvent:
         [
             (
                 DataProductIdentifier.cal_lw_cal_temp1_combined,
-                "CAL_LW_CAL_TEMP1_product_definition.yml",
+                "LW_CAL_TEMP1_COMBINED_product_definition.yml",
             ),
             (
                 DataProductIdentifier.cal_lw_cal_temp2_combined,
-                "CAL_LW_CAL_TEMP2_product_definition.yml",
+                "LW_CAL_TEMP2_COMBINED_product_definition.yml",
             ),
             (
                 DataProductIdentifier.cal_lw_cal_temp3_combined,
-                "CAL_LW_CAL_TEMP3_product_definition.yml",
+                "LW_CAL_TEMP3_COMBINED_product_definition.yml",
             ),
         ],
     )

@@ -43,8 +43,8 @@ def merge_l1a_decoded_datasets(
         # Create a copy to avoid mutating the inputs directly
         ds_prep = ds.copy()
 
-        # Remove the CCSDS header variables in the drop list
-        ds_prep = ds_prep.drop_vars(ccsds_header_drop_fields)
+        # Remove the CCSDS header variables in the drop list if they are present
+        ds_prep = ds_prep.drop_vars(ccsds_header_drop_fields, errors="ignore")
 
         # Prefix them so they don't collide (e.g., RAD_SAMPLE_SRC_SEQ_CTR)
         rename_dict = {v: f"{prefix}_{v}" for v in ccsds_header_keep_fields if v in ds_prep}

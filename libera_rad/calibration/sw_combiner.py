@@ -1,11 +1,10 @@
-import argparse
 import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-import xarray as xr
 
-from cloudpathlib import AnyPath, S3Path
+import xarray as xr
+from cloudpathlib import S3Path
 from libera_utils import Manifest
 from libera_utils.io.netcdf import write_libera_data_product
 from libera_utils.logutil import configure_task_logging
@@ -58,7 +57,7 @@ def sw_cal_combiner_algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     if not dropbox_path:
         raise ValueError("PROCESSING_PATH environment variable is not set")
 
-    datasets = [xr.open_dataset(file) for file in all_data.values()]
+    datasets = list(all_data.values())
     # Step 3: Combine sw cal event data and calculate any required variables
     logger.info("Step 3: Creating gain calibration event dataset")
     sw_cal_event = l1a_combine.merge_l1a_decoded_datasets(datasets)
