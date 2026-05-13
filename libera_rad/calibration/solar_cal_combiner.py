@@ -45,7 +45,7 @@ from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.netcdf import write_libera_data_product
 from libera_utils.logutil import configure_task_logging
 
-from libera_rad.calibration import l1a_combine, l1a_event_utils
+from libera_rad.calibration import l1a_combine, l1a_cal_event_utils
 from libera_rad.config import cal_solar_cal_product_definitions
 from libera_rad.l1b import extract_input_dataset, read_all_input_data
 
@@ -344,14 +344,14 @@ def build_solar_cal_event_datasets(
     )
 
     # Slice PEV-SW-STAT (1-D: PACKET only)
-    pev_sliced = l1a_event_utils.slice_dataset_to_time_window(pev_sw, t0, t1)
+    pev_sliced = l1a_cal_event_utils.slice_dataset_to_time_window(pev_sw, t0, t1)
     logger.info(
         "PEV-SW-STAT: %d / %d packets selected",
         pev_sliced.sizes["PACKET"], pev_sw.sizes["PACKET"],
     )
 
     # Slice RAD-SAMPLE (2-D: PACKET + RAD_SAMPLE_FPE_TIME)
-    rad_sliced = l1a_event_utils.slice_dataset_to_time_window(
+    rad_sliced = l1a_cal_event_utils.slice_dataset_to_time_window(
         rad_sample, t0, t1, secondary_time_dim="RAD_SAMPLE_FPE_TIME"
     )
     logger.info(
