@@ -30,3 +30,7 @@ cal_lw_cal_product_definitions = {
 cal_gain_product_config_path = Path(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "GAIN_CAL_COMBINED_product_definition.yml")
 )
+
+CAL_SW_COMBINED_PRODUCT_DEFINITION_PATH = Path(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "SW-CAL-COMBINED_product_definition.yml")
+)

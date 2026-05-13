@@ -1,0 +1,3301 @@
+attributes:
+  ProductID: SW-CAL-COMBINED-FULL
+  algorithm_version: 0.5.3
+coordinates:
+  PACKET_ICIE_TIME:
+    dtype: datetime64[ns]
+    dimensions:
+    - PACKET
+    attributes:
+      long_name: Packet timestamp from ICIE main processor
+    encoding:
+      units: nanoseconds since 1958-01-01
+      calendar: standard
+      dtype: int64
+  RAD_SAMPLE_FPE_TIME:
+    dtype: datetime64[ns]
+    dimensions:
+    - RAD_SAMPLE_FPE_TIME
+    attributes:
+      long_name: Radiometer sample timestamp from FPE (samples at 200Hz)
+    encoding:
+      units: nanoseconds since 1958-01-01
+      calendar: standard
+      dtype: int64
+  CAL_SAMPLE_FPE_TIME:
+    dtype: datetime64[ns]
+    dimensions:
+    - CAL_SAMPLE_FPE_TIME
+    attributes:
+      long_name: Calibration downsampled sample timestamp from FPE (samples at 200Hz)
+    encoding:
+      units: nanoseconds since 1958-01-01
+      calendar: standard
+      dtype: int64
+  AXIS_SAMPLE_ICIE_TIME:
+    dtype: datetime64[ns]
+    dimensions:
+    - AXIS_SAMPLE_ICIE_TIME
+    attributes:
+      long_name: Azimuth and elevation encoder sample timestamp
+    encoding:
+      units: nanoseconds since 1958-01-01
+      calendar: standard
+      dtype: int64
+variables:
+  PEV_SW_STAT_DECODED__VERSION:
+    attributes:
+      long_name: Packet version
+      valid_range:
+      - 0
+      - 7
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__TYPE:
+    attributes:
+      long_name: Packet type
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__SEC_HDR_FLAG:
+    attributes:
+      long_name: Secondary header flag
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__PKT_APID:
+    attributes:
+      long_name: Packet application ID
+      valid_range:
+      - 0
+      - 2047
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEV_SW_STAT_DECODED__SEQ_FLGS:
+    attributes:
+      long_name: Sequence flags
+      valid_range:
+      - 0
+      - 3
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__SRC_SEQ_CTR:
+    attributes:
+      long_name: Source sequence counter
+      valid_range:
+      - 0
+      - 16383
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEV_SW_STAT_DECODED__PKT_LEN:
+    attributes:
+      long_name: Packet length
+      units: bytes
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEV_SW_STAT_DECODED__PEV__TM_DAY_SW_STAT:
+    attributes:
+      long_name: Time Day
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEV_SW_STAT_DECODED__PEV__TM_MS_SW_STAT:
+    attributes:
+      long_name: Time Ms
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  PEV_SW_STAT_DECODED__PEV__TM_US_SW_STAT:
+    attributes:
+      long_name: Time Us
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEV_SW_STAT_DECODED__REUSABLE_SPARE_8:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  PEV_SW_STAT_DECODED__PEV__SW_CMD_SUCC_CNT:
+    attributes:
+      long_name: Number of successful commands
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__PEV__SW_CMD_RJCT_CNT:
+    attributes:
+      long_name: Number of commands rejected
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__PEV__SW_CMD_RCV_CNT:
+    attributes:
+      long_name: Number of received commands
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__PEV__SW_CMD_FMT_CNT:
+    attributes:
+      long_name: Number of bad format commands received
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__PEV__SW_CMD_SUCC_OP:
+    attributes:
+      long_name: Last successful command opcode
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S21'
+  PEV_SW_STAT_DECODED__PEV__SW_CMD_RJCT_OP:
+    attributes:
+      long_name: Last rejected command opcode
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S21'
+  PEV_SW_STAT_DECODED__PEV__SW_CMD_FAIL_CODE:
+    attributes:
+      long_name: Command failure code
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+  PEV_SW_STAT_DECODED__PEV__SW_DES_OVR_CNT:
+    attributes:
+      long_name: Number of DES tasks that overran
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__PEV__SW_BD_PASS:
+    attributes:
+      long_name: Board passivation status
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+  PEV_SW_STAT_DECODED__PEV__SW_IMG_IDX:
+    attributes:
+      long_name: Current image index from flash
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEV_SW_STAT_DECODED__PEV__SW_TIME_FREE_ST:
+    attributes:
+      long_name: Time sync status
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S4'
+  PEV_SW_STAT_DECODED__PEV__SW_TBL_LD_ST:
+    attributes:
+      long_name: Table loading state
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+  PEV_SW_STAT_DECODED__PEV__SW_MEM_OP_TYPE:
+    attributes:
+      long_name: Last memory operation type
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+  PEV_SW_STAT_DECODED__REUSABLE_SPARE_1:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  PEV_SW_STAT_DECODED__PEV__SW_PWR_ST_WFOV:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_PWR_ST_CFPE:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_PWR_ST_FPE:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_PWR_ST_LWC:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_AWU_ST_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_AWU_ST_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_ENC_MD_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S6'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_ENC_MD_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S6'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_ENC_ST_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_ENC_ST_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_MTR_ST_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_MTR_ST_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_STEP_POS:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_BB_SEL:
+    dimensions:
+    - PACKET
+    dtype: '|S4'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_HTR_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_STEP_CYCLE_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_HALL_POS:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_STEP_INIT:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_MSG_RCV_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__SW_PPS_RCV_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__SW_MEM_XSUM:
+    dimensions:
+    - PACKET
+    dtype: uint32
+    attributes:
+      _FillValue: 4294967295
+  PEV_SW_STAT_DECODED__PEV__ADC_SD_MTR1_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_SD_MTR2_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_RSM_MTR1_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_RSM_MTR2_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_SS_MTR1_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_SS_MTR2_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_GND1:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_GND2:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__ADC_VOR_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_CMD_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S12'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_CMD_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S12'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_ALIVE_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FAULT_ST_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FAULT_ST_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_ERR_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_TQ_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_RT_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_ANG_SD:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_ERR_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_TQ_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_RT_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_FLT_ANG_RSM:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_CMD_PCG0_RSM:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_CMD_PCG1_RSM:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_CMD_PCG0_SD:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_CMD_PCG1_SD:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_ANG_MEAS_RSM:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_RT_MEAS_RSM:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_ANG_MEAS_SD:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_RT_MEAS_SD:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_HTR_PWM:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_BB1_TEMP:
+    attributes:
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_BB2_TEMP:
+    attributes:
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_HTR_SETPNT:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_CMD_SUCC_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_PWBA_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  PEV_SW_STAT_DECODED__PEV__SW_LWC_HTR_PWM_DUTY:
+    dimensions:
+    - PACKET
+    dtype: uint32
+    attributes:
+      _FillValue: 4294967295
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_EN_CSEC_RSM:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__SW_AXIS_EN_CSEC_SD:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__PL_ALIVE_CNT_LWC:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__PL_DEAD_CNT_LWC:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEV_SW_STAT_DECODED__PEV__SW_STAT_CHECKSUM:
+    dimensions:
+    - PACKET
+    dtype: uint32
+    attributes:
+      _FillValue: 4294967295
+  PEC_SW_STAT_DECODED__VERSION:
+    attributes:
+      long_name: Packet version
+      valid_range:
+      - 0
+      - 7
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__TYPE:
+    attributes:
+      long_name: Packet type
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__SEC_HDR_FLAG:
+    attributes:
+      long_name: Secondary header flag
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__PKT_APID:
+    attributes:
+      long_name: Packet application ID
+      valid_range:
+      - 0
+      - 2047
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__SEQ_FLGS:
+    attributes:
+      long_name: Sequence flags
+      valid_range:
+      - 0
+      - 3
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__SRC_SEQ_CTR:
+    attributes:
+      long_name: Source sequence counter
+      valid_range:
+      - 0
+      - 16383
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PKT_LEN:
+    attributes:
+      long_name: Packet length
+      units: bytes
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__TM_DAY_SW_STAT:
+    attributes:
+      long_name: Time Day
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__TM_MS_SW_STAT:
+    attributes:
+      long_name: Time Ms
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  PEC_SW_STAT_DECODED__PEC__TM_US_SW_STAT:
+    attributes:
+      long_name: Time Us
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__REUSABLE_SPARE_8:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  PEC_SW_STAT_DECODED__PEC__SW_CMD_SUCC_CNT:
+    attributes:
+      long_name: Number of successful commands
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__PEC__SW_CMD_RJCT_CNT:
+    attributes:
+      long_name: Number of Commands Rejected by Libera PE - Cobham Processor
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__PEC__SW_CMD_RCV_CNT:
+    attributes:
+      long_name: Number of received commands
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__PEC__SW_CMD_FMT_CNT:
+    attributes:
+      long_name: Number of Bad Format Commands Received by Libera PE - Cobham Processor
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__PEC__SW_CMD_SUCC_OP:
+    attributes:
+      long_name: Last successful command opcode
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S18'
+  PEC_SW_STAT_DECODED__PEC__SW_CMD_RJCT_OP:
+    attributes:
+      long_name: Last rejected command opcode
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S18'
+  PEC_SW_STAT_DECODED__PEC__SW_CMD_FAIL_CODE:
+    attributes:
+      long_name: Command failure code
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+  PEC_SW_STAT_DECODED__PEC__SW_DES_OVR_CNT:
+    attributes:
+      long_name: Number of DES tasks that Overran in Libera PE - Cobham Processor
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__PEC__SW_SAS_ST:
+    attributes:
+      long_name: SAS Current State
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+  PEC_SW_STAT_DECODED__PEC__SW_BD_PASS:
+    attributes:
+      long_name: Indication of Board Passivation for Libera PE - Cobham Processor
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+  PEC_SW_STAT_DECODED__PEC__SW_IMG_IDX:
+    attributes:
+      long_name: Current image index from flash
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  PEC_SW_STAT_DECODED__PEC__SW_TIME_FREE_ST:
+    attributes:
+      long_name: Indication of Bad Time Sync by Libera PE - Cobham Processor
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S4'
+  PEC_SW_STAT_DECODED__PEC__SW_TBL_LD_ST:
+    attributes:
+      long_name: Table loading state
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_ST_RCM_PX:
+    attributes:
+      long_name: Heater State for RCM P
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+  PEC_SW_STAT_DECODED__PEC__SW_MEM_OP_TYPE:
+    attributes:
+      long_name: Operation Type
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+  PEC_SW_STAT_DECODED__REUSABLE_SPARE_5:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  PEC_SW_STAT_DECODED__PEC__SW_LED_CYCLE_ST:
+    attributes:
+      long_name: Duty Cycle State Machine
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_ST_WFOV:
+    attributes:
+      long_name: Heater State for WFOV
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_ST_RCM_NX:
+    attributes:
+      long_name: Heater State for RCM N
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+  PEC_SW_STAT_DECODED__PEC__SW_LED_BANK_B_ST:
+    attributes:
+      long_name: LED Bank B State
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+  PEC_SW_STAT_DECODED__PEC__SW_LED_BANK_A_ST:
+    attributes:
+      long_name: LED Bank A State
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+  PEC_SW_STAT_DECODED__PEC__SW_MSG_RCV_CNT:
+    attributes:
+      long_name: Number of received time messages
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__SW_PPS_RCV_CNT:
+    attributes:
+      long_name: Number of received time pulses
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__SW_P3P3_VMON:
+    attributes:
+      long_name: PE ATOMS P3.3V Voltage Monitor 1
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P1P5_VMON:
+    attributes:
+      long_name: PE P1.5V Voltage Monitor
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_CAL1_FB:
+    attributes:
+      long_name: Cal 1 FB
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P3P3_VREF:
+    attributes:
+      long_name: P3.3V Ref Monitor
+      units: V
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_CAL2_FB:
+    attributes:
+      long_name: Cal 2 FB
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_SAS_MON:
+    attributes:
+      long_name: Solar Avoidance Sensor
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_RCM_P_HTR_MON:
+    attributes:
+      long_name: RCM P Heater Monitor
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_RCM_N_HTR_MON:
+    attributes:
+      long_name: RCM N Heater Monitor
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_WFOV_HTR_MON:
+    attributes:
+      long_name: WFOV Heater Monitor
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_WFOV_LENS_TEMP:
+    attributes:
+      long_name: WFOV Lens Temp Monitor
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_LSA_LED_TEMP:
+    attributes:
+      long_name: Cal LED Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_AUX_RSMDR_TEMP:
+    attributes:
+      long_name: PE Aux Board RSM Drive Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_RCM_PX_TEMP:
+    attributes:
+      long_name: RCM +X Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_RCM_MX_TEMP:
+    attributes:
+      long_name: RCM -X Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_WFOV_FPA_TEMP:
+    attributes:
+      long_name: WFOV FPA Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P15_VMON:
+    attributes:
+      long_name: P15V Monitor
+      units: V
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P12_VMON:
+    attributes:
+      long_name: P12V Monitor
+      units: V
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P5_VMON:
+    attributes:
+      long_name: PE P5V Voltage Monitor
+      units: V
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P3P3_VMON2:
+    attributes:
+      long_name: PE P3.3V Voltage Monitor 2
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_N12_VMON:
+    attributes:
+      long_name: N12V Monitor
+      units: V
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_N15_VMON:
+    attributes:
+      long_name: N15V Monitor
+      units: V
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_LED_MON:
+    attributes:
+      long_name: LED V Monitor
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_N15_IMON:
+    attributes:
+      long_name: N15V Current Monitor
+      units: mA
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P3P3_IMON:
+    attributes:
+      long_name: P3.3V Current Monitor
+      units: mA
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P5_IMON:
+    attributes:
+      long_name: P5V Current Monitor
+      units: mA
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_P15_IMON:
+    attributes:
+      long_name: P15V Current Monitor
+      units: mA
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_PWR_PWB_TEMP:
+    attributes:
+      long_name: PE Power Board Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_PWR_REG_TEMP:
+    attributes:
+      long_name: PE Power Reg Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_AUX_LEDDR_TEMP:
+    attributes:
+      long_name: LED Driver Temp
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_GND:
+    attributes:
+      long_name: Ground Monitor
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float64
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_SETPNT_RCM_PX:
+    attributes:
+      long_name: Heater Setpoint for RCM +X, Celsius
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float32
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_TEMP_RCM_PX:
+    attributes:
+      long_name: RCM +X htr temp using onboard conversion from table, Celsius
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float32
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_SETPNT_RCM_NX:
+    attributes:
+      long_name: Heater Setpoint for RCM -X, Celsius
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float32
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_TEMP_RCM_NX:
+    attributes:
+      long_name: RCM -X htr temp using onboard conversion from table, Celsius
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float32
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_SETPNT_WFOV:
+    attributes:
+      long_name: Heater Setpoint for WFOV, Celsius
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float32
+  PEC_SW_STAT_DECODED__PEC__SW_HTR_TEMP_WFOV:
+    attributes:
+      long_name: WFOV htr temp using onboard conversion from table, Celsius
+      units: C
+      _FillValue: .nan
+    dimensions:
+    - PACKET
+    dtype: float32
+  PEC_SW_STAT_DECODED__PEC__SW_MEM_XSUM:
+    attributes:
+      long_name: Running memory checksum
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  PEC_SW_STAT_DECODED__PEC__SW_LED_A_LVL:
+    attributes:
+      long_name: Level of Bank A LED (0 if LEDs off)
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__SW_LED_B_LVL:
+    attributes:
+      long_name: Level of Bank B LED (0 if LEDs off)
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__SW_LED_CYCLE_ON_TM:
+    attributes:
+      long_name: LED Duty Cycle On time (ms)
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  PEC_SW_STAT_DECODED__PEC__SW_LED_CYCLE_OFF_TM:
+    attributes:
+      long_name: LED Duty Cycle Off Time (ms)
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  PEC_SW_STAT_DECODED__PEC__SW_LED_CYCLE_LVLA:
+    attributes:
+      long_name: LED Duty Cycle Level for bank A
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__SW_LED_CYCLE_LVLB:
+    attributes:
+      long_name: LED Duty Cycle Level for bank B
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  PEC_SW_STAT_DECODED__PEC__SW_LED_CYCLE_BANK:
+    attributes:
+      long_name: LED Duty Cycle Bank
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S4'
+  PEC_SW_STAT_DECODED__PEC__SW_LED_CYCLE_ID:
+    attributes:
+      long_name: LED ID
+      _FillValue: !!binary ""
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+  PEC_SW_STAT_DECODED__PEC__PECSWPKT_SPARE:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  PEC_SW_STAT_DECODED__PEC__SW_STAT_CHECKSUM:
+    attributes:
+      long_name: Packet checksum
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  RAD_SAMPLE_DECODED__VERSION:
+    attributes:
+      long_name: Packet version
+      valid_range:
+      - 0
+      - 7
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  RAD_SAMPLE_DECODED__TYPE:
+    attributes:
+      long_name: Packet type
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  RAD_SAMPLE_DECODED__SEC_HDR_FLAG:
+    attributes:
+      long_name: Secondary header flag
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  RAD_SAMPLE_DECODED__PKT_APID:
+    attributes:
+      long_name: Packet application ID
+      valid_range:
+      - 0
+      - 2047
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  RAD_SAMPLE_DECODED__SEQ_FLGS:
+    attributes:
+      long_name: Sequence flags
+      valid_range:
+      - 0
+      - 3
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  RAD_SAMPLE_DECODED__SRC_SEQ_CTR:
+    attributes:
+      long_name: Source sequence counter
+      valid_range:
+      - 0
+      - 16383
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  RAD_SAMPLE_DECODED__PKT_LEN:
+    attributes:
+      long_name: Packet length
+      units: bytes
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  RAD_SAMPLE_DECODED__ICIE__TM_DAY_RAD_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry day for packet
+      units: integer days
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  RAD_SAMPLE_DECODED__ICIE__TM_MS_RAD_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry milliseconds for packet
+      units: integer milliseconds
+      valid_range:
+      - 0
+      - 86399999
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  RAD_SAMPLE_DECODED__ICIE__TM_US_RAD_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry microseconds for packet
+      units: integer microseconds
+      valid_range:
+      - 0
+      - 999
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  RAD_SAMPLE_DECODED__REUSABLE_SPARE_8:
+    attributes:
+      long_name: Reusable spare field (8 bits)
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  RAD_SAMPLE_DECODED__ICIE__RAD_OBSID_RAD:
+    attributes:
+      long_name: ICIE radiometer observation ID for radiometer
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  RAD_SAMPLE_DECODED__ICIE__RAD_OBSID_WFOV:
+    attributes:
+      long_name: ICIE radiometer observation ID for wide field of view camera
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  RAD_SAMPLE_DECODED__ICIE__RAD_SAMPLE_CHECKSUM:
+    attributes:
+      long_name: ICIE radiometer sample packet checksum
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  RAD_SAMPLE_DECODED__ICIE__RAD_SAMPLE_0:
+    attributes:
+      long_name: ICIE radiometer sample channel 0 (SW)
+      units: W/(m^2*sr*nm)
+      _FillValue: .nan
+    dimensions:
+    - RAD_SAMPLE_FPE_TIME
+    dtype: float32
+  RAD_SAMPLE_DECODED__ICIE__RAD_SAMPLE_1:
+    attributes:
+      long_name: ICIE radiometer sample channel 1 (TOT)
+      units: W/(m^2*sr*nm)
+      _FillValue: .nan
+    dimensions:
+    - RAD_SAMPLE_FPE_TIME
+    dtype: float32
+  RAD_SAMPLE_DECODED__ICIE__RAD_SAMPLE_2:
+    attributes:
+      long_name: ICIE radiometer sample channel 2 (LW)
+      units: W/(m^2*sr*nm)
+      _FillValue: .nan
+    dimensions:
+    - RAD_SAMPLE_FPE_TIME
+    dtype: float32
+  RAD_SAMPLE_DECODED__ICIE__RAD_SAMPLE_3:
+    attributes:
+      long_name: ICIE radiometer sample channel 3 (SSW)
+      units: W/(m^2*sr*nm)
+      _FillValue: .nan
+    dimensions:
+    - RAD_SAMPLE_FPE_TIME
+    dtype: float32
+  RAD_SAMPLE_DECODED__RAD_SAMPLE_packet_index:
+    attributes:
+      comment: Maps each radiometer sample to its originating packet index
+      long_name: Packet index for radiometer sample data
+      _FillValue: -9223372036854775808
+    dimensions:
+    - RAD_SAMPLE_FPE_TIME
+    dtype: int64
+  CAL_SAMPLE_DECODED__VERSION:
+    attributes:
+      long_name: Packet version
+      valid_range:
+      - 0
+      - 7
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  CAL_SAMPLE_DECODED__TYPE:
+    attributes:
+      long_name: Packet type
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  CAL_SAMPLE_DECODED__SEC_HDR_FLAG:
+    attributes:
+      long_name: Secondary header flag
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  CAL_SAMPLE_DECODED__PKT_APID:
+    attributes:
+      long_name: Packet application ID
+      valid_range:
+      - 0
+      - 2047
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  CAL_SAMPLE_DECODED__SEQ_FLGS:
+    attributes:
+      long_name: Sequence flags
+      valid_range:
+      - 0
+      - 3
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  CAL_SAMPLE_DECODED__SRC_SEQ_CTR:
+    attributes:
+      long_name: Source sequence counter
+      valid_range:
+      - 0
+      - 16383
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  CAL_SAMPLE_DECODED__PKT_LEN:
+    attributes:
+      long_name: Packet length
+      units: bytes
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  CAL_SAMPLE_DECODED__ICIE__TM_DAY_CAL_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry day for packet
+      units: integer days
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  CAL_SAMPLE_DECODED__ICIE__TM_MS_CAL_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry milliseconds for packet
+      units: integer milliseconds
+      valid_range:
+      - 0
+      - 86399999
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  CAL_SAMPLE_DECODED__ICIE__TM_US_CAL_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry microseconds for packet
+      units: integer microseconds
+      valid_range:
+      - 0
+      - 999
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  CAL_SAMPLE_DECODED__REUSABLE_SPARE_8:
+    attributes:
+      long_name: Reusable spare field (8 bits)
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  CAL_SAMPLE_DECODED__ICIE__CAL_OBSID_RAD:
+    attributes:
+      long_name: ICIE calibration observation ID for radiometer
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  CAL_SAMPLE_DECODED__ICIE__CAL_OBSID_WFOV:
+    attributes:
+      long_name: ICIE calibration observation ID for wide field of view camera
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  CAL_SAMPLE_DECODED__ICIE__CAL_SAMPLE_CHECKSUM:
+    attributes:
+      long_name: ICIE calibration downsampled packet checksum
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  CAL_SAMPLE_DECODED__ICIE__CAL_SAMPLE:
+    attributes:
+      long_name: ICIE calibration downsampled radiometer sample
+      _FillValue: .nan
+    dimensions:
+    - CAL_SAMPLE_FPE_TIME
+    dtype: float32
+  CAL_SAMPLE_DECODED__CAL_SAMPLE_packet_index:
+    attributes:
+      comment: Maps each calibration downsampled sample to its originating packet
+        index
+      long_name: Packet index for calibration downsampled data
+      _FillValue: -9223372036854775808
+    dimensions:
+    - CAL_SAMPLE_FPE_TIME
+    dtype: int64
+  AXIS_SAMPLE_DECODED__VERSION:
+    attributes:
+      long_name: Packet version
+      valid_range:
+      - 0
+      - 7
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  AXIS_SAMPLE_DECODED__TYPE:
+    attributes:
+      long_name: Packet type
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  AXIS_SAMPLE_DECODED__SEC_HDR_FLAG:
+    attributes:
+      long_name: Secondary header flag
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  AXIS_SAMPLE_DECODED__PKT_APID:
+    attributes:
+      long_name: Packet application ID
+      valid_range:
+      - 0
+      - 2047
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  AXIS_SAMPLE_DECODED__SEQ_FLGS:
+    attributes:
+      long_name: Sequence flags
+      valid_range:
+      - 0
+      - 3
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  AXIS_SAMPLE_DECODED__SRC_SEQ_CTR:
+    attributes:
+      long_name: Source sequence counter
+      valid_range:
+      - 0
+      - 16383
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  AXIS_SAMPLE_DECODED__PKT_LEN:
+    attributes:
+      long_name: Packet length
+      units: bytes
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  AXIS_SAMPLE_DECODED__ICIE__TM_DAY_AXIS_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry day for packet
+      units: integer days
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  AXIS_SAMPLE_DECODED__ICIE__TM_MS_AXIS_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry milliseconds for packet
+      units: integer milliseconds
+      valid_range:
+      - 0
+      - 86399999
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  AXIS_SAMPLE_DECODED__ICIE__TM_US_AXIS_SAMPLE:
+    attributes:
+      long_name: ICIE telemetry microseconds for packet
+      units: integer microseconds
+      valid_range:
+      - 0
+      - 999
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  AXIS_SAMPLE_DECODED__REUSABLE_SPARE_8:
+    attributes:
+      long_name: Reusable spare field (8 bits)
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  AXIS_SAMPLE_DECODED__ICIE__AXIS_OBSID_RAD:
+    attributes:
+      long_name: ICIE axis observation ID for radiometer
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  AXIS_SAMPLE_DECODED__ICIE__AXIS_OBSID_WFOV:
+    attributes:
+      long_name: ICIE axis observation ID for wide field of view camera
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  AXIS_SAMPLE_DECODED__ICIE__AXIS_SAMPLE_CHECKSUM:
+    attributes:
+      long_name: ICIE axis sample packet checksum
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  AXIS_SAMPLE_DECODED__ICIE__AXIS_AZ_FILT:
+    attributes:
+      long_name: ICIE azimuth axis filtered encoder reading
+      units: radians
+      _FillValue: .nan
+    dimensions:
+    - AXIS_SAMPLE_ICIE_TIME
+    dtype: float32
+  AXIS_SAMPLE_DECODED__ICIE__AXIS_EL_FILT:
+    attributes:
+      long_name: ICIE elevation axis filtered encoder reading
+      units: radians
+      _FillValue: .nan
+    dimensions:
+    - AXIS_SAMPLE_ICIE_TIME
+    dtype: float32
+  AXIS_SAMPLE_DECODED__AXIS_SAMPLE_packet_index:
+    attributes:
+      comment: Maps each axis sample to its originating packet index
+      long_name: Packet index for axis sample data
+      _FillValue: -9223372036854775808
+    dimensions:
+    - AXIS_SAMPLE_ICIE_TIME
+    dtype: int64
+  NOM_HK_DECODED__VERSION:
+    attributes:
+      long_name: Packet version
+      valid_range:
+      - 0
+      - 7
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  NOM_HK_DECODED__TYPE:
+    attributes:
+      long_name: Packet type
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  NOM_HK_DECODED__SEC_HDR_FLAG:
+    attributes:
+      long_name: Secondary header flag
+      valid_range:
+      - 0
+      - 1
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  NOM_HK_DECODED__PKT_APID:
+    attributes:
+      long_name: Packet application ID
+      valid_range:
+      - 0
+      - 2047
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  NOM_HK_DECODED__SEQ_FLGS:
+    attributes:
+      long_name: Sequence flags
+      valid_range:
+      - 0
+      - 3
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  NOM_HK_DECODED__SRC_SEQ_CTR:
+    attributes:
+      long_name: Source sequence counter
+      valid_range:
+      - 0
+      - 16383
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  NOM_HK_DECODED__PKT_LEN:
+    attributes:
+      long_name: Packet length
+      units: bytes
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  NOM_HK_DECODED__ICIE__TM_DAY_NOM_HK:
+    attributes:
+      long_name: ICIE telemetry day for packet
+      units: integer days
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  NOM_HK_DECODED__ICIE__TM_MS_NOM_HK:
+    attributes:
+      long_name: ICIE telemetry milliseconds for packet
+      units: integer milliseconds
+      valid_range:
+      - 0
+      - 86399999
+      _FillValue: 4294967295
+    dimensions:
+    - PACKET
+    dtype: uint32
+  NOM_HK_DECODED__ICIE__TM_US_NOM_HK:
+    attributes:
+      long_name: ICIE telemetry microseconds for packet
+      units: integer microseconds
+      valid_range:
+      - 0
+      - 999
+      _FillValue: 65535
+    dimensions:
+    - PACKET
+    dtype: uint16
+  NOM_HK_DECODED__ICIE__CFPEC_CMD_SUCC_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__CFPEV_CMD_SUCC_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__CFPE_SWCR_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__FPEC_CMD_SUCC_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__FPEV_CMD_SUCC_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__FPE_TSCOPE_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__HK_MRAM_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S6'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__ICIE_12_VMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_26_IMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_26_VMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_3P3_IMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_3P3_VMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_5P0_IMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_5P0_VMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_AZ_AMB_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__ICIE_EL_PWB_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__NOM_HK_CHECKSUM:
+    dimensions:
+    - PACKET
+    dtype: uint32
+    attributes:
+      _FillValue: 4294967295
+  NOM_HK_DECODED__ICIE__PEC_CMD_SUCC_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__PEV_CMD_SUCC_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__PE_P3P3V2_MON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__PE_P5_VMON:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__PE_RCM_MX_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__PE_RCM_PX_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__PE_WFOV_FPA_TEMP:
+    dimensions:
+    - PACKET
+    dtype: float64
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SV_SAS_FAULT:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_ANG_ERR_AZ:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_ANG_ERR_EL:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_ANG_MEAS_AZ:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_ANG_MEAS_EL:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_AWU_ST_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_AWU_ST_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_BRK_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S10'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_CMD_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S12'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_CMD_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S12'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_CMD_PCG0_AZ:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_CMD_PCG0_EL:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_CMD_PCG1_AZ:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_CMD_PCG1_EL:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_AXIS_ENC_MD_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S6'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_ENC_MD_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S6'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_ENC_ST_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_ENC_ST_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FAULT_ST_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FAULT_ST_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_ANG_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_ANG_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_ERR_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_ERR_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_RT_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_RT_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_TQ_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_FLT_TQ_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_MTR_ST_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_AXIS_MTR_ST_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_CAL_SAMPLE:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_CFPEC_ALIVE_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_CFPEV_ALIVE_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_CMD_FAIL_CODE:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_CMD_FMT_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_CMD_RCV_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_CMD_RJCT_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_CMD_RJCT_OP:
+    dimensions:
+    - PACKET
+    dtype: '|S21'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_CMD_SUCC_OP:
+    dimensions:
+    - PACKET
+    dtype: '|S21'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_RESP_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP0:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP1:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP10:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP100:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP101:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP102:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP103:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP104:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP105:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP106:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP107:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP108:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP109:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP11:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP110:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP111:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP112:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP113:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP114:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP115:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP116:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP117:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP118:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP119:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP12:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP120:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP121:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP122:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP123:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP124:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP125:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP126:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP127:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP13:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP14:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP15:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP16:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP17:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP18:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP19:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP2:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP20:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP21:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP22:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP23:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP24:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP25:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP26:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP27:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP28:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP29:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP3:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP30:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP31:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP32:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP33:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP34:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP35:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP36:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP37:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP38:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP39:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP4:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP40:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP41:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP42:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP43:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP44:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP45:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP46:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP47:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP48:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP49:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP5:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP50:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP51:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP52:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP53:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP54:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP55:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP56:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP57:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP58:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP59:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP6:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP60:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP61:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP62:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP63:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP64:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP65:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP66:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP67:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP68:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP69:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP7:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP70:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP71:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP72:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP73:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP74:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP75:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP76:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP77:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP78:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP79:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP8:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP80:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP81:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP82:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP83:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP84:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP85:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP86:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP87:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP88:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP89:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP9:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP90:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP91:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP92:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP93:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP94:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP95:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP96:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP97:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP98:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_FP_WP_ST_WP99:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_LL_OVR_AZ:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_LL_OVR_EL:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_LWC_ALIVE_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_MEM_OP_TYPE:
+    dimensions:
+    - PACKET
+    dtype: '|S5'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_MEM_XSUM:
+    dimensions:
+    - PACKET
+    dtype: uint32
+    attributes:
+      _FillValue: 4294967295
+  NOM_HK_DECODED__ICIE__SW_MSG_RCV_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_OBSID_RAD:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_OBSID_WFOV:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_OS_CPU_MAX:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_OS_CPU_USAGE:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_PPS_RCV_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_RAD_PKT_CNT_CFPE:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_RAD_PKT_CNT_FPE:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_RAD_SAMPLE_0:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_RAD_SAMPLE_1:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_RAD_SAMPLE_2:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_RAD_SAMPLE_3:
+    dimensions:
+    - PACKET
+    dtype: float32
+    attributes:
+      _FillValue: .nan
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP0:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP1:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP2:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP3:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP4:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP5:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP6:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_BUF_OP7:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP0:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP1:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP2:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP3:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP4:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP5:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP6:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_EXEC_POS_OP7:
+    dimensions:
+    - PACKET
+    dtype: uint16
+    attributes:
+      _FillValue: 65535
+  NOM_HK_DECODED__ICIE__SW_SEQ_LD_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP0:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP1:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP2:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP3:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP4:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP5:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP6:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_STOP_CD_OP7:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP0:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP1:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP2:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP3:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP4:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP5:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP6:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SEQ_ST_OP7:
+    dimensions:
+    - PACKET
+    dtype: '|S7'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_SV_RCV_CNT:
+    dimensions:
+    - PACKET
+    dtype: uint8
+    attributes:
+      _FillValue: 255
+  NOM_HK_DECODED__ICIE__SW_TBL_LD_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S11'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_TIME_PPMS_SRC:
+    dimensions:
+    - PACKET
+    dtype: '|S8'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_WFOV_CAM_RCV_ERR:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_WFOV_FSW_RD_PAG:
+    dimensions:
+    - PACKET
+    dtype: uint32
+    attributes:
+      _FillValue: 4294967295
+  NOM_HK_DECODED__ICIE__SW_WFOV_FSW_WRT_PAG:
+    dimensions:
+    - PACKET
+    dtype: uint32
+    attributes:
+      _FillValue: 4294967295
+  NOM_HK_DECODED__ICIE__SW_WFOV_IMG_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S6'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_WFOV_NAND_BAD:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__ICIE__SW_WFOV_TLM_ST:
+    dimensions:
+    - PACKET
+    dtype: '|S3'
+    attributes:
+      _FillValue: !!binary ""
+  NOM_HK_DECODED__REUSABLE_SPARE_2:
+    attributes:
+      long_name: REUSABLE_SPARE_2
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8
+  NOM_HK_DECODED__REUSABLE_SPARE_8:
+    attributes:
+      long_name: REUSABLE_SPARE_8
+      _FillValue: 255
+    dimensions:
+    - PACKET
+    dtype: uint8

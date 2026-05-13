@@ -3,7 +3,7 @@ from libera_utils.constants import LiberaApid
 
 CCSDS_KEEP_FIELDS = ["PACKET", "PACKET_ICIE_TIME", "SRC_SEQ_CTR", "PKT_LEN", "PKT_APID"]
 
-CCSDS_DROP_FIELDS = ["VERSION", "TYPE", "SEC_HDR_FLAG", "SEQ_FLGS"]
+CCSDS_DROP_FIELDS = ["VERSION", "TYPE", "SEC_HDR_FLAG", "SEQ_FLGS", "REUSABLE_SPARE_8", "REUSABLE_SPARE_2"]
 
 
 def merge_l1a_decoded_datasets(

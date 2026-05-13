@@ -46,7 +46,8 @@ dependencies = [
     "pydantic >2.0.3, <3.0",
     "matplotlib >=3.5.0, <4.0",
     "astropy (>=7.2.0,<8.0.0)",
-    "libera-utils @ git+ssh://git@github.com/LASP-Libera/libera_utils.git@728514436b644e6c4c19b5bd40b91fbfe9788c63"
+    # "libera-utils @ git+ssh://git@github.com/LASP-Libera/libera_utils.git@728514436b644e6c4c19b5bd40b91fbfe9788c63"
+    "libera-utils @ file:///Users/mawa7160/dev/libera_utils",
 ] # These are the dependencies used in the package metadata when building the project
 
 [project.scripts]
