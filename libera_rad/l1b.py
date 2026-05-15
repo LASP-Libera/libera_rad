@@ -205,29 +205,27 @@ def process_l1a_to_l1b(
     rad_data, nom_hk_data = _extract_radiometer_datasets(all_input_data)
 
     # Initialize SPICE kernels
-    km = KernelManager()
-    km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
+    with KernelManager() as km:
+        km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
 
-    # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
-    timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
+        # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
+        timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
 
-    # Calculate geolocation
-    lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+        # Calculate geolocation
+        lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
 
-    # Interpolate temperatures
-    interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
+        # Interpolate temperatures
+        interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
 
-    # TODO[LIBSDC-711]: Confirm order doesn't matter:
-    #  gain calibration -> downsample -> calculate radiance is equivalent to
-    #  calculate radiance -> gain calibration -> downsample
+        # Calculate radiances
+        calculated_radiance_by_channel = radiance.calculate_radiances(
+            calibrated_data_by_channel, interpolated_temperatures
+        )
 
-    # Calculate radiances
-    calculated_radiance_by_channel = radiance.calculate_radiances(calibrated_data_by_channel, interpolated_temperatures)
+        # Package output product
+        l1b_product, attributes = _package_l1b_product(timestamps, lat_lon_alt, calculated_radiance_by_channel)
 
-    # Package output product
-    l1b_product, attributes = _package_l1b_product(timestamps, lat_lon_alt, calculated_radiance_by_channel)
-
-    return l1b_product, attributes
+        return l1b_product, attributes
 
 
 def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple[xr.Dataset, xr.Dataset]:

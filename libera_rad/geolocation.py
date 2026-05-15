@@ -42,11 +42,10 @@ def calculate_lat_lon_altitude(
     """
     kernel_manager.ensure_known_kernels_are_furnished()
 
-    # Could use more error handling here to support more options of inputs for time range
     u_gps_times = spicetime.adapt(time_range, "iso")
-    # TODO[LIBSDC-718]: check with IE team that radiometer channels are equivalent, or which one is best to use
-    ellips_lla_df, sc_xyz_df, ellips_qf_ds = spatial.instrument_intersect_ellipsoid(
-        u_gps_times, sp.obj.Body("LIBERA_SW_RAD", frame=True), geodetic=True, degrees=True
+
+    ellips_lla_df, sc_xyz_df, ellips_qf_ds = spatial.compute_ellipsoid_intersection(
+        u_gps_times, sp.obj.Body("LIBERA_SW_RAD", frame=True), give_geodetic_output=True, give_lat_lon_in_degrees=True
     )
 
     logger.debug(f"Calculation complete, generated {len(ellips_lla_df)} points")
