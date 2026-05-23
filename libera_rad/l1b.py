@@ -65,6 +65,9 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         manifest = AnyPath(manifest_path)
     input_manifest = Manifest.from_file(manifest)
     logger.info(f"Loaded manifest with {len(input_manifest.files)} files")
+    no_geo_mode = "no_geo" in input_manifest.configuration
+    if no_geo_mode:
+        logger.info("No geolocation mode detected: placeholder geolocation will be used.")
 
     # Set the output location to write to in the output dropbox
     dropbox_path = os.getenv("PROCESSING_PATH")
@@ -73,11 +76,15 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
 
     # Step 2: Read and store ALL input data from manifest files
     logger.info("Step 2: Reading all input data from manifest files")
-    all_input_data, dynamic_kernel_sources = read_all_input_data(input_manifest)
+    all_input_data, dynamic_kernel_sources = read_all_input_data(input_manifest, no_geo_mode=no_geo_mode)
 
     # Step 3: Calculate radiometer data variables
     logger.info("Step 3: Calculating radiometer data variables")
-    processed_data, dynamic_product_attributes = process_l1a_to_l1b(all_input_data, dynamic_kernel_sources)
+    processed_data, dynamic_product_attributes = process_l1a_to_l1b(
+        all_input_data,
+        dynamic_kernel_sources,
+        no_geo_mode=no_geo_mode,
+    )
 
     # Steps 4: Store data with metadata and write to output folder
     logger.info("Step 4: Creating and writing data product")
@@ -88,6 +95,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     # Step 6: Create output manifest
     logger.info("Step 5: Creating output manifest")
     output_manifest = Manifest.output_manifest_from_input_manifest(input_manifest)
+    output_manifest.configuration.update(input_manifest.configuration)
 
     # Step 7: Add data files to output manifest
     logger.info(f"Step 6: Adding data files to output manifest: {output_data_file_path}")
@@ -101,7 +109,9 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     return output_manifest_filepath
 
 
-def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset], list[str]]:
+def read_all_input_data(
+    input_manifest: Manifest, no_geo_mode: bool = False
+) -> tuple[dict[str, xr.Dataset], list[str] | None]:
     """
     Read and store all input data from manifest files.
 
@@ -119,8 +129,9 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     -------
     dict[str, xr.Dataset]
         Dictionary with filenames as keys and loaded xarray datasets as values.
-    list[str]
-        Manifest paths for dynamic SPICE kernels, in manifest order.
+    list[str] or None
+        Manifest paths for dynamic SPICE kernels, in manifest order, or None
+        when no_geo_mode is True and SPICE kernels are not required.
 
     Raises
     ------
@@ -134,13 +145,16 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     logger.info("Step 2: Reading all input data from manifest files")
 
     all_data: dict[str, xr.Dataset] = {}
-    dynamic_kernel_sources: list[str] = []
+    dynamic_kernel_sources: list[str] | None = [] if not no_geo_mode else None
 
     for i, file_info in enumerate(input_manifest.files):
         logger.info(f"Reading file {i + 1}/{len(input_manifest.files)}: {file_info.filename}")
 
         try:
             if file_info.filename.endswith((".bc", ".bsp")):
+                if no_geo_mode:
+                    logger.info(f"No geolocation mode: skipping SPICE file {file_info.filename}")
+                    continue
                 dynamic_kernel_sources.append(file_info.filename)
                 logger.info("Recorded SPICE kernel for KernelManager: %s", file_info.filename)
             else:
@@ -153,7 +167,11 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
             logger.error(f"Failed to process file {file_info.filename}: {e}", exc_info=True)
             raise
 
-    logger.info(f"Successfully loaded {len(all_data)} datasets and {len(dynamic_kernel_sources)} SPICE kernel paths")
+    logger.info(
+        "Successfully loaded %d datasets and %d SPICE kernel paths",
+        len(all_data),
+        0 if dynamic_kernel_sources is None else len(dynamic_kernel_sources),
+    )
 
     if not all_data:
         logger.warning("No data files were loaded from manifest")
@@ -162,7 +180,9 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
 
 
 def process_l1a_to_l1b(
-    all_input_data: dict[str, xr.Dataset], dynamic_kernel_sources: Sequence[str | Path | S3Path]
+    all_input_data: dict[str, xr.Dataset],
+    dynamic_kernel_sources: Sequence[str | Path | S3Path] | None,
+    no_geo_mode: bool = False,
 ) -> tuple[dict[str, np.ndarray], dict[str, str]]:
     """
     Process L1A data and SPICE Kernels to L1B product.
@@ -183,10 +203,15 @@ def process_l1a_to_l1b(
     all_input_data : dict[str, xr.Dataset]
         Dictionary of input datasets keyed by filename. Expected to contain radiometer sample data ('rad_sample') and
         nominal housekeeping data ('nom_hk').
-    dynamic_kernel_sources : sequence of str, pathlib.Path, or cloudpathlib.S3Path
+    dynamic_kernel_sources : sequence of str, pathlib.Path, or cloudpathlib.S3Path, or None
         Manifest-ordered paths to SPICE kernel files (.bc, .bsp). Each entry is materialized through
         :class:`~libera_utils.libera_spice.spice_utils.KernelFileCache` inside
-        :meth:`KernelManager.load_libera_dynamic_kernels`.
+        :meth:`KernelManager.load_libera_dynamic_kernels`. Not used when
+        no_geo_mode is True.
+    no_geo_mode : bool, optional
+        When True, bypasses SPICE geolocation and uses placeholder geolocation
+        values. Triggered by the presence of a 'no_geo' key in the input
+        manifest configuration. Defaults to False.
 
     Returns
     -------
@@ -204,28 +229,31 @@ def process_l1a_to_l1b(
     # Extract input datasets
     rad_data, nom_hk_data = _extract_radiometer_datasets(all_input_data)
 
-    # Initialize SPICE kernels
-    with KernelManager() as km:
-        km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
+    # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
+    timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
 
-        # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
-        timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
+    if no_geo_mode:
+        lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(len(timestamps))
+    else:
+        if not dynamic_kernel_sources:
+            raise ValueError("SPICE kernel sources are required for geolocation when no_geo_mode is False")
+        # Initialize SPICE kernels
+        with KernelManager() as km:
+            km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
 
-        # Calculate geolocation
-        lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            # Calculate geolocation
+            lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
 
-        # Interpolate temperatures
-        interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
+    # Interpolate temperatures
+    interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
 
-        # Calculate radiances
-        calculated_radiance_by_channel = radiance.calculate_radiances(
-            calibrated_data_by_channel, interpolated_temperatures
-        )
+    # Calculate radiances
+    calculated_radiance_by_channel = radiance.calculate_radiances(calibrated_data_by_channel, interpolated_temperatures)
 
-        # Package output product
-        l1b_product, attributes = _package_l1b_product(timestamps, lat_lon_alt, calculated_radiance_by_channel)
+    # Package output product
+    l1b_product, attributes = _package_l1b_product(timestamps, lat_lon_alt, calculated_radiance_by_channel)
 
-        return l1b_product, attributes
+    return l1b_product, attributes
 
 
 def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple[xr.Dataset, xr.Dataset]:

@@ -1,5 +1,9 @@
 # Version Changes
 
+## 0.5.4
+
+- Add `no_geo` manifest configuration to bypass SPICE geolocation for ground-calibration processing. When enabled, `.bc`/`.bsp` files are skipped during manifest read, `KernelManager` is not invoked, and standard product fill values are written for latitude, longitude, and altitude. Output manifest configuration is propagated from the input manifest.
+
 ## 0.5.3
 
 - Use libera_utils `KernelFileCache`/`KernelManager.load_libera_dynamic_kernels` for dynamic kernel materialization and add an integration assertion that dynamic kernel loads populate the user cache. Callers must pass a **sequence** of kernel paths; integration tests and learning notebooks build an explicit sorted path list from test data directories.
