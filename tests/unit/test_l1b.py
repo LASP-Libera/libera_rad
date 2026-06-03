@@ -40,25 +40,24 @@ class TestReadAllInputData:
         )
         return dataset
 
-    def test_read_all_input_data_creates_spice_directory(self, mock_manifest, tmp_path, mock_dataset):
-        """Test that SPICE directory is created."""
-        # Create a mock file handle that xr.open_dataset can use
+    def test_read_all_input_data_collects_dynamic_kernel_paths(self, mock_manifest, mock_dataset):
+        """Manifest kernel paths are returned for KernelManager (no package-local spice directory)."""
         mock_file = Mock()
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
         with (
             patch("libera_rad.l1b.smart_open", return_value=mock_file),
-            patch("libera_rad.l1b.smart_copy_file"),
             patch("xarray.open_dataset") as mock_open_dataset,
         ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
 
-            all_data, spice_directory = l1b.read_all_input_data(mock_manifest)
+            all_data, dynamic_kernel_sources = l1b.read_all_input_data(mock_manifest)
 
-            # Verify SPICE directory was created
-            assert spice_directory.exists()
-            assert spice_directory.name == "spice_files"
+            assert dynamic_kernel_sources == [
+                "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
+            ]
+            assert len(all_data) == 2
 
     def test_read_all_input_data_loads_netcdf_files(self, mock_manifest, mock_dataset):
         """Test that NetCDF files are loaded correctly."""
@@ -69,7 +68,6 @@ class TestReadAllInputData:
 
         with (
             patch("libera_rad.l1b.smart_open", return_value=mock_file),
-            patch("libera_rad.l1b.smart_copy_file"),
             patch("xarray.open_dataset") as mock_open_dataset,
         ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
@@ -80,27 +78,6 @@ class TestReadAllInputData:
             assert "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc" in all_data
             assert "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc" in all_data
 
-    def test_read_all_input_data_copies_spice_files(self, mock_manifest, mock_dataset):
-        """Test that SPICE kernel files are copied."""
-        # Create a mock file handle that xr.open_dataset can use
-        mock_file = Mock()
-        mock_file.__enter__ = Mock(return_value=mock_file)
-        mock_file.__exit__ = Mock(return_value=False)
-
-        with (
-            patch("libera_rad.l1b.smart_open", return_value=mock_file),
-            patch("libera_rad.l1b.smart_copy_file") as mock_copy,
-            patch("xarray.open_dataset") as mock_open_dataset,
-        ):
-            mock_open_dataset.return_value.load.return_value = mock_dataset
-
-            all_data, _ = l1b.read_all_input_data(mock_manifest)
-
-            # Verify smart_copy_file was called for the .bc file
-            mock_copy.assert_called_once()
-            call_args = mock_copy.call_args[0]
-            assert call_args[0] == "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
-
     def test_read_all_input_data_handles_file_not_found(self, mock_manifest):
         """Test error handling when file is not found."""
         # Create a mock file handle that raises FileNotFoundError when entered
@@ -108,7 +85,7 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(side_effect=FileNotFoundError("File not found"))
         mock_file.__exit__ = Mock(return_value=False)
 
-        with patch("libera_rad.l1b.smart_open", return_value=mock_file), patch("libera_rad.l1b.smart_copy_file"):
+        with patch("libera_rad.l1b.smart_open", return_value=mock_file):
             with pytest.raises(FileNotFoundError):
                 l1b.read_all_input_data(mock_manifest)
 
@@ -119,14 +96,11 @@ class TestReadAllInputData:
         file_info.filename = "test_kernel.bc"
         manifest.files = [file_info]
 
-        with patch("libera_rad.l1b.smart_copy_file") as mock_copy:
-            # Make smart_copy_file do nothing (successful copy)
-            mock_copy.return_value = None
+        all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
-            all_data, _ = l1b.read_all_input_data(manifest)
-
-            assert len(all_data) == 0
-            assert "No data files were loaded" in caplog.text
+        assert len(all_data) == 0
+        assert dynamic_kernel_sources == ["test_kernel.bc"]
+        assert "No data files were loaded" in caplog.text
 
     def test_read_all_input_data_handles_exception_in_processing(self, mock_manifest):
         """Test error handling when processing fails."""
@@ -137,7 +111,6 @@ class TestReadAllInputData:
 
         with (
             patch("libera_rad.l1b.smart_open", return_value=mock_file),
-            patch("libera_rad.l1b.smart_copy_file"),
             patch("xarray.open_dataset", side_effect=Exception("Processing error")),
         ):
             with pytest.raises(Exception, match="Processing error"):
@@ -164,38 +137,15 @@ class TestReadAllInputData:
 
         with (
             patch("libera_rad.l1b.smart_open", return_value=mock_file),
-            patch("libera_rad.l1b.smart_copy_file") as mock_copy,
             patch("xarray.open_dataset") as mock_open_dataset,
         ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
 
-            all_data, _ = l1b.read_all_input_data(manifest)
+            all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
-            # Verify: 1 NetCDF file loaded, 2 SPICE files copied
             assert len(all_data) == 1
             assert nc_file.filename in all_data
-            assert mock_copy.call_count == 2
-
-    def test_read_all_input_data_spice_directory_path(self, mock_manifest, mock_dataset):
-        """Test that SPICE directory is created in the correct location."""
-        # Create a mock file handle
-        mock_file = Mock()
-        mock_file.__enter__ = Mock(return_value=mock_file)
-        mock_file.__exit__ = Mock(return_value=False)
-
-        with (
-            patch("libera_rad.l1b.smart_open", return_value=mock_file),
-            patch("libera_rad.l1b.smart_copy_file"),
-            patch("xarray.open_dataset") as mock_open_dataset,
-        ):
-            mock_open_dataset.return_value.load.return_value = mock_dataset
-
-            all_data, spice_directory = l1b.read_all_input_data(mock_manifest)
-
-            # Verify the path structure
-            assert spice_directory.name == "spice_files"
-            # The parent should be the directory containing l1b.py
-            assert "libera_rad" in str(spice_directory.parent)
+            assert dynamic_kernel_sources == [bc_file.filename, bsp_file.filename]
 
 
 class TestExtractRadiometerDatasets:
@@ -281,10 +231,9 @@ class TestProcessL1aToL1b:
             "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": nom_hk_data,
         }
 
-    def test_process_l1a_to_l1b(self, mock_input_data, tmp_path):
+    def test_process_l1a_to_l1b(self, mock_input_data):
         """Test full L1A to L1B processing pipeline."""
-        spice_dir = tmp_path / "spice"
-        spice_dir.mkdir()
+        dynamic_kernel_sources = ["/tmp/dummy.bc"]
 
         with (
             patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
@@ -310,7 +259,7 @@ class TestProcessL1aToL1b:
             )
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
-            result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, spice_dir)
+            result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources)
 
             # Check result structure
             assert isinstance(result, dict)

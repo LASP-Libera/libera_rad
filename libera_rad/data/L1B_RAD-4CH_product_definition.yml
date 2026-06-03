@@ -1,6 +1,6 @@
 attributes:
   ProductID: RAD-4CH
-  algorithm_version: 0.5.2
+  algorithm_version: 0.5.3
   Earth_Sun_Distance_AU:
 
 coordinates:
