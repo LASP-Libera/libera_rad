@@ -65,9 +65,11 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         manifest = AnyPath(manifest_path)
     input_manifest = Manifest.from_file(manifest)
     logger.info(f"Loaded manifest with {len(input_manifest.files)} files")
-    no_geo_mode = "no_geo" in input_manifest.configuration
-    if no_geo_mode:
-        logger.info("No geolocation mode detected: placeholder geolocation will be used.")
+    use_geo = bool(input_manifest.configuration.get("use_geo", True))
+    if not use_geo:
+        logger.info(
+            "use_geo is false in manifest configuration; skipping SPICE geolocation and using placeholder lat/lon/alt."
+        )
 
     # Set the output location to write to in the output dropbox
     dropbox_path = os.getenv("PROCESSING_PATH")
@@ -76,14 +78,14 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
 
     # Step 2: Read and store ALL input data from manifest files
     logger.info("Step 2: Reading all input data from manifest files")
-    all_input_data, dynamic_kernel_sources = read_all_input_data(input_manifest, no_geo_mode=no_geo_mode)
+    all_input_data, dynamic_kernel_sources = read_all_input_data(input_manifest, use_geo=use_geo)
 
     # Step 3: Calculate radiometer data variables
     logger.info("Step 3: Calculating radiometer data variables")
     processed_data, dynamic_product_attributes = process_l1a_to_l1b(
         all_input_data,
         dynamic_kernel_sources,
-        no_geo_mode=no_geo_mode,
+        use_geo=use_geo,
     )
 
     # Steps 4: Store data with metadata and write to output folder
@@ -109,9 +111,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     return output_manifest_filepath
 
 
-def read_all_input_data(
-    input_manifest: Manifest, no_geo_mode: bool = False
-) -> tuple[dict[str, xr.Dataset], list[str] | None]:
+def read_all_input_data(input_manifest: Manifest, use_geo: bool = True) -> tuple[dict[str, xr.Dataset], list[str]]:
     """
     Read and store all input data from manifest files.
 
@@ -129,9 +129,9 @@ def read_all_input_data(
     -------
     dict[str, xr.Dataset]
         Dictionary with filenames as keys and loaded xarray datasets as values.
-    list[str] or None
-        Manifest paths for dynamic SPICE kernels, in manifest order, or None
-        when no_geo_mode is True and SPICE kernels are not required.
+    list[str]
+        Manifest paths for dynamic SPICE kernels, in manifest order. Empty when
+        use_geo is False and SPICE kernels are not required.
 
     Raises
     ------
@@ -145,15 +145,15 @@ def read_all_input_data(
     logger.info("Step 2: Reading all input data from manifest files")
 
     all_data: dict[str, xr.Dataset] = {}
-    dynamic_kernel_sources: list[str] | None = [] if not no_geo_mode else None
+    dynamic_kernel_sources: list[str] = []
 
     for i, file_info in enumerate(input_manifest.files):
         logger.info(f"Reading file {i + 1}/{len(input_manifest.files)}: {file_info.filename}")
 
         try:
             if file_info.filename.endswith((".bc", ".bsp")):
-                if no_geo_mode:
-                    logger.info(f"No geolocation mode: skipping SPICE file {file_info.filename}")
+                if not use_geo:
+                    logger.info(f"use_geo is false: skipping SPICE file {file_info.filename}")
                     continue
                 dynamic_kernel_sources.append(file_info.filename)
                 logger.info("Recorded SPICE kernel for KernelManager: %s", file_info.filename)
@@ -170,7 +170,7 @@ def read_all_input_data(
     logger.info(
         "Successfully loaded %d datasets and %d SPICE kernel paths",
         len(all_data),
-        0 if dynamic_kernel_sources is None else len(dynamic_kernel_sources),
+        len(dynamic_kernel_sources),
     )
 
     if not all_data:
@@ -181,8 +181,8 @@ def read_all_input_data(
 
 def process_l1a_to_l1b(
     all_input_data: dict[str, xr.Dataset],
-    dynamic_kernel_sources: Sequence[str | Path | S3Path] | None,
-    no_geo_mode: bool = False,
+    dynamic_kernel_sources: Sequence[str | Path | S3Path],
+    use_geo: bool = True,
 ) -> tuple[dict[str, np.ndarray], dict[str, str]]:
     """
     Process L1A data and SPICE Kernels to L1B product.
@@ -203,15 +203,15 @@ def process_l1a_to_l1b(
     all_input_data : dict[str, xr.Dataset]
         Dictionary of input datasets keyed by filename. Expected to contain radiometer sample data ('rad_sample') and
         nominal housekeeping data ('nom_hk').
-    dynamic_kernel_sources : sequence of str, pathlib.Path, or cloudpathlib.S3Path, or None
+    dynamic_kernel_sources : sequence of str, pathlib.Path, or cloudpathlib.S3Path
         Manifest-ordered paths to SPICE kernel files (.bc, .bsp). Each entry is materialized through
         :class:`~libera_utils.libera_spice.spice_utils.KernelFileCache` inside
-        :meth:`KernelManager.load_libera_dynamic_kernels`. Not used when
-        no_geo_mode is True.
-    no_geo_mode : bool, optional
-        When True, bypasses SPICE geolocation and uses placeholder geolocation
-        values. Triggered by the presence of a 'no_geo' key in the input
-        manifest configuration. Defaults to False.
+        :meth:`KernelManager.load_libera_dynamic_kernels`. May be empty when
+        use_geo is False.
+    use_geo : bool, optional
+        When True (default), runs SPICE geolocation. When False, uses placeholder
+        lat/lon/alt for ground-calibration processing. Set via manifest
+        ``configuration.use_geo``; omitting the key is equivalent to True.
 
     Returns
     -------
@@ -232,11 +232,11 @@ def process_l1a_to_l1b(
     # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
 
-    if no_geo_mode:
+    if not use_geo:
         lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(len(timestamps))
     else:
         if not dynamic_kernel_sources:
-            raise ValueError("SPICE kernel sources are required for geolocation when no_geo_mode is False")
+            raise ValueError("SPICE kernel sources are required when use_geo is True")
         # Initialize SPICE kernels
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)

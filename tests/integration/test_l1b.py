@@ -81,7 +81,7 @@ class TestL1bManifest:
     def test_l1b_manifest(self, generate_input_manifest, monkeypatch, tmp_path):
         """Output manifest must have type OUTPUT, exactly one file, and a valid Libera filename."""
         monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
-        output_manifest_path = l1b.algorithm(generate_input_manifest)
+        output_manifest_path = l1b.algorithm(generate_input_manifest())
 
         actual = Manifest.from_file(output_manifest_path)
         # Checksums, UIDs, and full paths will differ, but format and file names must be valid

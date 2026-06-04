@@ -2,7 +2,7 @@
 
 ## 0.5.4
 
-- Add `no_geo` manifest configuration to bypass SPICE geolocation for ground-calibration processing. When enabled, `.bc`/`.bsp` files are skipped during manifest read, `KernelManager` is not invoked, and standard product fill values are written for latitude, longitude, and altitude. Output manifest configuration is propagated from the input manifest.
+- Add optional `use_geo` manifest configuration for ground-calibration processing. Omitting `use_geo` or setting it to `true` runs SPICE geolocation as in production. Only `use_geo: false` skips `.bc`/`.bsp` during manifest read, bypasses `KernelManager`, and writes standard product fill values for latitude, longitude, and altitude. Output manifest configuration is propagated from the input manifest.
 
 ## 0.5.3
 

@@ -76,11 +76,11 @@ def calculate_geolocation_for_timestamps(km: KernelManager, timestamps: np.ndarr
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
     """
-    Create placeholder geolocation values for no-geolocation mode.
+    Create placeholder geolocation values when use_geo is False.
 
     Used when SPICE geolocation is intentionally bypassed via manifest
-    configuration. Returns latitude, longitude, and altitude values filled with
-    standard product fill values.
+    ``configuration.use_geo``. Returns latitude, longitude, and altitude values
+    filled with standard product fill values.
 
     Parameters
     ----------
@@ -92,7 +92,7 @@ def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
     pd.DataFrame
         DataFrame with columns ``lat``, ``lon``, and ``alt``.
     """
-    logger.info("No geolocation mode: using placeholder geolocation (Latitude, Longitude, Altitude).")
+    logger.info("use_geo is false: using placeholder geolocation (Latitude, Longitude, Altitude).")
     return pd.DataFrame(
         {
             "lat": np.full(shape=n_samples, fill_value=-999, dtype=np.float32),
