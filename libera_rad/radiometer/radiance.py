@@ -753,7 +753,7 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
     --------
     Logs a warning if no variable is found matching a channel's enum identifier.
     """
-    raw_times = rad_data["RAD_SAMPLE_FPE_TIME"].values.astype(np.float64)
+    raw_times = rad_data["RAD_SAMPLE_FPE_TIME"].values
 
     calibrated_data_by_channel = {}
     calibrated_data_points = 0
@@ -781,9 +781,9 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
             calibrated_data_points = len(calibrated_100hz_rad_data)
 
     # TODO[LIBSDC-720]: double check with Dave on timestamp downsampling
-    first_time = raw_times[0]
-    last_time = raw_times[-1]
-    timestamps = np.linspace(first_time, last_time, num=calibrated_data_points)
+    if not np.issubdtype(raw_times.dtype, np.datetime64):
+        raise ValueError("RAD_SAMPLE_FPE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
+    timestamps = raw_times.astype("datetime64[ns]")[::2][:calibrated_data_points]
     return timestamps, calibrated_data_by_channel
 
 
@@ -812,9 +812,17 @@ def interpolate_temperatures(timestamps: np.ndarray, nom_hk_data: xr.Dataset) ->
     """
     # TODO[LIBSDC-713]: Compare interpolation of temperature data with average temperature for period
     #     and consult IE team with results.
+    hk_times = nom_hk_data["PACKET_ICIE_TIME"].values
+    if not np.issubdtype(hk_times.dtype, np.datetime64):
+        raise ValueError("PACKET_ICIE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
+    hk_x = hk_times.astype("datetime64[ns]").astype(np.int64)
+    ts_x = np.asarray(timestamps, dtype="datetime64[ns]").astype(np.int64)
+
     return pd.Series(
         np.interp(
-            timestamps, nom_hk_data["PACKET_ICIE_TIME"].to_series(), nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series()
+            ts_x,
+            hk_x,
+            nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series().to_numpy(dtype=np.float64),
         )
     )
 

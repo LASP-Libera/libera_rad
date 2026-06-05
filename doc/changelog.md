@@ -1,5 +1,14 @@
 # Version Changes
 
+## 0.5.5
+
+- Add `jpss_only` manifest configuration: load only JPSS-SPK and JPSS-CK dynamic kernels, compute subsatellite geolocation via `LIBERA_BASE` nadir ellipsoid intersection (no motor CK), populate `Subsatellite_*` fields, and write Azimuth/Elevation as 0°. Warn when other SPICE files are listed but skipped.
+- Production geolocation: instrument `Latitude`/`Longitude`/`Altitude` from `LIBERA_SW_RAD` boresight intersection; `Subsatellite_*` from separate `LIBERA_BASE` nadir intersection. `Colatitude` is derived from instrument latitude.
+- Compute `Solar_Zenith_Surface`, `Viewing_Zenith_Surface`, and `Relative_Azimuth_Surface` via curryer `surface_angles` at the observation point (`LIBERA_SW_RAD` in production, `LIBERA_BASE` in `jpss_only`).
+- Extend `use_geo: false` mode: Azimuth and Elevation use product fill (`-999`); surface geometry placeholders use seeded random SZA/VZA/RAA within product valid ranges; warn when any `.bc`/`.bsp` files are listed but skipped.
+- Manifest flag `jpss_only` requires a truthy value; `use_geo: false` and `jpss_only: true` together raise `ValueError`.
+- L1A reads use `decode_times=True`; pipeline timestamps are `datetime64[ns]` only (removed `_CCSDS_EPOCH` numeric conversion paths).
+
 ## 0.5.4
 
 - Add optional `use_geo` manifest configuration for ground-calibration processing. Omitting `use_geo` or setting it to `true` runs SPICE geolocation as in production. Only `use_geo: false` skips `.bc`/`.bsp` during manifest read, bypasses `KernelManager`, and writes standard product fill values for latitude, longitude, and altitude. Output manifest configuration is propagated from the input manifest.
