@@ -147,6 +147,31 @@ class TestReadAllInputData:
             assert nc_file.filename in all_data
             assert dynamic_kernel_sources == [bc_file.filename, bsp_file.filename]
 
+    def test_read_all_input_data_use_geo_false_skips_spice_even_with_spice_files(self, mock_dataset):
+        """use_geo=false in manifest configuration should skip SPICE files and return empty kernel list."""
+        manifest = Mock()
+        nc_file = Mock()
+        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc"
+        bc_file = Mock()
+        bc_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
+        manifest.files = [nc_file, bc_file]
+        manifest.configuration = {"use_geo": False}
+
+        mock_file = Mock()
+        mock_file.__enter__ = Mock(return_value=mock_file)
+        mock_file.__exit__ = Mock(return_value=False)
+
+        with (
+            patch("libera_rad.l1b.smart_open", return_value=mock_file),
+            patch("xarray.open_dataset") as mock_open_dataset,
+        ):
+            mock_open_dataset.return_value.load.return_value = mock_dataset
+            all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
+
+        assert len(all_data) == 1
+        assert nc_file.filename in all_data
+        assert dynamic_kernel_sources == []
+
 
 class TestExtractRadiometerDatasets:
     """Tests for _extract_radiometer_datasets function."""
@@ -259,7 +284,7 @@ class TestProcessL1aToL1b:
             )
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
-            result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources)
+            result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, use_geo=True)
 
             # Check result structure
             assert isinstance(result, dict)
@@ -268,6 +293,61 @@ class TestProcessL1aToL1b:
             assert "Filtered_Radiance_SW" in result
             assert isinstance(dynamic_attributes, dict)
             assert "Earth_Sun_Distance_AU" in dynamic_attributes
+
+    def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
+        """use_geo=False should bypass KernelManager and SPICE geolocation."""
+        with (
+            patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
+            patch("libera_rad.l1b.KernelManager") as mock_kernel_manager_cls,
+            patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
+            patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
+            patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
+            patch("libera_rad.geolocation.create_placeholder_geolocation_dataframe") as mock_placeholder_geo,
+            patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_calculate_geo,
+            patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
+        ):
+            mock_cal = Mock()
+            channel_prop = Mock()
+            channel_prop.channel_enum = "1"
+            mock_cal.channels = {"sw": channel_prop}
+            mock_load_cal.return_value = mock_cal
+
+            mock_downsample.side_effect = lambda x: x[::10]
+            mock_calibrate.return_value = np.random.rand(1000)
+            mock_response.return_value = np.ones(501)
+            mock_placeholder_geo.return_value = pd.DataFrame(
+                {
+                    "lat": np.full(100, -999, dtype=np.float32),
+                    "lon": np.full(100, -999, dtype=np.float32),
+                    "alt": np.full(100, -9999, dtype=np.float32),
+                }
+            )
+            mock_radiance.return_value = pd.Series(np.random.rand(100))
+
+            result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, [], use_geo=False)
+
+        mock_kernel_manager_cls.assert_not_called()
+        mock_calculate_geo.assert_not_called()
+        mock_placeholder_geo.assert_called_once_with(100)
+        assert isinstance(result, dict)
+        assert "Latitude" in result
+        assert np.all(result["Latitude"] == np.float32(-999))
+        assert isinstance(dynamic_attributes, dict)
+
+    def test_process_l1a_to_l1b_requires_kernel_sources_when_use_geo_true(self, mock_input_data):
+        """use_geo=True requires SPICE kernel paths from the manifest."""
+        timestamps = np.arange(10, dtype=np.float64)
+        calibrated_data = {"sw": np.zeros(10)}
+
+        with patch(
+            "libera_rad.radiometer.radiance.calibrate_and_downsample_radiometer_data",
+            return_value=(timestamps, calibrated_data),
+        ):
+            with pytest.raises(
+                ValueError,
+                match="SPICE kernel sources are required when use_geo is True",
+            ):
+                l1b.process_l1a_to_l1b(mock_input_data, [], use_geo=True)
 
 
 class TestAlgorithm:
@@ -304,7 +384,7 @@ class TestAlgorithm:
             patch("libera_rad.l1b.read_all_input_data") as mock_read_all,
             patch("libera_rad.l1b.process_l1a_to_l1b"),
         ):
-            mock_from_file.return_value = Mock(files=[manifest_path])
+            mock_from_file.return_value = Mock(files=[manifest_path], configuration={})
             mock_read_all.return_value = ({"foo": xr.Dataset()}, tmp_path)
 
             with pytest.raises(ValueError, match="PROCESSING_PATH environment variable is not set"):
@@ -314,10 +394,10 @@ class TestAlgorithm:
         """Testing the algorithm to generate output manifests"""
 
         monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
-        algo_inputs = generate_input_manifest
+        manifest_path = generate_input_manifest()
 
         # Run the algorithm
-        output_manifest_path = l1b.algorithm(algo_inputs)
+        output_manifest_path = l1b.algorithm(manifest_path)
 
         output_manifest_obj = Manifest.from_file(output_manifest_path)
 

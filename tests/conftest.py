@@ -54,50 +54,53 @@ def test_integration_data_path(test_data_path):
 
 @pytest.fixture
 def generate_input_manifest(tmp_path, test_integration_data_path):
-    """Generating test manifest from the data in test_data"""
-    # Radiometer L1A data
-    l1a_radiometer_test_file = (
-        test_integration_data_path
-        / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
-    )
+    """Build and write an input manifest from integration test data.
 
-    # Housekeeping L1A Data
-    l1a_housekeeping_test_file = (
-        test_integration_data_path / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
-    )
+    Returns a callable: ``generate_input_manifest(configuration={})`` writes a
+    manifest with the given ``configuration`` dict and returns its path as str.
+    """
 
-    # SPICE Kernels - elevation
-    spice_kernel_elevation_file = (
-        test_integration_data_path / "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26016220328.bc"
-    )
-    # SPICE Kernels - azimuth
-    spice_kernel_azimuth_file = (
-        test_integration_data_path / "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26016220138.bc"
-    )
-    # SPICE Kernels - jpss spk
-    spice_kernel_jpss_spk_file = (
-        test_integration_data_path / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp"
-    )
-    # SPICE Kernels - jpss ck
-    spice_kernel_jpss_ck_file = (
-        test_integration_data_path / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc"
-    )
+    def _build(configuration: dict | None = None) -> str:
+        l1a_radiometer_test_file = (
+            test_integration_data_path
+            / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+        )
+        l1a_housekeeping_test_file = (
+            test_integration_data_path
+            / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+        )
+        spice_kernel_elevation_file = (
+            test_integration_data_path / "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26016220328.bc"
+        )
+        spice_kernel_azimuth_file = (
+            test_integration_data_path / "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26016220138.bc"
+        )
+        spice_kernel_jpss_spk_file = (
+            test_integration_data_path / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp"
+        )
+        spice_kernel_jpss_ck_file = (
+            test_integration_data_path / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc"
+        )
 
-    input_manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
+        input_manifest = Manifest(
+            manifest_type=ManifestType.INPUT,
+            files=[],
+            configuration=dict(configuration) if configuration is not None else {},
+        )
 
-    input_manifest.add_files(
-        l1a_radiometer_test_file,
-        l1a_housekeeping_test_file,
-        spice_kernel_elevation_file,
-        spice_kernel_azimuth_file,
-        spice_kernel_jpss_spk_file,
-        spice_kernel_jpss_ck_file,
-    )
-    input_manifest.add_desired_time_range(
-        start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC),
-        end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=UTC),
-    )
+        input_manifest.add_files(
+            l1a_radiometer_test_file,
+            l1a_housekeeping_test_file,
+            spice_kernel_elevation_file,
+            spice_kernel_azimuth_file,
+            spice_kernel_jpss_spk_file,
+            spice_kernel_jpss_ck_file,
+        )
+        input_manifest.add_desired_time_range(
+            start_datetime=datetime.combine(date.today(), datetime.min.time(), tzinfo=UTC),
+            end_datetime=datetime.combine(date.today(), datetime.max.time(), tzinfo=UTC),
+        )
 
-    input_manifest_file_path = input_manifest.write(out_path=tmp_path)
+        return str(input_manifest.write(out_path=tmp_path))
 
-    return str(input_manifest_file_path)
+    return _build
