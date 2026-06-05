@@ -148,13 +148,14 @@ class TestReadAllInputData:
             assert dynamic_kernel_sources == [bc_file.filename, bsp_file.filename]
 
     def test_read_all_input_data_use_geo_false_skips_spice_even_with_spice_files(self, mock_dataset):
-        """use_geo=False should skip SPICE files and return empty kernel list."""
+        """use_geo=false in manifest configuration should skip SPICE files and return empty kernel list."""
         manifest = Mock()
         nc_file = Mock()
         nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc"
         bc_file = Mock()
         bc_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
         manifest.files = [nc_file, bc_file]
+        manifest.configuration = {"use_geo": False}
 
         mock_file = Mock()
         mock_file.__enter__ = Mock(return_value=mock_file)
@@ -165,7 +166,7 @@ class TestReadAllInputData:
             patch("xarray.open_dataset") as mock_open_dataset,
         ):
             mock_open_dataset.return_value.load.return_value = mock_dataset
-            all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest, use_geo=False)
+            all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
         assert len(all_data) == 1
         assert nc_file.filename in all_data

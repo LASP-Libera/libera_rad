@@ -53,6 +53,13 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         If the PROCESSING_PATH environment variable is not set.
     Exception
         If any file cannot be opened or processed.
+
+    Notes
+    -----
+    Manifest ``configuration.use_geo`` controls geolocation behavior. When
+    ``use_geo`` is false, SPICE kernel files are skipped during input read and
+    placeholder lat/lon/alt values are written. Omitting the key defaults to
+    true (production SPICE geolocation).
     """
     now = datetime.now(UTC)
     configure_task_logging(f"l1b_{now}")
@@ -78,7 +85,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
 
     # Step 2: Read and store ALL input data from manifest files
     logger.info("Step 2: Reading all input data from manifest files")
-    all_input_data, dynamic_kernel_sources = read_all_input_data(input_manifest, use_geo=use_geo)
+    all_input_data, dynamic_kernel_sources = read_all_input_data(input_manifest)
 
     # Step 3: Calculate radiometer data variables
     logger.info("Step 3: Calculating radiometer data variables")
@@ -111,7 +118,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     return output_manifest_filepath
 
 
-def read_all_input_data(input_manifest: Manifest, use_geo: bool = True) -> tuple[dict[str, xr.Dataset], list[str]]:
+def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset], list[str]]:
     """
     Read and store all input data from manifest files.
 
@@ -131,7 +138,8 @@ def read_all_input_data(input_manifest: Manifest, use_geo: bool = True) -> tuple
         Dictionary with filenames as keys and loaded xarray datasets as values.
     list[str]
         Manifest paths for dynamic SPICE kernels, in manifest order. Empty when
-        use_geo is False and SPICE kernels are not required.
+        ``input_manifest.configuration.use_geo`` is false and SPICE kernels are
+        not required.
 
     Raises
     ------
@@ -141,9 +149,15 @@ def read_all_input_data(input_manifest: Manifest, use_geo: bool = True) -> tuple
     Warnings
     --------
     Logs a warning if no data files were loaded from the manifest.
+
+    Notes
+    -----
+    When ``input_manifest.configuration.use_geo`` is false, SPICE kernel files
+    (.bc, .bsp) are skipped. Omitting the key defaults to true.
     """
     logger.info("Step 2: Reading all input data from manifest files")
 
+    use_geo = bool(input_manifest.configuration.get("use_geo", True))
     all_data: dict[str, xr.Dataset] = {}
     dynamic_kernel_sources: list[str] = []
 
