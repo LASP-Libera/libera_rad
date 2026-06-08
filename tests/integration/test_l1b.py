@@ -402,3 +402,19 @@ class TestL1bJpssOnlyIntegration:
 
         assert np.all(jpss_only_l1b_product_dataset["Azimuth"].values == 0)
         assert np.all(jpss_only_l1b_product_dataset["Elevation"].values == 0)
+
+        angle_fill = -999.0
+        for var, lo, hi in (
+            ("Solar_Zenith_Surface", 0.0, 180.0),
+            ("Viewing_Zenith_Surface", 0.0, 180.0),
+            ("Relative_Azimuth_Surface", 0.0, 360.0),
+        ):
+            values = jpss_only_l1b_product_dataset[var].values
+            valid = values[(values != angle_fill) & np.isfinite(values)]
+            assert len(valid) > 0, f"Expected populated {var} in jpss_only output"
+            assert np.all((valid >= lo) & (valid <= hi)), f"{var} out of product valid_range"
+
+        # LIBERA_BASE nadir: viewing zenith should be near zero for subsatellite geometry
+        vza = jpss_only_l1b_product_dataset["Viewing_Zenith_Surface"].values
+        valid_vza = vza[(vza != angle_fill) & np.isfinite(vza)]
+        assert np.all(valid_vza < 1.0), "jpss_only viewing zenith should be nadir-like"

@@ -319,16 +319,21 @@ def process_l1a_to_l1b(
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
     n_samples = len(timestamps)
     subsatellite_lat_lon: pd.DataFrame | None = None
+    surface_geometry: dict[str, np.ndarray] | None = None
 
     if not use_geo:
         lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(n_samples)
         azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
+        surface_geometry = geolocation.create_placeholder_surface_geometry_angles(n_samples)
     elif jpss_only_mode:
         if not dynamic_kernel_sources:
             raise ValueError("SPICE kernel sources are required for geolocation when jpss_only_mode is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
             lat_lon_alt = geolocation.calculate_libera_base_subsatellite_geolocation(km, timestamps)
+            surface_geometry = geolocation.calculate_surface_geometry_angles(
+                km, timestamps, lat_lon_alt, spacecraft_body="LIBERA_BASE"
+            )
         subsatellite_lat_lon = lat_lon_alt
         azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
     else:
@@ -339,6 +344,9 @@ def process_l1a_to_l1b(
             lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
             subsatellite_lat_lon = geolocation.calculate_libera_base_subsatellite_geolocation(km, timestamps)
             azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+            surface_geometry = geolocation.calculate_surface_geometry_angles(
+                km, timestamps, lat_lon_alt, spacecraft_body="LIBERA_SW_RAD"
+            )
 
     # Interpolate temperatures
     interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
@@ -357,6 +365,7 @@ def process_l1a_to_l1b(
         azimuth=azimuth,
         elevation=elevation,
         subsatellite_lat_lon=subsatellite_lat_lon,
+        surface_geometry=surface_geometry,
     )
 
     return l1b_product, attributes
@@ -427,6 +436,7 @@ def _package_l1b_product(
     azimuth: np.ndarray,
     elevation: np.ndarray,
     subsatellite_lat_lon: pd.DataFrame | None = None,
+    surface_geometry: dict[str, np.ndarray] | None = None,
 ) -> tuple[dict[str, ndarray], dict[str, Any]]:
     """
     Package L1B product according to product definition.
@@ -441,6 +451,9 @@ def _package_l1b_product(
         Subsatellite point geolocation. When omitted, ``Subsatellite_*`` fields are
         filled with product placeholders. In ``jpss_only`` mode this matches
         ``lat_lon_alt``; in production it is computed separately (LIBERA_BASE nadir).
+    surface_geometry : dict[str, np.ndarray], optional
+        Solar zenith, viewing zenith, and relative azimuth at the observation point.
+        When omitted, surface geometry fields use product fill values.
     calculated_radiance_by_channel : dict[str, np.ndarray]
         Calculated radiance values for each channel.
 
@@ -499,9 +512,15 @@ def _package_l1b_product(
         # Geometry
         "Along_Track_Angle": placeholder_neg999,
         "Cross_Track_Angle": placeholder_neg999,
-        "Solar_Zenith_Surface": placeholder_neg999,
-        "Relative_Azimuth_Surface": placeholder_neg999,
-        "Viewing_Zenith_Surface": placeholder_neg999,
+        "Solar_Zenith_Surface": (
+            surface_geometry["solar_zenith"] if surface_geometry is not None else placeholder_neg999
+        ),
+        "Relative_Azimuth_Surface": (
+            surface_geometry["relative_azimuth"] if surface_geometry is not None else placeholder_neg999
+        ),
+        "Viewing_Zenith_Surface": (
+            surface_geometry["viewing_zenith"] if surface_geometry is not None else placeholder_neg999
+        ),
         "Viewing_Azimuth_Surface_WRT_North": placeholder_neg999,
         "Satellite_Position": placeholder_3d_neg9999,
         "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,

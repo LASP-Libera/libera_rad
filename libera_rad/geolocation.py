@@ -156,6 +156,107 @@ def calculate_libera_base_subsatellite_geolocation(
     return ellips_lla_df
 
 
+def create_placeholder_surface_geometry_angles(n_samples: int) -> dict[str, np.ndarray]:
+    """
+    Placeholder SZA, VZA, and RAA for no-geolocation mode.
+
+    Returns product fill values when SPICE geolocation is disabled via
+    ``configuration.use_geo``.
+    """
+    fill = np.float32(-999.0)
+    return {
+        "solar_zenith": np.full(n_samples, fill, dtype=np.float32),
+        "viewing_zenith": np.full(n_samples, fill, dtype=np.float32),
+        "relative_azimuth": np.full(n_samples, fill, dtype=np.float32),
+    }
+
+
+def calculate_surface_geometry_angles(
+    kernel_manager: KernelManager,
+    timestamps: np.ndarray,
+    lat_lon_alt: pd.DataFrame,
+    spacecraft_body: str,
+    fill_value: float = -999.0,
+) -> dict[str, np.ndarray]:
+    """
+    Compute surface solar zenith, viewing zenith, and relative azimuth angles.
+
+    Angles are evaluated at the Earth observation point given by ``lat_lon_alt``
+    using curryer ``surface_angles`` (geodetic zenith convention). Relative
+    azimuth is the satellite azimuth minus the solar azimuth, wrapped to
+    ``[0, 360)`` degrees clockwise from north at the surface.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with SPICE kernels already loaded (including NAIF for the Sun).
+    timestamps : np.ndarray
+        Radiometer timestamps on the L1B 100 Hz grid.
+    lat_lon_alt : pd.DataFrame
+        Columns ``lat``, ``lon``, ``alt`` in degrees and meters at each timestamp.
+    spacecraft_body : str
+        NAIF body for the viewing direction (e.g. ``LIBERA_SW_RAD`` or ``LIBERA_BASE``).
+    fill_value : float
+        Product fill for samples where angles cannot be computed.
+
+    Returns
+    -------
+    dict[str, np.ndarray]
+        ``solar_zenith``, ``viewing_zenith``, and ``relative_azimuth`` arrays (float32).
+    """
+    kernel_manager.ensure_known_kernels_are_furnished()
+    n_samples = len(timestamps)
+    fill = np.float32(fill_value)
+
+    ugps_times = np.asarray(spicetime.adapt(pd.DatetimeIndex(timestamps), "iso"))
+    lon = lat_lon_alt["lon"].to_numpy(dtype=np.float64)
+    lat = lat_lon_alt["lat"].to_numpy(dtype=np.float64)
+    alt_m = lat_lon_alt["alt"].to_numpy(dtype=np.float64)
+    valid = np.isfinite(lon) & np.isfinite(lat) & np.isfinite(alt_m)
+
+    sza = np.full(n_samples, fill, dtype=np.float32)
+    vza = np.full(n_samples, fill, dtype=np.float32)
+    raa = np.full(n_samples, fill, dtype=np.float32)
+    if not np.any(valid):
+        return {"solar_zenith": sza, "viewing_zenith": vza, "relative_azimuth": raa}
+
+    lon_lat_alt_km = np.column_stack([lon[valid], lat[valid], alt_m[valid] / 1000.0])
+    surface_xyz = spatial.geodetic_to_ecef(lon_lat_alt_km, meters=False, degrees=True)
+    surface_positions = pd.DataFrame(
+        surface_xyz,
+        columns=["x", "y", "z"],
+        index=pd.Index(ugps_times[valid], name="ugps"),
+    )
+
+    sun_angles = spatial.surface_angles(
+        surface_positions,
+        target_obj="SUN",
+        degrees=True,
+        geocentric=False,
+        allow_nans=True,
+    )
+    sat_angles = spatial.surface_angles(
+        surface_positions,
+        target_obj=sp.obj.Body(spacecraft_body, frame=True),
+        degrees=True,
+        geocentric=False,
+        allow_nans=True,
+    )
+
+    sza_valid = sun_angles["zenith"].to_numpy(dtype=np.float64)
+    vza_valid = sat_angles["zenith"].to_numpy(dtype=np.float64)
+    raa_valid = (sat_angles["azimuth"] - sun_angles["azimuth"]).to_numpy(dtype=np.float64) % 360.0
+
+    sza[valid] = np.where(np.isfinite(sza_valid), sza_valid, np.nan).astype(np.float32)
+    vza[valid] = np.where(np.isfinite(vza_valid), vza_valid, np.nan).astype(np.float32)
+    raa[valid] = np.where(np.isfinite(raa_valid), raa_valid, np.nan).astype(np.float32)
+
+    for arr in (sza, vza, raa):
+        arr[~np.isfinite(arr)] = fill
+
+    return {"solar_zenith": sza, "viewing_zenith": vza, "relative_azimuth": raa}
+
+
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
     """
     Create placeholder geolocation values when use_geo is False.

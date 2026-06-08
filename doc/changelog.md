@@ -1,5 +1,10 @@
 # Version Changes
 
+## 0.5.7
+
+- Compute `Solar_Zenith_Surface`, `Viewing_Zenith_Surface`, and `Relative_Azimuth_Surface` via curryer `surface_angles` at the observation point (`LIBERA_SW_RAD` in production, `LIBERA_BASE` in `jpss_only`).
+- Extend `use_geo: false` mode: surface geometry fields (SZA/VZA/RAA) use product fill (`-999`).
+
 ## 0.5.6
 
 - Production geolocation: populate `Subsatellite_*` via `LIBERA_BASE` nadir (reusing jpss_only subsatellite function), motor `Azimuth`/`Elevation` from CK frames, and derive `Colatitude` from instrument latitude.

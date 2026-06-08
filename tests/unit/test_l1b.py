@@ -376,12 +376,13 @@ class TestProcessL1aToL1b:
 
         with (
             patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
-            patch("libera_rad.l1b.KernelManager"),
+            patch("libera_rad.l1b.KernelManager") as mock_kernel_manager_cls,
             patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
             patch("libera_rad.geolocation.calculate_libera_base_subsatellite_geolocation") as mock_subsat,
+            patch("libera_rad.geolocation.calculate_surface_geometry_angles") as mock_surface_geo,
             patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -405,13 +406,23 @@ class TestProcessL1aToL1b:
                     "alt": np.zeros(100),
                 }
             )
+            mock_surface_geo.return_value = {
+                "solar_zenith": np.full(100, 45.0, dtype=np.float32),
+                "viewing_zenith": np.full(100, 12.0, dtype=np.float32),
+                "relative_azimuth": np.full(100, 90.0, dtype=np.float32),
+            }
             mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
+            mock_km = Mock()
+            mock_kernel_manager_cls.return_value.__enter__.return_value = mock_km
 
             result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, use_geo=True)
 
             mock_subsat.assert_called_once()
-            mock_azel.assert_called_once()
+            mock_surface_geo.assert_called_once()
+            assert mock_surface_geo.call_args[0][0] is mock_km
+            assert mock_surface_geo.call_args[0][2] is mock_geoloc.return_value
+            assert mock_surface_geo.call_args[1] == {"spacecraft_body": "LIBERA_SW_RAD"}
 
             # Check result structure
             assert isinstance(result, dict)
@@ -422,7 +433,9 @@ class TestProcessL1aToL1b:
             assert "Earth_Sun_Distance_AU" in dynamic_attributes
             assert not np.allclose(result["Subsatellite_Latitude"], result["Latitude"])
             assert not np.allclose(result["Subsatellite_Longitude"], result["Longitude"])
-            assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+            assert np.all(result["Solar_Zenith_Surface"] == 45.0)
+            assert np.all(result["Viewing_Zenith_Surface"] == 12.0)
+            assert np.all(result["Relative_Azimuth_Surface"] == 90.0)
 
     def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
         """use_geo false should bypass KernelManager and SPICE geolocation."""
@@ -470,6 +483,9 @@ class TestProcessL1aToL1b:
         assert np.all(result["Latitude"] == np.float32(-999))
         assert np.all(result["Azimuth"] == np.float32(-999))
         assert np.all(result["Elevation"] == np.float32(-999))
+        assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+        assert np.all(result["Viewing_Zenith_Surface"] == np.float32(-999))
+        assert np.all(result["Relative_Azimuth_Surface"] == np.float32(-999))
         assert isinstance(dynamic_attributes, dict)
 
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
@@ -480,11 +496,12 @@ class TestProcessL1aToL1b:
         ]
         with (
             patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
-            patch("libera_rad.l1b.KernelManager"),
+            patch("libera_rad.l1b.KernelManager") as mock_kernel_manager_cls,
             patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_libera_base_subsatellite_geolocation") as mock_jpss_geo,
+            patch("libera_rad.geolocation.calculate_surface_geometry_angles") as mock_surface_geo,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -503,17 +520,29 @@ class TestProcessL1aToL1b:
                     "alt": np.zeros(100, dtype=np.float32),
                 }
             )
+            mock_surface_geo.return_value = {
+                "solar_zenith": np.linspace(30, 40, 100, dtype=np.float32),
+                "viewing_zenith": np.zeros(100, dtype=np.float32),
+                "relative_azimuth": np.linspace(0, 359, 100, dtype=np.float32),
+            }
             mock_radiance.return_value = pd.Series(np.random.rand(100))
+            mock_km = Mock()
+            mock_kernel_manager_cls.return_value.__enter__.return_value = mock_km
 
             result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
 
         mock_prod_geo.assert_not_called()
         mock_jpss_geo.assert_called_once()
+        mock_surface_geo.assert_called_once()
+        assert mock_surface_geo.call_args[0][0] is mock_km
+        assert mock_surface_geo.call_args[0][2] is mock_jpss_geo.return_value
+        assert mock_surface_geo.call_args[1] == {"spacecraft_body": "LIBERA_BASE"}
         assert np.all(result["Azimuth"] == 0)
         assert np.all(result["Elevation"] == 0)
         assert np.allclose(result["Subsatellite_Latitude"], result["Latitude"])
         assert np.allclose(result["Subsatellite_Longitude"], result["Longitude"])
-        assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+        assert np.allclose(result["Solar_Zenith_Surface"], np.linspace(30, 40, 100, dtype=np.float32))
+        assert np.all(result["Viewing_Zenith_Surface"] == 0)
 
     @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])
     def test_process_l1a_to_l1b_requires_kernel_sources_when_use_geo_true(
