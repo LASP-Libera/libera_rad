@@ -176,7 +176,6 @@ class TestL1bScienceValues:
             vals = l1b_product_dataset[var_name].values
             assert np.any(vals != fill_value), f"{var_name} contains only fill-value sentinels"
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     @pytest.mark.parametrize("var_name", ["Azimuth", "Elevation"])
     def test_azimuth_elevation_contain_computed_values(self, l1b_product_dataset, product_definition, var_name):
         """Azimuth/Elevation must have at least one computed (non-fill) value."""
@@ -209,7 +208,6 @@ class TestL1bRegressionStatistics:
     _ELEVATION_MEAN_DEG = np.float64(1.1046268158518922)
     _ELEVATION_STD_DEG = np.float64(44.8208251340132)
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     def test_azimuth_mean_std_pinned(self, l1b_product_dataset, product_definition):
         fill_value = product_definition["variables"]["Azimuth"]["attributes"]["_FillValue"]
         vals = l1b_product_dataset["Azimuth"].values.astype(np.float64)
@@ -220,7 +218,6 @@ class TestL1bRegressionStatistics:
         assert np.isclose(mean, self._AZIMUTH_MEAN_DEG, rtol=1e-6, atol=1e-3)
         assert np.isclose(std, self._AZIMUTH_STD_DEG, rtol=1e-6, atol=1e-3)
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     def test_elevation_mean_std_pinned(self, l1b_product_dataset, product_definition):
         fill_value = product_definition["variables"]["Elevation"]["attributes"]["_FillValue"]
         vals = l1b_product_dataset["Elevation"].values.astype(np.float64)

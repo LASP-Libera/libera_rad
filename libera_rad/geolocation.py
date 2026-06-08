@@ -212,3 +212,62 @@ def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
             "alt": np.full(shape=n_samples, fill_value=-9999, dtype=np.float32),
         }
     )
+
+
+def calculate_azimuth_elevation_for_timestamps(
+    km: KernelManager,
+    timestamps: np.ndarray,
+    fill_value: float = -999.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate instrument azimuth and elevation angles for the given timestamps.
+
+    Angles are derived from SPICE CK frame transformations (motor kernels) using the same Euler angle
+    conventions validated in `libera_utils` tier-0 kernel tests.
+
+    Parameters
+    ----------
+    km : KernelManager
+        Initialized kernel manager with loaded SPICE kernels.
+    timestamps : np.ndarray
+        Radiometer timestamps aligned to the L1B output time grid as ``datetime64[ns]``.
+    fill_value : float
+        Fill value for samples where SPICE frame transforms are unavailable (coverage gaps).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float32.
+    """
+    km.ensure_known_kernels_are_furnished()
+
+    # TODO[LIBSDC-788]: Pre-flight CK coverage check via KernelManager before az/el pxform loop.
+
+    dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
+    et_times = spicetime.adapt(dt64_times, "dt64", "et")
+    az = np.full(shape=len(dt64_times), fill_value=fill_value, dtype=np.float32)
+    el = np.full(shape=len(dt64_times), fill_value=fill_value, dtype=np.float32)
+
+    two_pi = float(2.0 * np.pi)
+    for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
+        try:
+            # Match libera_utils/tests/integration/test_tier0_kernel.py conventions
+            m_az = sp.pxform("LIBERA_BASE_COORD", "LIBERA_AZ_COORD", float(et))
+            az_rad = float(sp.m2eul(m_az, 1, 2, 3)[2])
+            az_deg = np.degrees((az_rad + two_pi) % two_pi)
+
+            m_el = sp.pxform("LIBERA_AZ_COORD", "LIBERA_EL_COORD", float(et))
+            el_rad = float(sp.m2eul(m_el, 1, 2, 3)[0])
+            el_deg = np.degrees(el_rad)
+
+            az[i] = np.float32(az_deg)
+            el[i] = np.float32(el_deg)
+        except Exception:
+            logger.debug(
+                "SPICE frame transform unavailable at ET %.6f; leaving azimuth/elevation fill",
+                et,
+                exc_info=True,
+            )
+            continue
+
+    return az, el

@@ -296,6 +296,52 @@ class TestCalculateDataQualityFlags:
         assert len(result) == 0
 
 
+class TestLatitudeToColatitude:
+    """Tests for element-wise colatitude derivation."""
+
+    def test_latitude_to_colatitude_mixed_fill_and_valid(self):
+        lat = np.array([-999, 45.0, np.nan, -999], dtype=np.float32)
+        fill = np.full(4, -999, dtype=np.float32)
+        expected = np.array([-999, 45.0, -999, -999], dtype=np.float32)
+        result = l1b._latitude_to_colatitude(lat, fill)
+        np.testing.assert_array_equal(result, expected)
+
+    def test_package_l1b_product_colatitude_preserves_fill_per_sample(self):
+        n = 4
+        timestamps = pd.date_range("2025-01-01", periods=n, freq="s").to_numpy(dtype="datetime64[ns]")
+        lat_lon_alt = pd.DataFrame(
+            {
+                "lat": np.array([-999, 45.0, np.nan, -999], dtype=np.float32),
+                "lon": np.full(n, -999, dtype=np.float32),
+                "alt": np.full(n, -9999, dtype=np.float32),
+            }
+        )
+        subsatellite_lat_lon = pd.DataFrame(
+            {
+                "lat": np.array([-999, 30.0, 10.0, np.nan], dtype=np.float32),
+                "lon": np.zeros(n, dtype=np.float32),
+                "alt": np.zeros(n, dtype=np.float32),
+            }
+        )
+        result, _ = l1b._package_l1b_product(
+            timestamps=timestamps,
+            lat_lon_alt=lat_lon_alt,
+            calculated_radiance_by_channel={"sw": np.zeros(n, dtype=np.float32)},
+            operational_mode=np.zeros(n, dtype=np.uint16),
+            azimuth=np.full(n, -999, dtype=np.float32),
+            elevation=np.full(n, -999, dtype=np.float32),
+            subsatellite_lat_lon=subsatellite_lat_lon,
+        )
+        np.testing.assert_array_equal(
+            result["Colatitude"],
+            np.array([-999, 45.0, -999, -999], dtype=np.float32),
+        )
+        np.testing.assert_array_equal(
+            result["Subsatellite_Colatitude"],
+            np.array([-999, 60.0, 80.0, -999], dtype=np.float32),
+        )
+
+
 class TestProcessL1aToL1b:
     """Integration tests for process_l1a_to_l1b function."""
 
@@ -335,7 +381,8 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
-            patch("libera_rad.geolocation.create_placeholder_azimuth_elevation") as mock_placeholder_azel,
+            patch("libera_rad.geolocation.calculate_libera_base_subsatellite_geolocation") as mock_subsat,
+            patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             # Setup mocks
@@ -367,12 +414,13 @@ class TestProcessL1aToL1b:
                 np.full(100, -999, dtype=np.float32),
                 np.full(100, -999, dtype=np.float32),
             )
+            mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, use_geo=True)
 
-            mock_geoloc.assert_called_once()
-            mock_placeholder_azel.assert_called_once_with(100)
+            mock_subsat.assert_called_once()
+            mock_azel.assert_called_once()
 
             # Check result structure
             assert isinstance(result, dict)

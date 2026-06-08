@@ -335,8 +335,9 @@ def process_l1a_to_l1b(
             raise ValueError("SPICE kernel sources are required for geolocation when use_geo is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-            lat_lon_alt, subsatellite_lat_lon = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
-        azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
+            lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            subsatellite_lat_lon = geolocation.calculate_libera_base_subsatellite_geolocation(km, timestamps)
+            azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
 
     # Interpolate temperatures
     interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
@@ -435,7 +436,7 @@ def _package_l1b_product(
     subsatellite_lat_lon : pd.DataFrame, optional
         Subsatellite point geolocation. When omitted, ``Subsatellite_*`` fields are
         filled with product placeholders. In ``jpss_only`` mode this matches
-        ``lat_lon_alt``.
+        ``lat_lon_alt``; in production it is computed separately (LIBERA_BASE nadir).
     calculated_radiance_by_channel : dict[str, np.ndarray]
         Calculated radiance values for each channel.
 
@@ -473,6 +474,8 @@ def _package_l1b_product(
         subsatellite_lat = placeholder_neg999
         subsatellite_lon = placeholder_neg999
         subsatellite_colat = placeholder_neg999
+
+    colatitude = _latitude_to_colatitude(lat, placeholder_neg999)
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
