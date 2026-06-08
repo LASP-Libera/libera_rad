@@ -1,5 +1,9 @@
 # Version Changes
 
+## 0.5.6
+
+- Production geolocation: populate `Subsatellite_*` via `LIBERA_BASE` nadir (reusing jpss_only subsatellite function), motor `Azimuth`/`Elevation` from CK frames, and derive `Colatitude` from instrument latitude.
+
 ## 0.5.5
 
 - Add `jpss_only` manifest configuration: load only JPSS-SPK and JPSS-CK dynamic kernels, compute subsatellite geolocation via `LIBERA_BASE` nadir ellipsoid intersection (no motor CK), populate instrument and `Subsatellite_*` lat/lon from a single call, and write Azimuth/Elevation as 0°. Warn when other SPICE files are listed but skipped.
