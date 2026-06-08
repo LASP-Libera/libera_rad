@@ -17,6 +17,9 @@ from libera_utils.libera_spice.kernel_manager import KernelManager
 
 logger = logging.getLogger(__name__)
 
+# LIBERA_BASE_COORD +Z nadir; verified on integration JPSS-only kernels (no motor CK).
+_LIBERA_BASE_NADIR_VECTOR = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+
 
 def calculate_lat_lon_altitude(
     kernel_manager: KernelManager,
@@ -70,8 +73,77 @@ def calculate_geolocation_for_timestamps(km: KernelManager, timestamps: np.ndarr
         DataFrame containing geolocation data.
     """
     # TODO[LIBSDC-739]: Add all geolocation values into the data product
-    datetime_index_time = pd.DatetimeIndex(timestamps)
-    return calculate_lat_lon_altitude(km, datetime_index_time)
+    return calculate_lat_lon_altitude(km, pd.DatetimeIndex(timestamps))
+
+
+def create_placeholder_azimuth_elevation(n_samples: int, fill_value: float = -999.0) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Placeholder motor angles for no-geolocation mode.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+    fill_value : float
+        Product fill value for Azimuth and Elevation.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        `(azimuth_deg, elevation_deg)` arrays, dtype float32.
+    """
+    fill = np.float32(fill_value)
+    return (
+        np.full(n_samples, fill, dtype=np.float32),
+        np.full(n_samples, fill, dtype=np.float32),
+    )
+
+
+def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Reference motor angles for jpss_only mode (no motor CK).
+
+    Returns 0° azimuth and elevation per operational convention when motor
+    kernels are unavailable.
+    """
+    zeros = np.zeros(n_samples, dtype=np.float32)
+    return zeros, zeros
+
+
+def calculate_libera_base_subsatellite_geolocation(
+    kernel_manager: KernelManager,
+    timestamps: np.ndarray,
+) -> pd.DataFrame:
+    """
+    Subsatellite geolocation using LIBERA_BASE nadir ellipsoid intersection.
+
+    Uses JPSS dynamic kernels (SPK/CK) plus static FK; does not require motor
+    azimuth/elevation CK. Surface LLA (altitude near 0 m on the ellipsoid).
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with JPSS and static kernels already loaded.
+    timestamps : np.ndarray
+        Radiometer timestamps on the L1B 100 Hz grid.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns ``lat``, ``lon``, ``alt`` in degrees / meters.
+    """
+    kernel_manager.ensure_known_kernels_are_furnished()
+    u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
+
+    ellips_lla_df, _, _ = spatial.compute_ellipsoid_intersection(
+        u_gps_times,
+        sp.obj.Body("LIBERA_BASE", frame=True),
+        custom_pointing_vectors=_LIBERA_BASE_NADIR_VECTOR,
+        give_geodetic_output=True,
+        give_lat_lon_in_degrees=True,
+    )
+    logger.debug("LIBERA_BASE subsatellite geolocation: %d points", len(ellips_lla_df))
+    return ellips_lla_df
 
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:

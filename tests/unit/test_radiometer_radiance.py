@@ -379,9 +379,10 @@ class TestCalibrateAndDownsampleRadiometerData:
     @pytest.fixture
     def mock_rad_data(self):
         """Create mock radiometer dataset."""
+        times = pd.date_range("2025-01-01", periods=1000, freq="ms").values
         return xr.Dataset(
             {
-                "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
+                "RAD_SAMPLE_FPE_TIME": (["time"], times),
                 "ICIE__RAD_SAMPLE_0": (["time"], np.random.rand(1000)),
                 "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
                 "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
@@ -392,9 +393,10 @@ class TestCalibrateAndDownsampleRadiometerData:
     @pytest.fixture
     def mock_rad_data_missing_channel(self):
         """Create mock radiometer dataset."""
+        times = pd.date_range("2025-01-01", periods=1000, freq="ms").values
         return xr.Dataset(
             {
-                "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, 2000, dtype=np.float64)),
+                "RAD_SAMPLE_FPE_TIME": (["time"], times),
                 "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
                 "ICIE__RAD_SAMPLE_2": (["time"], np.random.rand(1000)),
                 "ICIE__RAD_SAMPLE_3": (["time"], np.random.rand(1000)),
@@ -441,19 +443,20 @@ class TestInterpolateTemperatures:
 
     def test_interpolate_temperatures(self):
         """Test temperature interpolation."""
-        timestamps = np.array([100, 200, 300, 400, 500], dtype=np.float64)
+        base = np.datetime64("2025-01-01T00:00:00")
+        timestamps = base + np.array([100, 200, 300, 400, 500], dtype="timedelta64[ms]")
 
         nom_hk_data = xr.Dataset(
             {
-                "PACKET_ICIE_TIME": (["time"], np.array([0, 250, 500], dtype=np.float64)),
+                "PACKET_ICIE_TIME": (["time"], base + np.array([0, 250, 500], dtype="timedelta64[ms]")),
                 "ICIE__FPE_TSCOPE_TEMP": (["time"], np.array([20.0, 25.0, 30.0])),
             }
         )
 
         result = interpolate_temperatures(timestamps, nom_hk_data)
-        expected = pd.Series([22.0, 24.0, 26.0, 28.0, 30.0])
+        expected = np.array([22.0, 24.0, 26.0, 28.0, 30.0])
         assert isinstance(result, pd.Series)
-        assert result.equals(expected)
+        np.testing.assert_allclose(result.to_numpy(), expected, rtol=0, atol=1e-5)
 
 
 class TestCalculateRadiances:

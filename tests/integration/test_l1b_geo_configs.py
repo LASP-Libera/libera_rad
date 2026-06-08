@@ -112,6 +112,8 @@ class TestL1bManifestUseGeoConfiguration:
             assert np.all(dataset["Latitude"].values == _LATITUDE_FILL)
             assert np.all(dataset["Longitude"].values == _LONGITUDE_FILL)
             assert np.all(dataset["Altitude"].values == _ALTITUDE_FILL)
+            assert np.all(dataset["Azimuth"].values == _LATITUDE_FILL)
+            assert np.all(dataset["Elevation"].values == _LATITUDE_FILL)
             assert np.any(dataset["Filtered_Radiance_SW"].values != np.float32(-999))
 
         with xr.open_dataset(output_manifest.files[0].filename) as dataset:
