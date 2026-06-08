@@ -50,11 +50,15 @@ def l1b_product_file_path(tmp_path_factory, test_integration_data_path):
     )
     manifest_path = str(input_manifest.write(out_path=tmp_path))
 
+    previous_processing_path = os.environ.get("PROCESSING_PATH")
     os.environ["PROCESSING_PATH"] = str(tmp_path)
     try:
         output_manifest_path = l1b.algorithm(manifest_path)
     finally:
-        del os.environ["PROCESSING_PATH"]
+        if previous_processing_path is None:
+            os.environ.pop("PROCESSING_PATH", None)
+        else:
+            os.environ["PROCESSING_PATH"] = previous_processing_path
 
     output_manifest = Manifest.from_file(output_manifest_path)
     assert len(output_manifest.files) == 1, "Expected exactly one L1B output file in manifest"
@@ -350,11 +354,15 @@ def jpss_only_l1b_product_file_path(tmp_path_factory, test_integration_data_path
     )
     manifest_path = str(input_manifest.write(out_path=tmp_path))
 
+    previous_processing_path = os.environ.get("PROCESSING_PATH")
     os.environ["PROCESSING_PATH"] = str(tmp_path)
     try:
         output_manifest_path = l1b.algorithm(manifest_path)
     finally:
-        del os.environ["PROCESSING_PATH"]
+        if previous_processing_path is None:
+            os.environ.pop("PROCESSING_PATH", None)
+        else:
+            os.environ["PROCESSING_PATH"] = previous_processing_path
 
     output_manifest = Manifest.from_file(output_manifest_path)
     assert len(output_manifest.files) == 1

@@ -345,7 +345,7 @@ class TestProcessL1aToL1b:
             mock_cal.channels = {"sw": channel_prop}
             mock_load_cal.return_value = mock_cal
 
-            mock_downsample.side_effect = lambda x: x[::10]
+            mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
             mock_geoloc.return_value = pd.DataFrame(
@@ -392,7 +392,7 @@ class TestProcessL1aToL1b:
             mock_cal.channels = {"sw": channel_prop}
             mock_load_cal.return_value = mock_cal
 
-            mock_downsample.side_effect = lambda x: x[::10]
+            mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
             mock_placeholder_geo.return_value = pd.DataFrame(
@@ -442,7 +442,7 @@ class TestProcessL1aToL1b:
             channel_prop.channel_enum = "1"
             mock_cal.channels = {"sw": channel_prop}
             mock_load_cal.return_value = mock_cal
-            mock_downsample.side_effect = lambda x: x[::10]
+            mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
             mock_jpss_geo.return_value = pd.DataFrame(

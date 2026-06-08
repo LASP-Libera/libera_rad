@@ -105,6 +105,16 @@ def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarra
 
     Returns 0° azimuth and elevation per operational convention when motor
     kernels are unavailable.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        `(azimuth_deg, elevation_deg)` arrays, dtype float32, filled with zeros.
     """
     zeros = np.zeros(n_samples, dtype=np.float32)
     return zeros, zeros
