@@ -1,4 +1,4 @@
-"""Unit tests for surface geometry angle helpers (optional SPICE integration)."""
+"""Integration tests for surface geometry angle helpers."""
 
 from pathlib import Path
 

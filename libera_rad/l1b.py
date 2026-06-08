@@ -159,7 +159,7 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     Read and store all input data from manifest files.
 
     This function opens and validates all input NetCDF files from the manifest and stores them in a dictionary keyed by
-    filename. SPICE kernel paths (.bc, .bsp) are collected in manifest order for
+    filename. SPICE kernel paths (.bc, .bsp) are collected and returned in required furnish order for
     :meth:`KernelManager.load_libera_dynamic_kernels`, which materializes each file via
     :class:`~libera_utils.libera_spice.spice_utils.KernelFileCache` (local or S3).
 
@@ -173,10 +173,11 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     dict[str, xr.Dataset]
         Dictionary with filenames as keys and loaded xarray datasets as values.
     list[str]
-        Manifest paths for dynamic SPICE kernels, in manifest order. Empty when
-        ``input_manifest.configuration.use_geo`` is false and SPICE kernels are
-        not required. When ``configuration.jpss_only`` is true, only JPSS-SPK
-        and JPSS-CK paths are collected.
+        Manifest paths for dynamic SPICE kernels in required furnish order
+        (``_REQUIRED_SPICE_JPSS_ONLY`` or ``_REQUIRED_SPICE_PRODUCTION``).
+        Empty when ``input_manifest.configuration.use_geo`` is false and SPICE
+        kernels are not required. When ``configuration.jpss_only`` is true,
+        only JPSS-SPK and JPSS-CK paths are collected.
 
     Raises
     ------
@@ -417,6 +418,15 @@ def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple
     return rad_data, nom_hk_data
 
 
+_LATITUDE_FILL = np.float32(-999)
+
+
+def _latitude_to_colatitude(lat: np.ndarray, fill: np.ndarray) -> np.ndarray:
+    """Derive colatitude from latitude, preserving fill for invalid samples."""
+    invalid = (lat == _LATITUDE_FILL) | ~np.isfinite(lat)
+    return np.where(invalid, fill, np.float32(90.0) - lat).astype(np.float32)
+
+
 def _package_l1b_product(
     timestamps: np.ndarray,
     lat_lon_alt: pd.DataFrame,
@@ -474,16 +484,13 @@ def _package_l1b_product(
     if subsatellite_lat_lon is not None:
         subsatellite_lat = subsatellite_lat_lon["lat"].to_numpy().astype(np.float32)
         subsatellite_lon = subsatellite_lat_lon["lon"].to_numpy().astype(np.float32)
-        subsatellite_colat = np.float32(90.0) - subsatellite_lat
+        subsatellite_colat = _latitude_to_colatitude(subsatellite_lat, placeholder_neg999)
     else:
         subsatellite_lat = placeholder_neg999
         subsatellite_lon = placeholder_neg999
         subsatellite_colat = placeholder_neg999
 
-    if subsatellite_lat_lon is not None or not np.all(lat == np.float32(-999)):
-        colatitude = np.float32(90.0) - lat
-    else:
-        colatitude = placeholder_neg999
+    colatitude = _latitude_to_colatitude(lat, placeholder_neg999)
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,

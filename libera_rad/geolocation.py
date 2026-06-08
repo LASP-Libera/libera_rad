@@ -146,22 +146,18 @@ def calculate_libera_base_subsatellite_geolocation(
     return ellips_lla_df
 
 
-def create_placeholder_surface_geometry_angles(
-    n_samples: int,
-    *,
-    seed: int = 0,
-) -> dict[str, np.ndarray]:
+def create_placeholder_surface_geometry_angles(n_samples: int) -> dict[str, np.ndarray]:
     """
     Placeholder SZA, VZA, and RAA for no-geolocation mode.
 
-    Draws independent random values per sample within L1B product ``valid_range``
-    bounds so downstream tests receive plausible geometry when SPICE is disabled.
+    Returns product fill values when SPICE geolocation is disabled via
+    ``configuration.use_geo``.
     """
-    rng = np.random.default_rng(seed)
+    fill = np.float32(-999.0)
     return {
-        "solar_zenith": rng.uniform(10.0, 80.0, size=n_samples).astype(np.float32),
-        "viewing_zenith": rng.uniform(5.0, 70.0, size=n_samples).astype(np.float32),
-        "relative_azimuth": rng.uniform(0.0, 360.0, size=n_samples).astype(np.float32),
+        "solar_zenith": np.full(n_samples, fill, dtype=np.float32),
+        "viewing_zenith": np.full(n_samples, fill, dtype=np.float32),
+        "relative_azimuth": np.full(n_samples, fill, dtype=np.float32),
     }
 
 

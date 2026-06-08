@@ -296,6 +296,52 @@ class TestCalculateDataQualityFlags:
         assert len(result) == 0
 
 
+class TestLatitudeToColatitude:
+    """Tests for element-wise colatitude derivation."""
+
+    def test_latitude_to_colatitude_mixed_fill_and_valid(self):
+        lat = np.array([-999, 45.0, np.nan, -999], dtype=np.float32)
+        fill = np.full(4, -999, dtype=np.float32)
+        expected = np.array([-999, 45.0, -999, -999], dtype=np.float32)
+        result = l1b._latitude_to_colatitude(lat, fill)
+        np.testing.assert_array_equal(result, expected)
+
+    def test_package_l1b_product_colatitude_preserves_fill_per_sample(self):
+        n = 4
+        timestamps = pd.date_range("2025-01-01", periods=n, freq="s").to_numpy(dtype="datetime64[ns]")
+        lat_lon_alt = pd.DataFrame(
+            {
+                "lat": np.array([-999, 45.0, np.nan, -999], dtype=np.float32),
+                "lon": np.full(n, -999, dtype=np.float32),
+                "alt": np.full(n, -9999, dtype=np.float32),
+            }
+        )
+        subsatellite_lat_lon = pd.DataFrame(
+            {
+                "lat": np.array([-999, 30.0, 10.0, np.nan], dtype=np.float32),
+                "lon": np.zeros(n, dtype=np.float32),
+                "alt": np.zeros(n, dtype=np.float32),
+            }
+        )
+        result, _ = l1b._package_l1b_product(
+            timestamps=timestamps,
+            lat_lon_alt=lat_lon_alt,
+            calculated_radiance_by_channel={"sw": np.zeros(n, dtype=np.float32)},
+            operational_mode=np.zeros(n, dtype=np.uint16),
+            azimuth=np.full(n, -999, dtype=np.float32),
+            elevation=np.full(n, -999, dtype=np.float32),
+            subsatellite_lat_lon=subsatellite_lat_lon,
+        )
+        np.testing.assert_array_equal(
+            result["Colatitude"],
+            np.array([-999, 45.0, -999, -999], dtype=np.float32),
+        )
+        np.testing.assert_array_equal(
+            result["Subsatellite_Colatitude"],
+            np.array([-999, 60.0, 80.0, -999], dtype=np.float32),
+        )
+
+
 class TestProcessL1aToL1b:
     """Integration tests for process_l1a_to_l1b function."""
 
@@ -437,13 +483,9 @@ class TestProcessL1aToL1b:
         assert np.all(result["Latitude"] == np.float32(-999))
         assert np.all(result["Azimuth"] == np.float32(-999))
         assert np.all(result["Elevation"] == np.float32(-999))
-        sza = result["Solar_Zenith_Surface"]
-        vza = result["Viewing_Zenith_Surface"]
-        raa = result["Relative_Azimuth_Surface"]
-        assert np.all((sza >= 10) & (sza <= 80))
-        assert np.all((vza >= 5) & (vza <= 70))
-        assert np.all((raa >= 0) & (raa < 360))
-        assert len(np.unique(sza)) > 1
+        assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+        assert np.all(result["Viewing_Zenith_Surface"] == np.float32(-999))
+        assert np.all(result["Relative_Azimuth_Surface"] == np.float32(-999))
         assert isinstance(dynamic_attributes, dict)
 
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
