@@ -29,8 +29,8 @@ from libera_rad.calibration.constants import (
 )
 from libera_rad.config import l1b_ground_calibration_path
 from libera_rad.radiometer.gain_calibration import (
-    _decimation_factor,
     apply_gain_calibration,
+    decimation_factor,
     downsample_libera_signal,
     get_ground_cal_response_function,
 )
@@ -789,8 +789,8 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
     # TODO[LIBSDC-720]: double check with Dave on timestamp downsampling
     if not np.issubdtype(raw_times.dtype, np.datetime64):
         raise ValueError("RAD_SAMPLE_FPE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
-    decimation_factor = _decimation_factor(_RAD_SAMPLE_HZ, _L1B_OUTPUT_HZ)
-    timestamps = raw_times.astype("datetime64[ns]")[::decimation_factor][:calibrated_data_points]
+    factor = decimation_factor(_RAD_SAMPLE_HZ, _L1B_OUTPUT_HZ)
+    timestamps = raw_times.astype("datetime64[ns]")[::factor][:calibrated_data_points]
     return timestamps, calibrated_data_by_channel
 
 
@@ -829,7 +829,7 @@ def interpolate_temperatures(timestamps: np.ndarray, nom_hk_data: xr.Dataset) ->
         np.interp(
             ts_x,
             hk_x,
-            nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series().to_numpy(dtype=np.float64),
+            np.asarray(nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].values, dtype=np.float64),
         )
     )
 

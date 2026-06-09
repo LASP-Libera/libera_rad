@@ -48,7 +48,7 @@ def get_ground_cal_response_function(freqs: np.ndarray, path: str = config.trans
     return interp_transfer.astype(complex)
 
 
-def _decimation_factor(from_rate: float = 200.0, to_rate: float = 100.0) -> int:
+def decimation_factor(from_rate: float = 200.0, to_rate: float = 100.0) -> int:
     if from_rate <= 0:
         raise ValueError("from_rate must be positive")
     if to_rate <= 0:
@@ -85,7 +85,7 @@ def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, 
     -----
     If from_rate / to_rate is not an integer, it is rounded to the nearest whole number.
     """
-    factor = _decimation_factor(from_rate, to_rate)
+    factor = decimation_factor(from_rate, to_rate)
     if len(signal_data) == 0:
         return signal_data
     # Decimate without filter (slice syntax: [start:stop:step])
