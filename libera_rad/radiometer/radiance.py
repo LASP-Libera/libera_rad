@@ -829,7 +829,7 @@ def interpolate_temperatures(timestamps: np.ndarray, nom_hk_data: xr.Dataset) ->
         np.interp(
             ts_x,
             hk_x,
-            nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series().to_numpy(dtype=np.float64),
+            np.asarray(nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].values, dtype=np.float64),
         )
     )
 

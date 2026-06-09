@@ -6,6 +6,7 @@ import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import astropy.units as u
 import numpy as np
@@ -265,7 +266,7 @@ def process_l1a_to_l1b(
     dynamic_kernel_sources: Sequence[str | Path | S3Path],
     use_geo: bool = True,
     jpss_only_mode: bool = False,
-) -> tuple[dict[str, np.ndarray], dict[str, str]]:
+) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
     """
     Process L1A data and SPICE Kernels to L1B product.
 
@@ -423,7 +424,7 @@ def _package_l1b_product(
     azimuth: np.ndarray,
     elevation: np.ndarray,
     subsatellite_lat_lon: pd.DataFrame | None = None,
-) -> tuple[dict[str, ndarray], dict[str, str]]:
+) -> tuple[dict[str, ndarray], dict[str, Any]]:
     """
     Package L1B product according to product definition.
 
@@ -442,7 +443,7 @@ def _package_l1b_product(
 
     Returns
     -------
-    Tuple(dict[str, np.ndarray], dict[str, str])
+    Tuple(dict[str, np.ndarray], dict[str, Any])
         Complete L1B product dictionary with all required variables and dynamic attributes for the dataset.
 
     Notes
@@ -603,7 +604,7 @@ def calculate_data_quality_flags(data_length: int) -> np.ndarray:
 
 
 def create_and_write_data_product(
-    processed_data: dict[str, np.ndarray], dynamic_attributes: dict[str, str], output_path: str | Path | S3Path
+    processed_data: dict[str, np.ndarray], dynamic_attributes: dict[str, Any], output_path: str | Path | S3Path
 ) -> LiberaDataProductFilename:
     """
     Store science data with metadata and write to output folder.
@@ -616,7 +617,7 @@ def create_and_write_data_product(
     processed_data : dict[str, np.ndarray]
         Dictionary of processed science variables. Keys are variable names matching the product definition, values are
         numpy arrays containing the data.
-    dynamic_attributes : dict[str, str]
+    dynamic_attributes : dict[str, Any]
         Dictionary of dynamic attributes to be added to the whole dataset, with keys matching the product definition.
     output_path : str | Path | S3Path
         The directory location where the output file will be written.
