@@ -7,6 +7,7 @@ import xarray as xr
 from libera_rad.calibration.combiners import l1a_cal_event_utils as utils
 
 _VALID_L1A_NC = "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+_VALID_RAD_SAMPLE_NC = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
 
 
 class TestParseLiberaFilenameTimes:
@@ -142,6 +143,37 @@ class TestOpenAndSortL1aFiles:
         ds = utils.open_and_sort_l1a_files([path])
         times = ds["PACKET_ICIE_TIME"].values
         assert np.all(times[:-1] <= times[1:])
+
+    def test_multi_file_concatenation_sorts_unsorted_inputs(self, test_l1a_cal_data_path, tmp_path):
+        """Later files with out-of-order PACKET_ICIE_TIME must still yield sorted output."""
+        src = test_l1a_cal_data_path / "short_nom_hk.nc"
+        base = xr.open_dataset(src).load()
+        times = base["PACKET_ICIE_TIME"].values
+        half = len(times) // 2
+
+        first_half = base.isel(PACKET=slice(0, half))
+        second_half = base.isel(PACKET=slice(half, None))
+
+        file_a = tmp_path / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T180000_R26016183821.nc"
+        file_b = tmp_path / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T180000_20251120T190549_R26016183822.nc"
+        first_half.to_netcdf(file_a)
+        second_half.to_netcdf(file_b)
+
+        # Pass the chronologically second segment first so open_and_sort must reorder.
+        ds = utils.open_and_sort_l1a_files([file_b, file_a])
+        out_times = ds["PACKET_ICIE_TIME"].values
+        assert np.all(out_times[:-1] <= out_times[1:])
+        assert len(out_times) == len(times)
+
+    def test_raises_when_mixed_product_types(self, test_l1a_cal_data_path, tmp_path):
+        nom_hk_src = test_l1a_cal_data_path / "short_nom_hk.nc"
+        rad_src = test_l1a_cal_data_path / "short_rad_sample.nc"
+        nom_hk = tmp_path / _VALID_L1A_NC
+        rad_sample = tmp_path / _VALID_RAD_SAMPLE_NC
+        nom_hk.symlink_to(nom_hk_src)
+        rad_sample.symlink_to(rad_src)
+        with pytest.raises(ValueError, match="same L1A product type"):
+            utils.open_and_sort_l1a_files([nom_hk, rad_sample])
 
 
 class TestLoadL1aProduct:

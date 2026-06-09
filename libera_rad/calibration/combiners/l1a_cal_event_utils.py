@@ -1,17 +1,14 @@
-"""Generic L1A event-detection and time-windowing utilities.
+"""L1A calibration event utilities — filenames, loading, and time windows.
 
-Provides reusable, pipeline-agnostic building blocks for any calibration event
-pipeline that operates on Libera L1A decoded products:
+Shared helpers for calibration combiners that operate on decoded L1A NetCDF
+products:
 
-- Parsing time ranges from Libera filenames
-- Selecting L1A files that overlap a set of time windows
-- Opening and concatenating L1A NetCDF files into a single sorted Dataset
-- Detecting contiguous runs of an integer field value (e.g. OBSID, mode flags)
-- Scanning a directory to find windows where a field holds target values
-- Slicing a decoded L1A Dataset to a time window (with optional secondary dim)
-
-These functions are intentionally free of solar-cal or LW-cal specifics so that
-any future calibration event type can import them without modification.
+- Parse Libera filename time ranges
+- Filter file lists by overlapping time windows (default 60 s pad)
+- Open, validate, concatenate, and sort files by ``PACKET_ICIE_TIME``
+- Detect contiguous runs of an integer telemetry field (e.g. OBSID)
+- Scan directories for event windows from a single field variable
+- Slice datasets to inclusive ``[t0, t1]`` on packet time (and optional FPE time)
 """
 
 import logging
@@ -116,7 +113,17 @@ def open_and_sort_l1a_files(files: list[Path]) -> xr.Dataset:
     -------
     xr.Dataset
         Concatenated dataset, time-sorted along the ``PACKET`` dimension.
+
+    Raises
+    ------
+    ValueError
+        If input files do not share the same Libera ``data_product_id``.
     """
+    if len(files) > 1:
+        product_ids = [LiberaDataProductFilename.from_file_path(str(path)).data_product_id for path in files]
+        if len(set(product_ids)) > 1:
+            raise ValueError(f"All input files must be the same L1A product type; found: {sorted(set(product_ids))}")
+
     if len(files) == 1:
         ds = xr.open_dataset(files[0]).load()
         if "PACKET_ICIE_TIME" in ds.coords:
@@ -127,16 +134,8 @@ def open_and_sort_l1a_files(files: list[Path]) -> xr.Dataset:
         has_fpe_dim = "RAD_SAMPLE_FPE_TIME" in _peek.dims
 
     if not has_fpe_dim:
-        ds = xr.open_mfdataset(
-            files,
-            concat_dim="PACKET",
-            combine="nested",
-            data_vars="minimal",
-            coords="minimal",
-            compat="override",
-            join="override",
-            parallel=False,
-        ).load()
+        parts = [xr.open_dataset(f).load() for f in files]
+        ds = xr.concat(parts, dim="PACKET")
         if "PACKET_ICIE_TIME" in ds.coords:
             ds = ds.isel(PACKET=np.argsort(ds["PACKET_ICIE_TIME"].values))
         return ds
@@ -373,9 +372,9 @@ def slice_dataset_to_time_window(
 ) -> xr.Dataset:
     """Slice a decoded L1A Dataset to packets (and optionally samples) in ``[t0, t1]``.
 
-    This is the canonical time-cropping utility for any calibration combiner.
-    LW cal currently receives pre-cropped files, but if it ever needs in-place
-    cropping it can call this function directly.
+    Applies an inclusive mask on *packet_time_var* along ``PACKET``. When
+    *secondary_time_dim* is set, that dimension is sliced independently (e.g.
+    ``RAD_SAMPLE_FPE_TIME`` on RAD-SAMPLE products).
 
     Parameters
     ----------

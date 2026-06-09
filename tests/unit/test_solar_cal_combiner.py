@@ -23,8 +23,11 @@ def _all_data_for_obsids(obsids: list[int]) -> dict[str, xr.Dataset]:
     ("obsid", "expected_face"),
     [
         (384, DataProductIdentifier.cal_solar_face1_combined),
+        (385, DataProductIdentifier.cal_solar_face1_combined),
         (388, DataProductIdentifier.cal_solar_face2_combined),
+        (389, DataProductIdentifier.cal_solar_face2_combined),
         (392, DataProductIdentifier.cal_solar_face3_combined),
+        (393, DataProductIdentifier.cal_solar_face3_combined),
     ],
 )
 def test_get_solar_cal_face_returns_expected_identifier(obsid, expected_face):

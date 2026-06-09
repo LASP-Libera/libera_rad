@@ -4,9 +4,10 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import xarray as xr
-from cloudpathlib import S3Path
+from cloudpathlib import AnyPath, S3Path
 from libera_utils import smart_copy_file, smart_open
 from libera_utils.constants import DataProductIdentifier
+from libera_utils.io.netcdf import NetcdfEngine
 from libera_utils.io.product_definition import LiberaDataProductDefinition
 
 
@@ -24,15 +25,21 @@ def copy_cal_input_file(source: Path, dest: Path | S3Path) -> Path | S3Path:
 
 
 def write_cal_netcdf(dataset: xr.Dataset, dest: Path | S3Path) -> None:
-    """Write a NetCDF dataset to a local or S3 path."""
-    with smart_open(dest, mode="wb") as file_handle:
-        dataset.to_netcdf(file_handle, engine="h5netcdf")
+    """Write a NetCDF dataset using the libera_utils-configured xarray engine."""
+    dest_path = AnyPath(dest)
+    engine = NetcdfEngine.get_from_config()
+    if engine == NetcdfEngine.netcdf4 and not isinstance(dest_path, S3Path):
+        dataset.to_netcdf(dest_path, engine=NetcdfEngine.netcdf4)
+    else:
+        with smart_open(dest, mode="wb") as file_handle:
+            dataset.to_netcdf(file_handle, engine=NetcdfEngine.h5netcdf)
 
 
 def load_cal_netcdf(path: Path | S3Path | str) -> xr.Dataset:
-    """Load a NetCDF dataset from a local or S3 path."""
+    """Load a NetCDF dataset using the libera_utils-configured xarray engine."""
+    engine = NetcdfEngine.get_from_config()
     with smart_open(path, mode="rb") as file_handle:
-        return xr.open_dataset(file_handle, engine="h5netcdf").load()
+        return xr.open_dataset(file_handle, engine=engine).load()
 
 
 def assert_cal_product_conformance(

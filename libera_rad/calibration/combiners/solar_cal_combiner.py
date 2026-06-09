@@ -1,30 +1,15 @@
 """Solar calibration event combiner — production algorithm.
 
-Receives a manifest containing:
-  - A NOM-HK-DECODED L1A file covering (at minimum) the solar-cal event window
-    for a single face; tightly pre-cropped by the upstream runner for efficiency.
-  - RAD-SAMPLE-DECODED L1A file(s) covering the same window.
-  - PEV-SW-STAT-DECODED L1A file(s) covering the same window.
+Reads an input manifest with NOM-HK-DECODED, RAD-SAMPLE-DECODED, and
+PEV-SW-STAT-DECODED L1A products, detects the solar-cal face from NOM-HK OBSIDs,
+slices RAD-SAMPLE and PEV-SW-STAT to the NOM-HK event window (with
+:const:`DEFAULT_PAD`), merges the three streams via
+:func:`~libera_rad.calibration.combiners.l1a_combine.merge_l1a_decoded_datasets`,
+and writes one SOLAR-FACE*-COMBINED NetCDF plus an output manifest.
 
-The combiner is self-contained: it derives the exact event time window from the
-NOM-HK OBSID content and re-slices all three datasets accordingly, so it will
-produce correct output even if the manifest contains over-windowed (or full
-24-hour) files.  The upstream pre-cropping performed by
-:mod:`libera_rad.calibration.run_solar_cal_event` is a memory/performance
-optimisation, not a correctness requirement.
-
-Slices the datasets to the NOM-HK event window (plus configurable padding),
-merges all three sources via
-:func:`libera_rad.calibration.l1a_combine.merge_l1a_decoded_datasets`, and
-writes one solar-cal L1A output file plus an output manifest.
-
-Pipeline role
--------------
-This module is the production-facing entry point for solar calibration event
-processing.  The upstream step (event detection, NOM-HK cropping, and manifest
-generation) is handled by :mod:`libera_rad.calibration.run_solar_cal_event`,
-which simulates what a pipeline orchestration layer (e.g. Step Functions) would
-do in production.
+The combiner is self-contained: it derives the event window from NOM-HK OBSID
+content and re-slices companion products, so manifests may include full-day files
+as well as pre-windowed inputs.
 
 Public interface
 ----------------

@@ -73,7 +73,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         raise ValueError("PROCESSING_PATH environment variable is not set")
 
     # Step 3: Combine lw cal event data and calculate any required variables
-    logger.info("Step 3: Creating longwave calibration event dataset")
+    logger.info("Step 3: Creating LW calibration event dataset")
     lw_cal_event = l1a_combine.merge_l1a_decoded_datasets(list(all_data.values()))
 
     # Steps 4: Store data with metadata and write to output folder
@@ -145,7 +145,7 @@ def get_lw_event_type(all_data: dict[str, xr.Dataset]) -> DataProductIdentifier:
         if obsid in obsid_event_types:
             matches.append(obsid_event_types[obsid])
     if len(matches) == 1:
-        logger.info(f"Longwave Calibration event detected: {matches[0]}")
+        logger.info("LW calibration event detected: %s", matches[0])
         return matches[0]
     elif len(matches) > 1:
         raise ValueError("More than one longwave calibration event input data. Detected OBSIDS: " + str(obsids))
