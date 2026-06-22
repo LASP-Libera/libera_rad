@@ -294,6 +294,21 @@ class TestL1bPhysicalInvariants:
             "Non-fill Longitude values are outside [-180, 180]"
         )
 
+    def test_colatitude_populated_and_consistent_with_latitude(self, l1b_product_dataset):
+        """Colatitude and Subsatellite_Colatitude must be 90 - latitude when geolocation is computed."""
+        lat_fill = -999.0
+        lat = l1b_product_dataset["Latitude"].values
+        colat = l1b_product_dataset["Colatitude"].values
+        subsat_lat = l1b_product_dataset["Subsatellite_Latitude"].values
+        subsat_colat = l1b_product_dataset["Subsatellite_Colatitude"].values
+
+        non_fill = (lat != lat_fill) & np.isfinite(lat)
+        assert np.any(non_fill), "Expected computed instrument latitude values"
+        assert np.allclose(colat[non_fill], 90.0 - lat[non_fill])
+        assert np.allclose(subsat_colat[non_fill], 90.0 - subsat_lat[non_fill])
+        assert np.all((colat[non_fill] >= 0) & (colat[non_fill] <= 180))
+        assert np.all((subsat_colat[non_fill] >= 0) & (subsat_colat[non_fill] <= 180))
+
     @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     def test_non_fill_azimuth_elevation_within_valid_range(self, l1b_product_dataset):
         """Non-fill Azimuth/Elevation values must be within the product definition valid ranges."""
@@ -403,6 +418,18 @@ class TestL1bJpssOnlyIntegration:
             jpss_only_l1b_product_dataset["Subsatellite_Longitude"].values,
             lon,
         )
+        assert np.allclose(
+            jpss_only_l1b_product_dataset["Colatitude"].values,
+            90.0 - lat,
+        )
+        assert np.allclose(
+            jpss_only_l1b_product_dataset["Subsatellite_Colatitude"].values,
+            90.0 - jpss_only_l1b_product_dataset["Subsatellite_Latitude"].values,
+        )
+        colat = jpss_only_l1b_product_dataset["Subsatellite_Colatitude"].values
+        non_fill_colat = colat[(colat != -999.0) & np.isfinite(colat)]
+        assert len(non_fill_colat) > 0
+        assert np.all((non_fill_colat >= 0) & (non_fill_colat <= 180))
 
         assert np.all(jpss_only_l1b_product_dataset["Azimuth"].values == 0)
         assert np.all(jpss_only_l1b_product_dataset["Elevation"].values == 0)

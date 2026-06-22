@@ -335,7 +335,7 @@ def process_l1a_to_l1b(
             raise ValueError("SPICE kernel sources are required for geolocation when use_geo is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-            lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            lat_lon_alt, subsatellite_lat_lon = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
         azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
 
     # Interpolate temperatures
@@ -408,6 +408,12 @@ def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple
     return rad_data, nom_hk_data
 
 
+def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarray:
+    """Geodetic colatitude (degrees) from latitude, preserving product fill values."""
+    fill_val = np.float32(fill)
+    return np.where(lat == fill_val, fill_val, (90.0 - lat).astype(np.float32))
+
+
 def _package_l1b_product(
     timestamps: np.ndarray,
     lat_lon_alt: pd.DataFrame,
@@ -458,26 +464,29 @@ def _package_l1b_product(
     lat = lat_lon_alt["lat"].to_numpy().astype(np.float32)
     lon = lat_lon_alt["lon"].to_numpy().astype(np.float32)
     alt = lat_lon_alt["alt"].to_numpy().astype(np.float32)
+    colat = _colatitude_from_latitude(lat)
     if subsatellite_lat_lon is not None:
         subsatellite_lat = subsatellite_lat_lon["lat"].to_numpy().astype(np.float32)
         subsatellite_lon = subsatellite_lat_lon["lon"].to_numpy().astype(np.float32)
+        subsatellite_colat = _colatitude_from_latitude(subsatellite_lat)
     else:
         subsatellite_lat = placeholder_neg999
         subsatellite_lon = placeholder_neg999
+        subsatellite_colat = placeholder_neg999
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
         # Position
         "Latitude": lat,
         "Terrain_Corrected_Latitude": placeholder_neg999,
-        "Colatitude": placeholder_neg999,
+        "Colatitude": colat,
         "Longitude": lon,
         "Terrain_Corrected_Longitude": placeholder_neg999,
         "Altitude": alt,
         "Terrain_Corrected_Altitude": placeholder_neg9999,
         "Subsatellite_Latitude": subsatellite_lat,
         "Subsolar_Latitude": placeholder_neg999,
-        "Subsatellite_Colatitude": placeholder_neg999,
+        "Subsatellite_Colatitude": subsatellite_colat,
         "Subsolar_Colatitude": placeholder_neg999,
         "Subsatellite_Longitude": subsatellite_lon,
         "Subsolar_Longitude": placeholder_neg999,

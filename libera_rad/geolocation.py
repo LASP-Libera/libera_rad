@@ -17,19 +17,48 @@ from libera_utils.libera_spice.kernel_manager import KernelManager
 
 logger = logging.getLogger(__name__)
 
-# LIBERA_BASE_COORD +Z nadir; verified on integration JPSS-only kernels (no motor CK).
-_LIBERA_BASE_NADIR_VECTOR = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+
+def _subsatellite_lla_from_ecef(sc_xyz_df: pd.DataFrame) -> pd.DataFrame:
+    """Derive subsatellite geodetic coordinates from spacecraft ECEF position."""
+    lla = spatial.ecef_to_geodetic(sc_xyz_df[["x", "y", "z"]].to_numpy(), meters=False, degrees=True)
+    return pd.DataFrame({"lat": lla[..., 1], "lon": lla[..., 0], "alt": lla[..., 2]})
+
+
+def _spacecraft_ecef_positions(u_gps_times: np.ndarray, spice_body_name: str = "LIBERA_BASE") -> pd.DataFrame:
+    """
+    Query spacecraft ECEF positions at each time (no instrument kernel or pointing).
+
+    Uses ``SpatialQueries.query_rotation_and_position`` for ``spkezp`` in ITRF93;
+    only the position vector is retained. Gaps or kernel errors leave NaN rows.
+    """
+    instrument = sp.obj.Body(spice_body_name, frame=True)
+    et_times = spicetime.adapt(u_gps_times, to="et")
+    positions = np.full((len(et_times), 3), np.nan)
+
+    for ith, et_time in enumerate(et_times):
+        (_, position), _ = spatial.SpatialQueries.query_rotation_and_position(
+            et_time, instrument, "NONE", allow_nans=True
+        )
+        if np.isfinite(position).all():
+            positions[ith, :] = position
+
+    index = pd.Index(np.asarray(u_gps_times).ravel(), name="ugps")
+    return pd.DataFrame(positions, columns=["x", "y", "z"], index=index)
 
 
 def calculate_lat_lon_altitude(
     kernel_manager: KernelManager,
     time_range: pd.DatetimeIndex,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Calculate latitude, longitude, and altitude (convenience function).
+    Calculate instrument and subsatellite geolocation (convenience function).
 
     This function handles all kernel loading and cleanup automatically.
     For multiple calculations, use KernelManager directly for better performance.
+
+    Instrument lat/lon/alt come from ``LIBERA_SW_RAD`` ellipsoid intersection.
+    Subsatellite lat/lon/alt come from spacecraft ECEF position via
+    ``spatial.ecef_to_geodetic`` (attitude-independent).
 
     Parameters
     ----------
@@ -40,25 +69,29 @@ def calculate_lat_lon_altitude(
 
     Returns
     -------
-    pd.DataFrame
-        A DataFrame containing latitude, longitude, and altitude data.
+    tuple[pd.DataFrame, pd.DataFrame]
+        Instrument geolocation and subsatellite geolocation DataFrames with
+        columns ``lat``, ``lon``, and ``alt``.
     """
     kernel_manager.ensure_known_kernels_are_furnished()
 
     u_gps_times = spicetime.adapt(time_range, "iso")
 
-    ellips_lla_df, sc_xyz_df, ellips_qf_ds = spatial.compute_ellipsoid_intersection(
+    ellips_lla_df, sc_xyz_df, _ = spatial.compute_ellipsoid_intersection(
         u_gps_times, sp.obj.Body("LIBERA_SW_RAD", frame=True), give_geodetic_output=True, give_lat_lon_in_degrees=True
     )
+    subsatellite_lla_df = _subsatellite_lla_from_ecef(sc_xyz_df)
 
-    logger.debug(f"Calculation complete, generated {len(ellips_lla_df)} points")
+    logger.debug("Calculation complete, generated %d instrument and subsatellite points", len(ellips_lla_df))
 
-    return ellips_lla_df
+    return ellips_lla_df, subsatellite_lla_df
 
 
-def calculate_geolocation_for_timestamps(km: KernelManager, timestamps: np.ndarray) -> pd.DataFrame:
+def calculate_geolocation_for_timestamps(
+    km: KernelManager, timestamps: np.ndarray
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Calculate geolocation information for given timestamps using SPICE kernels.
+    Calculate instrument and subsatellite geolocation for given timestamps.
 
     Parameters
     ----------
@@ -69,8 +102,8 @@ def calculate_geolocation_for_timestamps(km: KernelManager, timestamps: np.ndarr
 
     Returns
     -------
-    pd.DataFrame
-        DataFrame containing geolocation data.
+    tuple[pd.DataFrame, pd.DataFrame]
+        Instrument geolocation and subsatellite geolocation DataFrames.
     """
     # TODO[LIBSDC-739]: Add all geolocation values into the data product
     return calculate_lat_lon_altitude(km, pd.DatetimeIndex(timestamps))
@@ -125,10 +158,12 @@ def calculate_libera_base_subsatellite_geolocation(
     timestamps: np.ndarray,
 ) -> pd.DataFrame:
     """
-    Subsatellite geolocation using LIBERA_BASE nadir ellipsoid intersection.
+    Subsatellite geolocation from LIBERA_BASE spacecraft ECEF position.
 
     Uses JPSS dynamic kernels (SPK/CK) plus static FK; does not require motor
-    azimuth/elevation CK. Surface LLA (altitude near 0 m on the ellipsoid).
+    azimuth/elevation CK or instrument pointing kernels. Spacecraft ECEF position
+    is queried via SPICE ``spkezp``; subsatellite lat/lon come from
+    ``spatial.ecef_to_geodetic``.
 
     Parameters
     ----------
@@ -140,20 +175,15 @@ def calculate_libera_base_subsatellite_geolocation(
     Returns
     -------
     pd.DataFrame
-        Columns ``lat``, ``lon``, ``alt`` in degrees / meters.
+        Columns ``lat``, ``lon``, ``alt`` in degrees / kilometers.
     """
     kernel_manager.ensure_known_kernels_are_furnished()
     u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
 
-    ellips_lla_df, _, _ = spatial.compute_ellipsoid_intersection(
-        u_gps_times,
-        sp.obj.Body("LIBERA_BASE", frame=True),
-        custom_pointing_vectors=_LIBERA_BASE_NADIR_VECTOR,
-        give_geodetic_output=True,
-        give_lat_lon_in_degrees=True,
-    )
-    logger.debug("LIBERA_BASE subsatellite geolocation: %d points", len(ellips_lla_df))
-    return ellips_lla_df
+    sc_xyz_df = _spacecraft_ecef_positions(u_gps_times)
+    subsatellite_lla_df = _subsatellite_lla_from_ecef(sc_xyz_df)
+    logger.debug("LIBERA_BASE subsatellite geolocation: %d points", len(subsatellite_lla_df))
+    return subsatellite_lla_df
 
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:

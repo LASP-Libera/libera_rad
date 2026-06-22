@@ -790,7 +790,7 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
     if not np.issubdtype(raw_times.dtype, np.datetime64):
         raise ValueError("RAD_SAMPLE_FPE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
     decimation_factor = _decimation_factor(_RAD_SAMPLE_HZ, _L1B_OUTPUT_HZ)
-    timestamps = raw_times.astype("datetime64[ns]")[::decimation_factor][:calibrated_data_points]
+    timestamps = raw_times[::decimation_factor][:calibrated_data_points]
     return timestamps, calibrated_data_by_channel
 
 
@@ -822,8 +822,8 @@ def interpolate_temperatures(timestamps: np.ndarray, nom_hk_data: xr.Dataset) ->
     hk_times = nom_hk_data["PACKET_ICIE_TIME"].values
     if not np.issubdtype(hk_times.dtype, np.datetime64):
         raise ValueError("PACKET_ICIE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
-    hk_x = hk_times.astype("datetime64[ns]").astype(np.int64)
-    ts_x = np.asarray(timestamps, dtype="datetime64[ns]").astype(np.int64)
+    hk_x = hk_times.astype(np.int64)
+    ts_x = np.asarray(timestamps).astype(np.int64)
 
     return pd.Series(
         np.interp(

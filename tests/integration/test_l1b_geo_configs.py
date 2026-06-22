@@ -33,7 +33,8 @@ def expected_geolocation(test_integration_data_path):
 
     with KernelManager() as km:
         km.load_libera_dynamic_kernels(kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-        return calculate_geolocation_for_timestamps(km, timestamps)
+        instrument_lla, _ = calculate_geolocation_for_timestamps(km, timestamps)
+        return instrument_lla
 
 
 class TestL1bManifestUseGeoConfiguration:

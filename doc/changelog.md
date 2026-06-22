@@ -2,7 +2,7 @@
 
 ## 0.5.5
 
-- Add `jpss_only` manifest configuration: load only JPSS-SPK and JPSS-CK dynamic kernels, compute subsatellite geolocation via `LIBERA_BASE` nadir ellipsoid intersection (no motor CK), populate instrument and `Subsatellite_*` lat/lon from a single call, and write Azimuth/Elevation as 0°. Warn when other SPICE files are listed but skipped.
+- Add `jpss_only` manifest configuration: load only JPSS-SPK and JPSS-CK dynamic kernels, query LIBERA*BASE spacecraft ECEF position via SPICE and derive subsatellite geolocation with `spatial.ecef_to_geodetic` (no motor CK or instrument pointing kernels), populate instrument and `Subsatellite*\*`lat/lon/colat from a single call, and write Azimuth/Elevation as 0°. Production mode derives subsatellite lat/lon from`sc_xyz_df`returned by the existing`LIBERA_SW_RAD` ellipsoid intersection. Warn when other SPICE files are listed but skipped.
 - Refactor SPICE manifest handling: validate required kernel product IDs, reject duplicates, and return kernels in furnish order.
 - Extend `use_geo: false` mode: Azimuth and Elevation use product fill (`-999`); warn when any `.bc`/`.bsp` files are listed but skipped.
 - Manifest flag `jpss_only` requires a truthy value; `use_geo: false` and `jpss_only: true` together raise `ValueError`.

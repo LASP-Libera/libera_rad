@@ -30,7 +30,7 @@ def test_geolocation_from_kernels(test_dynamic_kernels_path):
     print(f"Calculating lat/lon/alt from {start_time} to {end_time}")
     time_range = pd.date_range(start_time, end_time, freq="10ms", inclusive="left")
 
-    lat_lon_alt = calculate_lat_lon_altitude(km, time_range)
+    lat_lon_alt, subsatellite_lla = calculate_lat_lon_altitude(km, time_range)
 
     print("Mean Lat: ", np.nanmean(lat_lon_alt["lat"]))
     print("Mean Lon: ", np.nanmean(lat_lon_alt["lon"]))

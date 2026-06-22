@@ -348,9 +348,21 @@ class TestProcessL1aToL1b:
             mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
-            mock_geoloc.return_value = pd.DataFrame(
-                {"lat": np.random.rand(100), "lon": np.random.rand(100), "alt": np.random.rand(100)}
+            instrument_lla = pd.DataFrame(
+                {
+                    "lat": np.linspace(30, 31, 100, dtype=np.float32),
+                    "lon": np.linspace(-100, -99, 100, dtype=np.float32),
+                    "alt": np.zeros(100, dtype=np.float32),
+                }
             )
+            subsatellite_lla = pd.DataFrame(
+                {
+                    "lat": np.linspace(29, 30, 100, dtype=np.float32),
+                    "lon": np.linspace(-101, -100, 100, dtype=np.float32),
+                    "alt": np.zeros(100, dtype=np.float32),
+                }
+            )
+            mock_geoloc.return_value = (instrument_lla, subsatellite_lla)
             mock_placeholder_azel.return_value = (
                 np.full(100, -999, dtype=np.float32),
                 np.full(100, -999, dtype=np.float32),
@@ -369,7 +381,9 @@ class TestProcessL1aToL1b:
             assert "Filtered_Radiance_SW" in result
             assert isinstance(dynamic_attributes, dict)
             assert "Earth_Sun_Distance_AU" in dynamic_attributes
-            assert np.all(result["Subsatellite_Latitude"] == np.float32(-999))
+            assert np.all(result["Subsatellite_Latitude"] != np.float32(-999))
+            assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
+            assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
             assert np.all(result["Azimuth"] == np.float32(-999))
             assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
 
@@ -417,6 +431,8 @@ class TestProcessL1aToL1b:
         assert isinstance(result, dict)
         assert "Latitude" in result
         assert np.all(result["Latitude"] == np.float32(-999))
+        assert np.all(result["Colatitude"] == np.float32(-999))
+        assert np.all(result["Subsatellite_Colatitude"] == np.float32(-999))
         assert np.all(result["Azimuth"] == np.float32(-999))
         assert np.all(result["Elevation"] == np.float32(-999))
         assert isinstance(dynamic_attributes, dict)
@@ -462,6 +478,8 @@ class TestProcessL1aToL1b:
         assert np.all(result["Elevation"] == 0)
         assert np.allclose(result["Subsatellite_Latitude"], result["Latitude"])
         assert np.allclose(result["Subsatellite_Longitude"], result["Longitude"])
+        assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
+        assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
         assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
 
     @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])

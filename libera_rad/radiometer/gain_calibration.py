@@ -49,6 +49,26 @@ def get_ground_cal_response_function(freqs: np.ndarray, path: str = config.trans
 
 
 def _decimation_factor(from_rate: float = 200.0, to_rate: float = 100.0) -> int:
+    """
+    Integer decimation factor from one sample rate to another.
+
+    Parameters
+    ----------
+    from_rate : float, optional
+        Source sampling rate in Hz. Default is 200.0.
+    to_rate : float, optional
+        Target sampling rate in Hz. Default is 100.0.
+
+    Returns
+    -------
+    int
+        Number of samples to skip between retained outputs (``from_rate / to_rate``).
+
+    Raises
+    ------
+    ValueError
+        If either rate is non-positive or ``from_rate`` is less than ``to_rate``.
+    """
     if from_rate <= 0:
         raise ValueError("from_rate must be positive")
     if to_rate <= 0:
@@ -79,7 +99,7 @@ def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, 
     Raises
     ------
     ValueError
-        If from_rate or to rate is zero, from_rate or to rate is negative, or if from_rate is less than to_rate.
+        If ``from_rate`` or ``to_rate`` is invalid; see :func:`_decimation_factor`.
 
     Notes
     -----
