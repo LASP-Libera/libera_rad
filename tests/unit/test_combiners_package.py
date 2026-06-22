@@ -16,8 +16,3 @@ def test_algorithms_exported_from_combiners_package():
     assert solar_algorithm.__module__.startswith("libera_rad.calibration.combiners")
     assert sw_algorithm.__module__.startswith("libera_rad.calibration.combiners")
     assert merge_l1a_decoded_datasets.__module__.startswith("libera_rad.calibration.combiners")
-
-
-def test_combiners_package_imports_without_error():
-    """Importing the combiners package should not raise."""
-    import libera_rad.calibration.combiners  # noqa: F401

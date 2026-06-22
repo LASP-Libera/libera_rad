@@ -2,8 +2,7 @@
 
 Reads an input manifest with NOM-HK-DECODED, RAD-SAMPLE-DECODED, and
 PEV-SW-STAT-DECODED L1A products, detects the solar-cal face from NOM-HK OBSIDs,
-slices RAD-SAMPLE and PEV-SW-STAT to the NOM-HK event window (with
-:const:`DEFAULT_PAD`), merges the three streams via
+slices RAD-SAMPLE and PEV-SW-STAT to the NOM-HK event window, merges the three streams via
 :func:`~libera_rad.calibration.combiners.l1a_combine.merge_l1a_decoded_datasets`,
 and writes one SOLAR-FACE*-COMBINED NetCDF plus an output manifest.
 
@@ -31,58 +30,23 @@ from libera_utils.io.netcdf import write_libera_data_product
 from libera_utils.logutil import configure_task_logging
 
 from libera_rad.calibration.combiners import l1a_cal_event_utils, l1a_combine
+from libera_rad.calibration.constants import (
+    COMBINER_SOLAR_FACE_BASE_OBSIDS,
+    COMBINER_SOLAR_FACE_IDENTIFIER_TO_FACE_NUM,
+    COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER,
+)
 from libera_rad.config import cal_solar_product_definitions
 from libera_rad.l1b import extract_input_dataset, read_all_input_data
+from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-#: Default symmetric time padding applied around the NOM-HK event window when
-#: slicing the full 24-hour RAD-SAMPLE and PEV-SW-STAT files.
-DEFAULT_PAD: np.timedelta64 = np.timedelta64(5 * 60, "s")  # 5 minutes
-
-#: Mapping of solar-cal OBSID → face-level DataProductIdentifier.
-#: OBSIDs per ICD:
-#:   384-387: Face 1 (primary diffuser)
-#:   388-391: Face 2 (secondary diffuser)
-#:   392-395: Face 3 (tertiary diffuser)
-OBSID_TO_FACE_IDENTIFIER: dict[int, DataProductIdentifier] = {
-    # Face 1
-    384: DataProductIdentifier.cal_solar_face1_combined,
-    385: DataProductIdentifier.cal_solar_face1_combined,
-    386: DataProductIdentifier.cal_solar_face1_combined,
-    387: DataProductIdentifier.cal_solar_face1_combined,
-    # Face 2
-    388: DataProductIdentifier.cal_solar_face2_combined,
-    389: DataProductIdentifier.cal_solar_face2_combined,
-    390: DataProductIdentifier.cal_solar_face2_combined,
-    391: DataProductIdentifier.cal_solar_face2_combined,
-    # Face 3
-    392: DataProductIdentifier.cal_solar_face3_combined,
-    393: DataProductIdentifier.cal_solar_face3_combined,
-    394: DataProductIdentifier.cal_solar_face3_combined,
-    395: DataProductIdentifier.cal_solar_face3_combined,
-}
-
-#: Face number (1, 2, 3) keyed by DataProductIdentifier.
-FACE_IDENTIFIER_TO_FACE_NUM: dict[DataProductIdentifier, int] = {
-    DataProductIdentifier.cal_solar_face1_combined: 1,
-    DataProductIdentifier.cal_solar_face2_combined: 2,
-    DataProductIdentifier.cal_solar_face3_combined: 3,
-}
-
-#: First OBSID for each face number (used to derive ``event_pass_index``).
-FACE_BASE_OBSIDS: dict[int, int] = {1: 384, 2: 388, 3: 392}
-
 
 # ---------------------------------------------------------------------------
 # Main algorithm
 # ---------------------------------------------------------------------------
 
 
+# TODO[LIBSDC-564]: Re-evaluate shared vs event-specific steps and consolidate helpers during Tier 1.
 def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     """Main processing algorithm for the solar calibration event combiner.
 
@@ -149,8 +113,10 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     # Filter NOM-HK to ONLY the OBSIDs belonging to the detected face,
     # not all 12 solar-cal OBSIDs. This ensures the event window derived
     # from hk_times.min()/max() is tightly scoped to this face+pass.
-    face_num = FACE_IDENTIFIER_TO_FACE_NUM[face_identifier]
-    face_obsid_set = {obsid for obsid, info in OBSID_TO_FACE_IDENTIFIER.items() if info == face_identifier}
+    face_num = COMBINER_SOLAR_FACE_IDENTIFIER_TO_FACE_NUM[face_identifier]
+    face_obsid_set = {
+        obsid for obsid, info in COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER.items() if info == face_identifier
+    }
     nom_hk_event_mask = np.isin(nom_hk["ICIE__SW_OBSID_RAD"].values, list(face_obsid_set))
     nom_hk_event = nom_hk.isel(PACKET=nom_hk_event_mask)
     logger.info(
@@ -161,12 +127,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         sorted(face_obsid_set),
     )
 
-    # build_solar_cal_event_datasets derives t0/t1 from nom_hk_event times
-    # and applies pad once. Do NOT pre-pad in generate_solar_cal_manifests
-    # and then pad again here — pass pad=DEFAULT_PAD only here.
-    nom_hk_out, pev_sw_sliced, rad_sample_sliced = build_solar_cal_event_datasets(
-        nom_hk_event, pev_sw, rad_sample, pad=DEFAULT_PAD
-    )
+    nom_hk_out, pev_sw_sliced, rad_sample_sliced = build_solar_cal_event_datasets(nom_hk_event, pev_sw, rad_sample)
     # Step 5: Merge all three datasets via l1a_combine
     logger.info("Step 5: Merging datasets via l1a_combine")
     solar_cal_event = l1a_combine.merge_l1a_decoded_datasets([nom_hk_out, pev_sw_sliced, rad_sample_sliced])
@@ -175,11 +136,12 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     # Filter to solar-cal OBSIDs only (ICIE__SW_OBSID_RAD can contain non-solar-cal
     # values like 2 during initialisation/transition windows).
     all_obsids = [int(o) for o in np.unique(solar_cal_event["ICIE__SW_OBSID_RAD"].values)]
-    source_obsids = sorted(o for o in all_obsids if o in OBSID_TO_FACE_IDENTIFIER)
-    event_pass_index = min(source_obsids) - FACE_BASE_OBSIDS[face_num]
+    source_obsids = sorted(o for o in all_obsids if o in COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER)
+    event_pass_index = min(source_obsids) - COMBINER_SOLAR_FACE_BASE_OBSIDS[face_num]
     solar_cal_event.attrs["solar_cal_face"] = face_num
     solar_cal_event.attrs["source_obsids"] = source_obsids
     solar_cal_event.attrs["event_pass_index"] = event_pass_index
+    solar_cal_event.attrs["algorithm_version"] = libera_rad_version()
     logger.info(
         "Global attributes set: solar_cal_face=%d, source_obsids=%s, event_pass_index=%d",
         face_num,
@@ -251,8 +213,8 @@ def get_solar_cal_face(all_data: dict[str, xr.Dataset]) -> DataProductIdentifier
 
     face_identifiers: set[DataProductIdentifier] = set()
     for obsid in obsids:
-        if obsid in OBSID_TO_FACE_IDENTIFIER:
-            face_identifiers.add(OBSID_TO_FACE_IDENTIFIER[obsid])
+        if obsid in COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER:
+            face_identifiers.add(COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER[obsid])
 
     if len(face_identifiers) == 1:
         face_id = next(iter(face_identifiers))
@@ -267,7 +229,7 @@ def get_solar_cal_face(all_data: dict[str, xr.Dataset]) -> DataProductIdentifier
     raise ValueError(
         f"No recognised solar-cal OBSIDs found in the NOM-HK data. "
         f"Detected OBSIDs: {obsids}. "
-        f"Expected one of: {sorted(OBSID_TO_FACE_IDENTIFIER.keys())}."
+        f"Expected one of: {sorted(COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER.keys())}."
     )
 
 
@@ -275,7 +237,6 @@ def build_solar_cal_event_datasets(
     nom_hk: xr.Dataset,
     pev_sw: xr.Dataset,
     rad_sample: xr.Dataset,
-    pad: np.timedelta64 = DEFAULT_PAD,
 ) -> tuple[xr.Dataset, xr.Dataset, xr.Dataset]:
     """Slice PEV-SW-STAT and RAD-SAMPLE to the NOM-HK event window.
 
@@ -283,8 +244,8 @@ def build_solar_cal_event_datasets(
     (``ICIE__SW_OBSID_RAD`` in the recognised solar-cal OBSID set) before
     calling this function — see :func:`algorithm` for how that filtering is
     applied.  PEV-SW-STAT and RAD-SAMPLE are full 24-hour datasets that are
-    sliced to ``[t_start − pad, t_end + pad]`` using the min/max of the
-    filtered NOM-HK ``PACKET_ICIE_TIME`` coordinate.
+    sliced to ``[t_start, t_end]`` using the min/max of the filtered NOM-HK
+    ``PACKET_ICIE_TIME`` coordinate.
 
     The returned datasets retain the original ``PACKET`` dimension name and
     are ready to be passed directly to
@@ -301,9 +262,6 @@ def build_solar_cal_event_datasets(
     rad_sample : xr.Dataset
         Full 24-hour RAD-SAMPLE-DECODED dataset
         (``PACKET`` / ``PACKET_ICIE_TIME`` + ``RAD_SAMPLE_FPE_TIME``).
-    pad : np.timedelta64
-        Symmetric time padding applied around the NOM-HK window when slicing
-        the full-day files (default 5 minutes).
 
     Returns
     -------
@@ -313,15 +271,10 @@ def build_solar_cal_event_datasets(
         ``merge_l1a_decoded_datasets``.
     """
     hk_times = nom_hk["PACKET_ICIE_TIME"].values
-    t0 = hk_times.min() - pad
-    t1 = hk_times.max() + pad
+    t0 = hk_times.min()
+    t1 = hk_times.max()
 
-    logger.info(
-        "Slicing to event window (±%d min padding): [%s — %s]",
-        int(pad / np.timedelta64(60, "s")),
-        t0,
-        t1,
-    )
+    logger.info("Slicing to event window: [%s — %s]", t0, t1)
 
     # Slice PEV-SW-STAT (1-D: PACKET only)
     pev_sliced = l1a_cal_event_utils.slice_dataset_to_time_window(pev_sw, t0, t1)

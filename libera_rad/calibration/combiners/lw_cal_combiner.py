@@ -13,12 +13,17 @@ from libera_utils.io.netcdf import write_libera_data_product
 from libera_utils.logutil import configure_task_logging
 
 from libera_rad.calibration.combiners import l1a_combine
+from libera_rad.calibration.constants import (
+    COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER,
+)
 from libera_rad.config import cal_lw_product_definitions
 from libera_rad.l1b import extract_input_dataset, read_all_input_data
+from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
 
 
+# TODO[LIBSDC-564]: Re-evaluate shared vs event-specific steps and consolidate helpers during Tier 1.
 def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     """
     Main processing algorithm implementing the 7-step Libera processing workflow for longwave calibration events.
@@ -75,6 +80,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     # Step 3: Combine lw cal event data and calculate any required variables
     logger.info("Step 3: Creating LW calibration event dataset")
     lw_cal_event = l1a_combine.merge_l1a_decoded_datasets(list(all_data.values()))
+    lw_cal_event.attrs["algorithm_version"] = libera_rad_version()
 
     # Steps 4: Store data with metadata and write to output folder
     logger.info("Step 4: Creating and writing data product")
@@ -133,17 +139,12 @@ def get_lw_event_type(all_data: dict[str, xr.Dataset]) -> DataProductIdentifier:
     ValueError
         If no recognized LW calibration OBSID is found in the input data.
     """
-    obsid_event_types = {
-        320: DataProductIdentifier.cal_lw_temp1_combined,
-        321: DataProductIdentifier.cal_lw_temp2_combined,
-        322: DataProductIdentifier.cal_lw_temp3_combined,
-    }
     nom_hk_data = extract_input_dataset(all_data, DataProductIdentifier.l1a_icie_nom_hk_decoded)
     obsids = np.unique(nom_hk_data["ICIE__SW_OBSID_RAD"].values)
     matches = []
     for obsid in obsids:
-        if obsid in obsid_event_types:
-            matches.append(obsid_event_types[obsid])
+        if obsid in COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER:
+            matches.append(COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER[obsid])
     if len(matches) == 1:
         logger.info("LW calibration event detected: %s", matches[0])
         return matches[0]

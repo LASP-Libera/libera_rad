@@ -11,7 +11,7 @@ from tests.integration.test_calibration.cal_test_helpers import (
     cal_desired_time_range,
     copy_cal_input_file,
     load_cal_netcdf,
-    write_cal_netcdf,
+    write_nom_hk_fixture,
 )
 
 
@@ -22,13 +22,12 @@ def test_solar_cal_algorithm_end_to_end_face1_conforms_to_product_definition(
 ):
     input_dir, output_dir = cal_io_paths
 
-    nom_hk = input_dir / "LIBERA_L1A_NOM-HK-DECODED_V5-6-1_20251213T172515_20251213T172902_R26099184809.nc"
     rad_sample = input_dir / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-6-1_20251213T172514_20251213T172902_R26119221206.nc"
     pev = input_dir / "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-6-1_20251213T172526_20251213T172830_R26101025905.nc"
 
     nom_hk_ds = xr.open_dataset(test_l1a_cal_data_path / "short_nom_hk.nc").load()
     nom_hk_ds["ICIE__SW_OBSID_RAD"] = ("PACKET", np.full(nom_hk_ds.sizes["PACKET"], 384, dtype=np.uint16))
-    write_cal_netcdf(nom_hk_ds, nom_hk)
+    nom_hk = write_nom_hk_fixture(nom_hk_ds, input_dir)
     copy_cal_input_file(test_l1a_cal_data_path / "short_rad_sample.nc", rad_sample)
     copy_cal_input_file(test_l1a_cal_data_path / "short_pev.nc", pev)
 

@@ -12,10 +12,12 @@ from libera_utils.logutil import configure_task_logging
 from libera_rad.calibration.combiners import l1a_combine
 from libera_rad.config import cal_sw_product_definitions
 from libera_rad.l1b import read_all_input_data
+from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
 
 
+# TODO[LIBSDC-564]: Re-evaluate shared vs event-specific steps and consolidate helpers during Tier 1.
 def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     """
     Main processing algorithm implementing the Libera processing workflow for SW (shortwave) calibration events.
@@ -59,8 +61,9 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
 
     datasets = list(all_data.values())
     # Step 3: Combine sw cal event data and calculate any required variables
-    logger.info("Step 3: Creating SW calibration event dataset")
+    logger.info("Step 3: Creating shortwave calibration event dataset")
     sw_cal_event = l1a_combine.merge_l1a_decoded_datasets(datasets)
+    sw_cal_event.attrs["algorithm_version"] = libera_rad_version()
 
     # Steps 4: Store data with metadata and write to output folder
     logger.info("Step 4: Creating and writing data product")

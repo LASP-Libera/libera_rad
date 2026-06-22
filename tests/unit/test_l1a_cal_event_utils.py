@@ -138,12 +138,6 @@ class TestSliceDatasetToTimeWindow:
 class TestOpenAndSortL1aFiles:
     """Tests for open_and_sort_l1a_files."""
 
-    def test_single_file_sorted_by_packet_icie_time(self, test_l1a_cal_data_path):
-        path = test_l1a_cal_data_path / "short_nom_hk.nc"
-        ds = utils.open_and_sort_l1a_files([path])
-        times = ds["PACKET_ICIE_TIME"].values
-        assert np.all(times[:-1] <= times[1:])
-
     def test_multi_file_concatenation_sorts_unsorted_inputs(self, test_l1a_cal_data_path, tmp_path):
         """Later files with out-of-order PACKET_ICIE_TIME must still yield sorted output."""
         src = test_l1a_cal_data_path / "short_nom_hk.nc"

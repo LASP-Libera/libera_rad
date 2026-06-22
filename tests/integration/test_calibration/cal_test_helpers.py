@@ -4,11 +4,14 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import xarray as xr
-from cloudpathlib import AnyPath, S3Path
+from cloudpathlib import S3Path
 from libera_utils import smart_copy_file, smart_open
-from libera_utils.constants import DataProductIdentifier
-from libera_utils.io.netcdf import NetcdfEngine
+from libera_utils.constants import DataProductIdentifier, LiberaApid
+from libera_utils.io.netcdf import NetcdfEngine, write_libera_data_product
 from libera_utils.io.product_definition import LiberaDataProductDefinition
+from libera_utils.l1a.l1a_packet_configs import get_l1a_product_definition_path
+
+from libera_rad.version import version as libera_rad_version
 
 
 def cal_desired_time_range() -> tuple[datetime, datetime]:
@@ -24,15 +27,16 @@ def copy_cal_input_file(source: Path, dest: Path | S3Path) -> Path | S3Path:
     return smart_copy_file(source, dest)
 
 
-def write_cal_netcdf(dataset: xr.Dataset, dest: Path | S3Path) -> None:
-    """Write a NetCDF dataset using the libera_utils-configured xarray engine."""
-    dest_path = AnyPath(dest)
-    engine = NetcdfEngine.get_from_config()
-    if engine == NetcdfEngine.netcdf4 and not isinstance(dest_path, S3Path):
-        dataset.to_netcdf(dest_path, engine=NetcdfEngine.netcdf4)
-    else:
-        with smart_open(dest, mode="wb") as file_handle:
-            dataset.to_netcdf(file_handle, engine=NetcdfEngine.h5netcdf)
+def write_nom_hk_fixture(dataset: xr.Dataset, output_dir: Path | S3Path) -> Path | S3Path:
+    """Write a modified NOM-HK L1A fixture via write_libera_data_product."""
+    result = write_libera_data_product(
+        data_product_definition=get_l1a_product_definition_path(LiberaApid.icie_nom_hk),
+        data=dataset,
+        output_path=output_dir,
+        time_variable="PACKET_ICIE_TIME",
+        strict=True,
+    )
+    return result.path
 
 
 def load_cal_netcdf(path: Path | S3Path | str) -> xr.Dataset:
@@ -52,6 +56,7 @@ def assert_cal_product_conformance(
     for variable in dataset.variables.values():
         variable.encoding.clear()
     assert dataset.attrs["ProductID"] == expected_product_id
+    assert dataset.attrs["algorithm_version"] == libera_rad_version()
     definition = LiberaDataProductDefinition.from_yaml(product_definitions[product_identifier])
     conformed = definition.enforce_dataset_conformance(dataset)
     errors = definition.check_dataset_conformance(conformed, strict=True)

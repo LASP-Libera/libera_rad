@@ -639,13 +639,14 @@ def create_and_write_data_product(
     # Step 5: Write the data product file
     logger.info("Step 5: Writing data product to environment specified file")
 
+    product_attributes = {**dynamic_attributes, "algorithm_version": libera_rad_version()}
     output_file_path = write_libera_data_product(
         data_product_definition=product_config_path,
         data=processed_data,
         output_path=output_path,
         time_variable="radiometer_time",
         strict=True,
-        dynamic_product_attributes=dynamic_attributes,
+        dynamic_product_attributes=product_attributes,
     )
     logger.info(f"Saving to {output_file_path}")
     return output_file_path
