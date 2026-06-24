@@ -24,7 +24,7 @@ def _subsatellite_lla_from_ecef(sc_xyz_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({"lat": lla[..., 1], "lon": lla[..., 0], "alt": lla[..., 2]})
 
 
-def _spacecraft_ecef_positions(u_gps_times: np.ndarray, spice_body_name: str = "LIBERA_BASE") -> pd.DataFrame:
+def _spacecraft_ecef_positions(u_gps_times: np.ndarray, spice_body_name: str = "JPSS4_SC") -> pd.DataFrame:
     """
     Query spacecraft ECEF positions at each time (no instrument kernel or pointing).
 
