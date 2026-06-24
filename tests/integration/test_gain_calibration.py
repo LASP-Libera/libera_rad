@@ -241,8 +241,8 @@ class TestIntegration:
         assert np.all(np.abs(difference[50:150]) < 0.1)
 
         # Downsample
-        downsampled = downsample_libera_signal(calibrated, from_rate=200.0, to_rate=100.0)
-        uncalibrated_downsampled = downsample_libera_signal(true_signal, from_rate=200.0, to_rate=100.0)
+        downsampled = downsample_libera_signal(calibrated, from_rate=200, to_rate=100)
+        uncalibrated_downsampled = downsample_libera_signal(true_signal, from_rate=200, to_rate=100)
         # Verify pipeline worked
         assert len(downsampled) == 200
         downsampled_difference = downsampled - uncalibrated_downsampled

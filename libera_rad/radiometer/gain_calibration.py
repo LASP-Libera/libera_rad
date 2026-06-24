@@ -48,7 +48,37 @@ def get_ground_cal_response_function(freqs: np.ndarray, path: str = config.trans
     return interp_transfer.astype(complex)
 
 
-def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, to_rate: float = 100.0) -> np.ndarray:
+def decimation_factor(from_rate: int = 200, to_rate: int = 100) -> int:
+    """
+    Integer decimation factor from one sample rate to another.
+
+    Parameters
+    ----------
+    from_rate : int, optional
+        Source sampling rate in Hz. Default is 200.
+    to_rate : int, optional
+        Target sampling rate in Hz. Default is 100.
+
+    Returns
+    -------
+    int
+        Number of samples to skip between retained outputs (``from_rate / to_rate``).
+
+    Raises
+    ------
+    ValueError
+        If either rate is non-positive or ``from_rate`` is less than ``to_rate``.
+    """
+    if from_rate <= 0:
+        raise ValueError("from_rate must be positive")
+    if to_rate <= 0:
+        raise ValueError("to_rate must be positive")
+    if from_rate < to_rate:
+        raise ValueError("from_rate must be greater than to_rate")
+    return int(round(from_rate / to_rate, 0))
+
+
+def downsample_libera_signal(signal_data: np.ndarray, from_rate: int = 200, to_rate: int = 100) -> np.ndarray:
     """
     Downsample a signal from one sampling rate to another with pure decimation (take every Nth sample).
 
@@ -56,10 +86,10 @@ def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, 
     ----------
     signal_data : np.ndarray
         Input signal to be downsampled. Should be a 1D array.
-    from_rate : float, optional
-        Original sampling rate in Hz. Default is 200.0.
-    to_rate : float, optional
-        Target sampling rate in Hz. Default is 100.0.
+    from_rate : int, optional
+        Original sampling rate in Hz. Default is 200.
+    to_rate : int, optional
+        Target sampling rate in Hz. Default is 100.
 
     Returns
     -------
@@ -69,19 +99,13 @@ def downsample_libera_signal(signal_data: np.ndarray, from_rate: float = 200.0, 
     Raises
     ------
     ValueError
-        If from_rate or to rate is zero, from_rate or to rate is negative, or if from_rate is less than to_rate.
+        If ``from_rate`` or ``to_rate`` is invalid; see :func:`decimation_factor`.
 
     Notes
     -----
     If from_rate / to_rate is not an integer, it is rounded to the nearest whole number.
     """
-    if from_rate <= 0:
-        raise ValueError("from_rate must be positive")
-    if to_rate <= 0:
-        raise ValueError("to_rate must be positive")
-    if from_rate < to_rate:
-        raise ValueError("from_rate must be greater than to_rate")
-    factor = int(round(from_rate / to_rate, 0))
+    factor = decimation_factor(from_rate, to_rate)
     if len(signal_data) == 0:
         return signal_data
     # Decimate without filter (slice syntax: [start:stop:step])

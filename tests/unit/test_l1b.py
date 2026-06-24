@@ -13,6 +13,16 @@ from libera_utils.io.manifest import Manifest
 from libera_rad import l1b
 
 
+class TestRequireSpiceInputs:
+    def test_require_spice_inputs_ok(self):
+        spice_files = {product_id: f"/tmp/{product_id.name}.bc" for product_id in l1b._REQUIRED_SPICE_PRODUCTION}
+        l1b._require_spice_inputs(spice_files, l1b._REQUIRED_SPICE_PRODUCTION)
+
+    def test_require_spice_inputs_missing(self):
+        with pytest.raises(ValueError, match="Input manifest missing required SPICE data products: JPSS-SPK"):
+            l1b._require_spice_inputs({}, l1b._REQUIRED_SPICE_JPSS_ONLY)
+
+
 class TestReadAllInputData:
     """Tests for read_all_input_data function."""
 
@@ -21,12 +31,19 @@ class TestReadAllInputData:
         """Create a mock manifest with test files."""
         manifest = Mock()
         file_info_1 = Mock()
-        file_info_1.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc"
+        file_info_1.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
         file_info_2 = Mock()
-        file_info_2.filename = "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc"
+        file_info_2.filename = "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
         file_info_3 = Mock()
-        file_info_3.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
-        manifest.files = [file_info_1, file_info_2, file_info_3]
+        file_info_3.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        file_info_4 = Mock()
+        file_info_4.filename = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        file_info_5 = Mock()
+        file_info_5.filename = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp"
+        file_info_6 = Mock()
+        file_info_6.filename = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc"
+        manifest.files = [file_info_1, file_info_2, file_info_3, file_info_4, file_info_5, file_info_6]
+        manifest.configuration = {}
         return manifest
 
     @pytest.fixture
@@ -55,7 +72,10 @@ class TestReadAllInputData:
             all_data, dynamic_kernel_sources = l1b.read_all_input_data(mock_manifest)
 
             assert dynamic_kernel_sources == [
-                "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
+                "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc",
+                "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc",
+                "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp",
+                "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc",
             ]
             assert len(all_data) == 2
 
@@ -75,8 +95,8 @@ class TestReadAllInputData:
             all_data, _ = l1b.read_all_input_data(mock_manifest)
 
             assert len(all_data) == 2  # Two NetCDF files
-            assert "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc" in all_data
-            assert "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc" in all_data
+            assert "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc" in all_data
+            assert "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc" in all_data
 
     def test_read_all_input_data_handles_file_not_found(self, mock_manifest):
         """Test error handling when file is not found."""
@@ -89,18 +109,18 @@ class TestReadAllInputData:
             with pytest.raises(FileNotFoundError):
                 l1b.read_all_input_data(mock_manifest)
 
-    def test_read_all_input_data_warns_on_empty_data(self, caplog):
-        """Test warning is logged when no data files are loaded."""
+    def test_read_all_input_data_rejects_incomplete_spice_manifest(self):
+        """Production mode requires four dynamic SPICE kernels before processing."""
         manifest = Mock()
-        file_info = Mock()
-        file_info.filename = "test_kernel.bc"
-        manifest.files = [file_info]
+        az_file = Mock()
+        az_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        el_file = Mock()
+        el_file.filename = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        manifest.files = [az_file, el_file]
+        manifest.configuration = {}
 
-        all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
-
-        assert len(all_data) == 0
-        assert dynamic_kernel_sources == ["test_kernel.bc"]
-        assert "No data files were loaded" in caplog.text
+        with pytest.raises(ValueError, match="Input manifest missing required SPICE"):
+            l1b.read_all_input_data(manifest)
 
     def test_read_all_input_data_handles_exception_in_processing(self, mock_manifest):
         """Test error handling when processing fails."""
@@ -122,13 +142,18 @@ class TestReadAllInputData:
 
         # Create a mix of file types
         nc_file = Mock()
-        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc"
-        bc_file = Mock()
-        bc_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
+        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
+        az_file = Mock()
+        az_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        el_file = Mock()
+        el_file.filename = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
         bsp_file = Mock()
-        bsp_file.filename = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R00000000000.bsp"
+        bsp_file.filename = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp"
+        jpss_ck = Mock()
+        jpss_ck.filename = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc"
 
-        manifest.files = [nc_file, bc_file, bsp_file]
+        manifest.files = [nc_file, az_file, el_file, bsp_file, jpss_ck]
+        manifest.configuration = {}
 
         # Create a mock file handle
         mock_file = Mock()
@@ -145,15 +170,22 @@ class TestReadAllInputData:
 
             assert len(all_data) == 1
             assert nc_file.filename in all_data
-            assert dynamic_kernel_sources == [bc_file.filename, bsp_file.filename]
+            assert dynamic_kernel_sources == [
+                az_file.filename,
+                el_file.filename,
+                bsp_file.filename,
+                jpss_ck.filename,
+            ]
 
-    def test_read_all_input_data_use_geo_false_skips_spice_even_with_spice_files(self, mock_dataset):
-        """use_geo=false in manifest configuration should skip SPICE files and return empty kernel list."""
+    def test_read_all_input_data_use_geo_false_skips_spice(self, mock_dataset, caplog):
+        """use_geo false should skip SPICE files and return an empty kernel list."""
+        import logging
+
         manifest = Mock()
         nc_file = Mock()
-        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R00000000000.nc"
+        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
         bc_file = Mock()
-        bc_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R00000000000.bc"
+        bc_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
         manifest.files = [nc_file, bc_file]
         manifest.configuration = {"use_geo": False}
 
@@ -161,16 +193,49 @@ class TestReadAllInputData:
         mock_file.__enter__ = Mock(return_value=mock_file)
         mock_file.__exit__ = Mock(return_value=False)
 
-        with (
-            patch("libera_rad.l1b.smart_open", return_value=mock_file),
-            patch("xarray.open_dataset") as mock_open_dataset,
-        ):
-            mock_open_dataset.return_value.load.return_value = mock_dataset
-            all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
+        with caplog.at_level(logging.WARNING):
+            with (
+                patch("libera_rad.l1b.smart_open", return_value=mock_file),
+                patch("xarray.open_dataset") as mock_open_dataset,
+            ):
+                mock_open_dataset.return_value.load.return_value = mock_dataset
+                all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
         assert len(all_data) == 1
         assert nc_file.filename in all_data
         assert dynamic_kernel_sources == []
+        assert "use_geo is false: skipping SPICE kernel" in caplog.text
+
+    def test_read_all_input_data_jpss_only_mode_filters_kernels(self, mock_dataset, caplog):
+        """jpss_only collects only JPSS kernels and warns on motor kernels."""
+        import logging
+
+        manifest = Mock()
+        nc_file = Mock()
+        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
+        az_file = Mock()
+        az_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        jpss_spk = Mock()
+        jpss_spk.filename = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp"
+        jpss_ck = Mock()
+        jpss_ck.filename = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc"
+        manifest.files = [nc_file, az_file, jpss_spk, jpss_ck]
+        manifest.configuration = {"jpss_only": True}
+
+        mock_file = Mock()
+        mock_file.__enter__ = Mock(return_value=mock_file)
+        mock_file.__exit__ = Mock(return_value=False)
+
+        with caplog.at_level(logging.WARNING):
+            with (
+                patch("libera_rad.l1b.smart_open", return_value=mock_file),
+                patch("xarray.open_dataset") as mock_open_dataset,
+            ):
+                mock_open_dataset.return_value.load.return_value = mock_dataset
+                _, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
+
+        assert dynamic_kernel_sources == [jpss_spk.filename, jpss_ck.filename]
+        assert "jpss_only mode: skipping SPICE file" in caplog.text
 
 
 class TestExtractRadiometerDatasets:
@@ -237,16 +302,19 @@ class TestProcessL1aToL1b:
     @pytest.fixture
     def mock_input_data(self):
         """Create mock input data."""
+        rad_times = pd.date_range("2025-01-01", periods=1000, freq="ms").values
         rad_data = xr.Dataset(
             {
-                "RAD_SAMPLE_FPE_TIME": (["time"], np.arange(1000, dtype=np.float64)),
+                "RAD_SAMPLE_FPE_TIME": (["time"], rad_times),
+                "PACKET_ICIE_TIME": (["time"], rad_times),
+                "ICIE__RAD_OBSID_RAD": (["time"], np.full(1000, 128, dtype=np.uint16)),
                 "ICIE__RAD_SAMPLE_1": (["time"], np.random.rand(1000)),
             }
         )
 
         nom_hk_data = xr.Dataset(
             {
-                "PACKET_ICIE_TIME": (["time"], np.arange(0, 1000, 10, dtype=np.float64)),
+                "PACKET_ICIE_TIME": (["time"], pd.date_range("2025-01-01", periods=100, freq="10ms").values),
                 "ICIE__FPE_TSCOPE_TEMP": (["time"], np.full(100, 25.0)),
             }
         )
@@ -262,11 +330,12 @@ class TestProcessL1aToL1b:
 
         with (
             patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
-            patch("libera_utils.libera_spice.kernel_manager.KernelManager.load_libera_dynamic_kernels"),
+            patch("libera_rad.l1b.KernelManager"),
             patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
-            patch("libera_rad.geolocation.calculate_lat_lon_altitude") as mock_geoloc,
+            patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
+            patch("libera_rad.geolocation.create_placeholder_azimuth_elevation") as mock_placeholder_azel,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             # Setup mocks
@@ -276,15 +345,34 @@ class TestProcessL1aToL1b:
             mock_cal.channels = {"sw": channel_prop}
             mock_load_cal.return_value = mock_cal
 
-            mock_downsample.side_effect = lambda x: x[::10]
+            mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
-            mock_geoloc.return_value = pd.DataFrame(
-                {"lat": np.random.rand(100), "lon": np.random.rand(100), "alt": np.random.rand(100)}
+            instrument_lla = pd.DataFrame(
+                {
+                    "lat": np.linspace(30, 31, 100, dtype=np.float32),
+                    "lon": np.linspace(-100, -99, 100, dtype=np.float32),
+                    "alt": np.zeros(100, dtype=np.float32),
+                }
+            )
+            subsatellite_lla = pd.DataFrame(
+                {
+                    "lat": np.linspace(29, 30, 100, dtype=np.float32),
+                    "lon": np.linspace(-101, -100, 100, dtype=np.float32),
+                    "alt": np.zeros(100, dtype=np.float32),
+                }
+            )
+            mock_geoloc.return_value = (instrument_lla, subsatellite_lla)
+            mock_placeholder_azel.return_value = (
+                np.full(100, -999, dtype=np.float32),
+                np.full(100, -999, dtype=np.float32),
             )
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, use_geo=True)
+
+            mock_geoloc.assert_called_once()
+            mock_placeholder_azel.assert_called_once_with(100)
 
             # Check result structure
             assert isinstance(result, dict)
@@ -293,9 +381,14 @@ class TestProcessL1aToL1b:
             assert "Filtered_Radiance_SW" in result
             assert isinstance(dynamic_attributes, dict)
             assert "Earth_Sun_Distance_AU" in dynamic_attributes
+            assert np.all(result["Subsatellite_Latitude"] != np.float32(-999))
+            assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
+            assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
+            assert np.all(result["Azimuth"] == np.float32(-999))
+            assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
 
     def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
-        """use_geo=False should bypass KernelManager and SPICE geolocation."""
+        """use_geo false should bypass KernelManager and SPICE geolocation."""
         with (
             patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
             patch("libera_rad.l1b.KernelManager") as mock_kernel_manager_cls,
@@ -303,6 +396,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.create_placeholder_geolocation_dataframe") as mock_placeholder_geo,
+            patch("libera_rad.geolocation.create_placeholder_azimuth_elevation") as mock_placeholder_azel,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_calculate_geo,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -312,7 +406,7 @@ class TestProcessL1aToL1b:
             mock_cal.channels = {"sw": channel_prop}
             mock_load_cal.return_value = mock_cal
 
-            mock_downsample.side_effect = lambda x: x[::10]
+            mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
             mock_placeholder_geo.return_value = pd.DataFrame(
@@ -322,6 +416,10 @@ class TestProcessL1aToL1b:
                     "alt": np.full(100, -9999, dtype=np.float32),
                 }
             )
+            mock_placeholder_azel.return_value = (
+                np.full(100, -999, dtype=np.float32),
+                np.full(100, -999, dtype=np.float32),
+            )
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, dynamic_attributes = l1b.process_l1a_to_l1b(mock_input_data, [], use_geo=False)
@@ -329,13 +427,66 @@ class TestProcessL1aToL1b:
         mock_kernel_manager_cls.assert_not_called()
         mock_calculate_geo.assert_not_called()
         mock_placeholder_geo.assert_called_once_with(100)
+        mock_placeholder_azel.assert_called_once_with(100)
         assert isinstance(result, dict)
         assert "Latitude" in result
         assert np.all(result["Latitude"] == np.float32(-999))
+        assert np.all(result["Colatitude"] == np.float32(-999))
+        assert np.all(result["Subsatellite_Colatitude"] == np.float32(-999))
+        assert np.all(result["Azimuth"] == np.float32(-999))
+        assert np.all(result["Elevation"] == np.float32(-999))
         assert isinstance(dynamic_attributes, dict)
 
-    def test_process_l1a_to_l1b_requires_kernel_sources_when_use_geo_true(self, mock_input_data):
-        """use_geo=True requires SPICE kernel paths from the manifest."""
+    def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
+        """jpss_only uses LIBERA_BASE geo and zero motor angles."""
+        dynamic_kernel_sources = [
+            "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp",
+            "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc",
+        ]
+        with (
+            patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
+            patch("libera_rad.l1b.KernelManager"),
+            patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
+            patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
+            patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
+            patch("libera_rad.geolocation.calculate_libera_base_subsatellite_geolocation") as mock_jpss_geo,
+            patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
+            patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
+        ):
+            mock_cal = Mock()
+            channel_prop = Mock()
+            channel_prop.channel_enum = "1"
+            mock_cal.channels = {"sw": channel_prop}
+            mock_load_cal.return_value = mock_cal
+            mock_downsample.side_effect = lambda x, **kwargs: x[::10]
+            mock_calibrate.return_value = np.random.rand(1000)
+            mock_response.return_value = np.ones(501)
+            mock_jpss_geo.return_value = pd.DataFrame(
+                {
+                    "lat": np.linspace(10, 11, 100, dtype=np.float32),
+                    "lon": np.linspace(-80, -79, 100, dtype=np.float32),
+                    "alt": np.zeros(100, dtype=np.float32),
+                }
+            )
+            mock_radiance.return_value = pd.Series(np.random.rand(100))
+
+            result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
+
+        mock_prod_geo.assert_not_called()
+        mock_jpss_geo.assert_called_once()
+        assert np.all(result["Azimuth"] == 0)
+        assert np.all(result["Elevation"] == 0)
+        assert np.allclose(result["Subsatellite_Latitude"], result["Latitude"])
+        assert np.allclose(result["Subsatellite_Longitude"], result["Longitude"])
+        assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
+        assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
+        assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+
+    @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])
+    def test_process_l1a_to_l1b_requires_kernel_sources_when_use_geo_true(
+        self, mock_input_data, dynamic_kernel_sources
+    ):
+        """Geolocation mode requires SPICE kernel paths from the manifest."""
         timestamps = np.arange(10, dtype=np.float64)
         calibrated_data = {"sw": np.zeros(10)}
 
@@ -345,9 +496,9 @@ class TestProcessL1aToL1b:
         ):
             with pytest.raises(
                 ValueError,
-                match="SPICE kernel sources are required when use_geo is True",
+                match="SPICE kernel sources are required for geolocation when use_geo is True",
             ):
-                l1b.process_l1a_to_l1b(mock_input_data, [], use_geo=True)
+                l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, use_geo=True)
 
 
 class TestAlgorithm:
@@ -375,6 +526,70 @@ class TestAlgorithm:
         manifest.files = []
         return manifest
 
+    def test_algorithm_rejects_use_geo_false_and_jpss_only(self, tmp_path, monkeypatch):
+        """Mutually exclusive manifest flags raise before processing."""
+        monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
+        manifest_path = tmp_path / "manifest.json"
+        with (
+            patch("libera_utils.Manifest.from_file") as mock_from_file,
+            patch("libera_rad.l1b.read_all_input_data"),
+        ):
+            mock_from_file.return_value = Mock(
+                files=[manifest_path],
+                configuration={"use_geo": False, "jpss_only": True},
+            )
+            with pytest.raises(ValueError, match="cannot both be enabled"):
+                l1b.algorithm(manifest_path)
+
+    def test_algorithm_use_geo_false_disables_geolocation(self, tmp_path, monkeypatch):
+        """Explicit use_geo: false disables SPICE geolocation."""
+        monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
+        manifest_path = tmp_path / "manifest.json"
+        output_manifest = Mock()
+        with (
+            patch("libera_utils.Manifest.from_file") as mock_from_file,
+            patch("libera_utils.Manifest.output_manifest_from_input_manifest", return_value=output_manifest),
+            patch("libera_rad.l1b.read_all_input_data") as mock_read,
+            patch("libera_rad.l1b.process_l1a_to_l1b") as mock_process,
+            patch("libera_rad.l1b.create_and_write_data_product") as mock_write,
+        ):
+            mock_from_file.return_value = Mock(
+                files=[manifest_path],
+                configuration={"use_geo": False},
+            )
+            mock_read.return_value = ({}, [])
+            mock_process.return_value = ({}, {})
+            mock_write.return_value = Mock(path="out.nc")
+            output_manifest.write.return_value = tmp_path / "out_manifest.json"
+            input_manifest = mock_from_file.return_value
+            l1b.algorithm(manifest_path)
+            mock_read.assert_called_once_with(input_manifest)
+            assert mock_process.call_args.kwargs["use_geo"] is False
+            assert mock_process.call_args.kwargs["jpss_only_mode"] is False
+
+    def test_algorithm_omitted_use_geo_defaults_to_true(self, tmp_path, monkeypatch):
+        """Omitting use_geo from configuration defaults to production geolocation."""
+        monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
+        manifest_path = tmp_path / "manifest.json"
+        output_manifest = Mock()
+        with (
+            patch("libera_utils.Manifest.from_file") as mock_from_file,
+            patch("libera_utils.Manifest.output_manifest_from_input_manifest", return_value=output_manifest),
+            patch("libera_rad.l1b.read_all_input_data") as mock_read,
+            patch("libera_rad.l1b.process_l1a_to_l1b") as mock_process,
+            patch("libera_rad.l1b.create_and_write_data_product") as mock_write,
+        ):
+            mock_from_file.return_value = Mock(files=[manifest_path], configuration={})
+            mock_read.return_value = ({}, [])
+            mock_process.return_value = ({}, {})
+            mock_write.return_value = Mock(path="out.nc")
+            output_manifest.write.return_value = tmp_path / "out_manifest.json"
+            input_manifest = mock_from_file.return_value
+            l1b.algorithm(manifest_path)
+            mock_read.assert_called_once_with(input_manifest)
+            assert mock_process.call_args.kwargs["use_geo"] is True
+            assert mock_process.call_args.kwargs["jpss_only_mode"] is False
+
     def test_algorithm_missing_processing_path(self, tmp_path, monkeypatch):
         """Test error when PROCESSING_PATH is not set."""
         manifest_path = tmp_path / "manifest.json"
@@ -394,10 +609,10 @@ class TestAlgorithm:
         """Testing the algorithm to generate output manifests"""
 
         monkeypatch.setenv("PROCESSING_PATH", str(tmp_path))
-        manifest_path = generate_input_manifest()
+        algo_inputs = generate_input_manifest()
 
         # Run the algorithm
-        output_manifest_path = l1b.algorithm(manifest_path)
+        output_manifest_path = l1b.algorithm(algo_inputs)
 
         output_manifest_obj = Manifest.from_file(output_manifest_path)
 

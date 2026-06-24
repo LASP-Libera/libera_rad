@@ -26,8 +26,40 @@ from libera_rad import geolocation
 from libera_rad.calibration.constants import ChannelName
 from libera_rad.config import product_config_path
 from libera_rad.radiometer import radiance
+from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
+
+# Required dynamic SPICE inputs keyed by Libera data product id (see libera_utils.constants).
+_REQUIRED_SPICE_JPSS_ONLY: tuple[DataProductIdentifier, ...] = (
+    DataProductIdentifier.spice_jpss_spk,
+    DataProductIdentifier.spice_jpss_ck,
+)
+# Furnish order matches integration manifests: motor CK before JPSS CK.
+_REQUIRED_SPICE_PRODUCTION: tuple[DataProductIdentifier, ...] = (
+    DataProductIdentifier.spice_az_ck,
+    DataProductIdentifier.spice_el_ck,
+    DataProductIdentifier.spice_jpss_spk,
+    DataProductIdentifier.spice_jpss_ck,
+)
+
+
+def _require_spice_inputs(
+    spice_files: dict[DataProductIdentifier, str],
+    required: tuple[DataProductIdentifier, ...],
+) -> None:
+    missing = [product_id for product_id in required if product_id not in spice_files]
+    if missing:
+        labels = ", ".join(str(product_id) for product_id in missing)
+        raise ValueError(f"Input manifest missing required SPICE data products: {labels}")
+
+
+def _manifest_geo_flags(input_manifest: Manifest) -> tuple[bool, bool]:
+    """Return ``(use_geo, jpss_only)`` from manifest configuration."""
+    cfg = input_manifest.configuration
+    use_geo = bool(cfg.get("use_geo", True))
+    jpss_only_mode = bool(cfg.get("jpss_only"))
+    return use_geo, jpss_only_mode
 
 
 def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
@@ -59,7 +91,8 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     Manifest ``configuration.use_geo`` controls geolocation behavior. When
     ``use_geo`` is false, SPICE kernel files are skipped during input read and
     placeholder lat/lon/alt values are written. Omitting the key defaults to
-    true (production SPICE geolocation).
+    true (production SPICE geolocation). ``configuration.jpss_only`` selects
+    JPSS-only SPICE geolocation and cannot be combined with ``use_geo: false``.
     """
     now = datetime.now(UTC)
     configure_task_logging(f"l1b_{now}")
@@ -72,11 +105,13 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         manifest = AnyPath(manifest_path)
     input_manifest = Manifest.from_file(manifest)
     logger.info(f"Loaded manifest with {len(input_manifest.files)} files")
-    use_geo = bool(input_manifest.configuration.get("use_geo", True))
+    use_geo, jpss_only_mode = _manifest_geo_flags(input_manifest)
+    if not use_geo and jpss_only_mode:
+        raise ValueError("use_geo: false and jpss_only cannot both be enabled")
     if not use_geo:
-        logger.info(
-            "use_geo is false in manifest configuration; skipping SPICE geolocation and using placeholder lat/lon/alt."
-        )
+        logger.info("use_geo is false: placeholder geolocation will be used.")
+    if jpss_only_mode:
+        logger.info("jpss_only mode detected: LIBERA_BASE subsatellite geolocation will be used.")
 
     # Set the output location to write to in the output dropbox
     dropbox_path = os.getenv("PROCESSING_PATH")
@@ -93,24 +128,25 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
         all_input_data,
         dynamic_kernel_sources,
         use_geo=use_geo,
+        jpss_only_mode=jpss_only_mode,
     )
 
-    # Steps 4: Store data with metadata and write to output folder
+    # Step 4: Store data with metadata and write to output folder
     logger.info("Step 4: Creating and writing data product")
     output_data_file_path = create_and_write_data_product(
         processed_data=processed_data, dynamic_attributes=dynamic_product_attributes, output_path=dropbox_path
     )
 
-    # Step 6: Create output manifest
+    # Step 5: Create output manifest
     logger.info("Step 5: Creating output manifest")
     output_manifest = Manifest.output_manifest_from_input_manifest(input_manifest)
     output_manifest.configuration.update(input_manifest.configuration)
 
-    # Step 7: Add data files to output manifest
+    # Step 6: Add data files to output manifest
     logger.info(f"Step 6: Adding data files to output manifest: {output_data_file_path}")
     output_manifest.add_files(output_data_file_path.path)
 
-    # Step 8: Write output manifest to output dropbox folder
+    # Step 7: Write output manifest to output dropbox folder
     logger.info("Step 7: Writing the output manifest")
     output_manifest_filepath = output_manifest.write(dropbox_path)
     logger.info(f"Output manifest written to: {output_manifest_filepath}")
@@ -123,7 +159,7 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     Read and store all input data from manifest files.
 
     This function opens and validates all input NetCDF files from the manifest and stores them in a dictionary keyed by
-    filename. SPICE kernel paths (.bc, .bsp) are collected in manifest order for
+    filename. SPICE kernel paths (.bc, .bsp) are collected and returned in required furnish order for
     :meth:`KernelManager.load_libera_dynamic_kernels`, which materializes each file via
     :class:`~libera_utils.libera_spice.spice_utils.KernelFileCache` (local or S3).
 
@@ -137,9 +173,11 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     dict[str, xr.Dataset]
         Dictionary with filenames as keys and loaded xarray datasets as values.
     list[str]
-        Manifest paths for dynamic SPICE kernels, in manifest order. Empty when
-        ``input_manifest.configuration.use_geo`` is false and SPICE kernels are
-        not required.
+        Manifest paths for dynamic SPICE kernels in required furnish order
+        (``_REQUIRED_SPICE_JPSS_ONLY`` or ``_REQUIRED_SPICE_PRODUCTION``).
+        Empty when ``input_manifest.configuration.use_geo`` is false and SPICE
+        kernels are not required. When ``configuration.jpss_only`` is true,
+        only JPSS-SPK and JPSS-CK paths are collected.
 
     Raises
     ------
@@ -153,13 +191,13 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     Notes
     -----
     When ``input_manifest.configuration.use_geo`` is false, SPICE kernel files
-    (.bc, .bsp) are skipped. Omitting the key defaults to true.
+    (.bc, .bsp) are skipped. Omitting ``use_geo`` defaults to true.
     """
     logger.info("Step 2: Reading all input data from manifest files")
 
-    use_geo = bool(input_manifest.configuration.get("use_geo", True))
+    use_geo, jpss_only_mode = _manifest_geo_flags(input_manifest)
     all_data: dict[str, xr.Dataset] = {}
-    dynamic_kernel_sources: list[str] = []
+    spice_files: dict[DataProductIdentifier, str] = {}
 
     for i, file_info in enumerate(input_manifest.files):
         logger.info(f"Reading file {i + 1}/{len(input_manifest.files)}: {file_info.filename}")
@@ -167,19 +205,48 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
         try:
             if file_info.filename.endswith((".bc", ".bsp")):
                 if not use_geo:
-                    logger.info(f"use_geo is false: skipping SPICE file {file_info.filename}")
+                    logger.warning(
+                        "use_geo is false: skipping SPICE kernel %s",
+                        file_info.filename,
+                    )
                     continue
-                dynamic_kernel_sources.append(file_info.filename)
-                logger.info("Recorded SPICE kernel for KernelManager: %s", file_info.filename)
+
+                product_id = LiberaDataProductFilename.from_file_path(file_info.filename).data_product_id
+                if jpss_only_mode and product_id not in _REQUIRED_SPICE_JPSS_ONLY:
+                    logger.warning(
+                        "jpss_only mode: skipping SPICE file %s (%s)",
+                        file_info.filename,
+                        product_id,
+                    )
+                    continue
+
+                if product_id in spice_files:
+                    raise ValueError(
+                        f"Duplicate SPICE data product {product_id} in manifest: "
+                        f"{spice_files[product_id]} and {file_info.filename}"
+                    )
+
+                spice_files[product_id] = file_info.filename
+                logger.info(
+                    "Recorded SPICE kernel %s (%s)",
+                    file_info.filename,
+                    product_id,
+                )
             else:
                 with smart_open(file_info.filename) as file_handle:
                     LiberaDataProductFilename.from_file_path(file_info.filename)  # Ensure file is Libera Data Product
-                    dataset = xr.open_dataset(file_handle).load()
+                    dataset = xr.open_dataset(file_handle, decode_times=True).load()
                     all_data[file_info.filename] = dataset
                     logger.info(f"Successfully loaded dataset: {file_handle}")
         except Exception as e:
             logger.error(f"Failed to process file {file_info.filename}: {e}", exc_info=True)
             raise
+
+    dynamic_kernel_sources: list[str] = []
+    if use_geo:
+        required_spice = _REQUIRED_SPICE_JPSS_ONLY if jpss_only_mode else _REQUIRED_SPICE_PRODUCTION
+        _require_spice_inputs(spice_files, required_spice)
+        dynamic_kernel_sources = [spice_files[product_id] for product_id in required_spice]
 
     logger.info(
         "Successfully loaded %d datasets and %d SPICE kernel paths",
@@ -197,6 +264,7 @@ def process_l1a_to_l1b(
     all_input_data: dict[str, xr.Dataset],
     dynamic_kernel_sources: Sequence[str | Path | S3Path],
     use_geo: bool = True,
+    jpss_only_mode: bool = False,
 ) -> tuple[dict[str, np.ndarray], dict[str, str]]:
     """
     Process L1A data and SPICE Kernels to L1B product.
@@ -226,6 +294,9 @@ def process_l1a_to_l1b(
         When True (default), runs SPICE geolocation. When False, uses placeholder
         lat/lon/alt for ground-calibration processing. Set via manifest
         ``configuration.use_geo``; omitting the key is equivalent to True.
+    jpss_only_mode : bool, optional
+        When True, uses JPSS kernels only and LIBERA_BASE subsatellite
+        geolocation with 0° motor angles. Defaults to False.
 
     Returns
     -------
@@ -243,29 +314,48 @@ def process_l1a_to_l1b(
     # Extract input datasets
     rad_data, nom_hk_data = _extract_radiometer_datasets(all_input_data)
 
-    # Process radiometer data: timestamps is in nanoseconds since 1958-01-01, from radiometer FPE time
+    # Process radiometer data: timestamps are datetime64[ns] from decoded L1A FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
+    n_samples = len(timestamps)
+    subsatellite_lat_lon: pd.DataFrame | None = None
 
     if not use_geo:
-        lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(len(timestamps))
-    else:
+        lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(n_samples)
+        azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
+    elif jpss_only_mode:
         if not dynamic_kernel_sources:
-            raise ValueError("SPICE kernel sources are required when use_geo is True")
-        # Initialize SPICE kernels
+            raise ValueError("SPICE kernel sources are required for geolocation when jpss_only_mode is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-
-            # Calculate geolocation
-            lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            lat_lon_alt = geolocation.calculate_libera_base_subsatellite_geolocation(km, timestamps)
+        subsatellite_lat_lon = lat_lon_alt
+        azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
+    else:
+        if not dynamic_kernel_sources:
+            raise ValueError("SPICE kernel sources are required for geolocation when use_geo is True")
+        with KernelManager() as km:
+            km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
+            lat_lon_alt, subsatellite_lat_lon = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+        azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
 
     # Interpolate temperatures
     interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
 
+    # Instrument mode (packet-level OBSID mapped to 100 Hz output time grid)
+    operational_mode = _calculate_operational_mode(rad_data, timestamps)
+
     # Calculate radiances
     calculated_radiance_by_channel = radiance.calculate_radiances(calibrated_data_by_channel, interpolated_temperatures)
 
-    # Package output product
-    l1b_product, attributes = _package_l1b_product(timestamps, lat_lon_alt, calculated_radiance_by_channel)
+    l1b_product, attributes = _package_l1b_product(
+        timestamps=timestamps,
+        lat_lon_alt=lat_lon_alt,
+        calculated_radiance_by_channel=calculated_radiance_by_channel,
+        operational_mode=operational_mode,
+        azimuth=azimuth,
+        elevation=elevation,
+        subsatellite_lat_lon=subsatellite_lat_lon,
+    )
 
     return l1b_product, attributes
 
@@ -318,8 +408,20 @@ def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple
     return rad_data, nom_hk_data
 
 
+def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarray:
+    """Geodetic colatitude (degrees) from latitude, preserving product fill values."""
+    fill_val = np.float32(fill)
+    return np.where(lat == fill_val, fill_val, (90.0 - lat).astype(np.float32))
+
+
 def _package_l1b_product(
-    timestamps: np.ndarray, lat_lon_alt: pd.DataFrame, calculated_radiance_by_channel: dict[str, np.ndarray]
+    timestamps: np.ndarray,
+    lat_lon_alt: pd.DataFrame,
+    calculated_radiance_by_channel: dict[str, np.ndarray],
+    operational_mode: np.ndarray,
+    azimuth: np.ndarray,
+    elevation: np.ndarray,
+    subsatellite_lat_lon: pd.DataFrame | None = None,
 ) -> tuple[dict[str, ndarray], dict[str, str]]:
     """
     Package L1B product according to product definition.
@@ -329,7 +431,11 @@ def _package_l1b_product(
     timestamps : np.ndarray
         Radiometer measurement timestamps at 100Hz.
     lat_lon_alt : pd.DataFrame
-        Geolocation data containing latitude, longitude, and altitude.
+        Instrument geolocation (latitude, longitude, altitude) on the L1B time grid.
+    subsatellite_lat_lon : pd.DataFrame, optional
+        Subsatellite point geolocation. When omitted, ``Subsatellite_*`` fields are
+        filled with product placeholders. In ``jpss_only`` mode this matches
+        ``lat_lon_alt``.
     calculated_radiance_by_channel : dict[str, np.ndarray]
         Calculated radiance values for each channel.
 
@@ -353,23 +459,36 @@ def _package_l1b_product(
     placeholder_3d_neg999_f32 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float32)
     placeholder_hourly_3d_neg999 = np.full(shape=[24, 3], fill_value=-999, dtype=np.float64)  # 24 hours per day
     placeholder_hourly_3d_neg9999 = np.full(shape=[24, 3], fill_value=-9999, dtype=np.float64)  # 24 hours per day
-    radiometer_time = timestamps.astype("datetime64[ns]")
+    radiometer_time = np.asarray(timestamps, dtype="datetime64[ns]")
+
+    lat = lat_lon_alt["lat"].to_numpy().astype(np.float32)
+    lon = lat_lon_alt["lon"].to_numpy().astype(np.float32)
+    alt = lat_lon_alt["alt"].to_numpy().astype(np.float32)
+    colat = _colatitude_from_latitude(lat)
+    if subsatellite_lat_lon is not None:
+        subsatellite_lat = subsatellite_lat_lon["lat"].to_numpy().astype(np.float32)
+        subsatellite_lon = subsatellite_lat_lon["lon"].to_numpy().astype(np.float32)
+        subsatellite_colat = _colatitude_from_latitude(subsatellite_lat)
+    else:
+        subsatellite_lat = placeholder_neg999
+        subsatellite_lon = placeholder_neg999
+        subsatellite_colat = placeholder_neg999
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
         # Position
-        "Latitude": lat_lon_alt["lat"].to_numpy().astype(np.float32),
+        "Latitude": lat,
         "Terrain_Corrected_Latitude": placeholder_neg999,
-        "Colatitude": placeholder_neg999,
-        "Longitude": lat_lon_alt["lon"].to_numpy().astype(np.float32),
+        "Colatitude": colat,
+        "Longitude": lon,
         "Terrain_Corrected_Longitude": placeholder_neg999,
-        "Altitude": lat_lon_alt["alt"].to_numpy().astype(np.float32),
+        "Altitude": alt,
         "Terrain_Corrected_Altitude": placeholder_neg9999,
-        "Subsatellite_Latitude": placeholder_neg999,
+        "Subsatellite_Latitude": subsatellite_lat,
         "Subsolar_Latitude": placeholder_neg999,
-        "Subsatellite_Colatitude": placeholder_neg999,
+        "Subsatellite_Colatitude": subsatellite_colat,
         "Subsolar_Colatitude": placeholder_neg999,
-        "Subsatellite_Longitude": placeholder_neg999,
+        "Subsatellite_Longitude": subsatellite_lon,
         "Subsolar_Longitude": placeholder_neg999,
         # Geometry
         "Along_Track_Angle": placeholder_neg999,
@@ -386,8 +505,8 @@ def _package_l1b_product(
         "Satellite_Attitude_Q1": placeholder_neg999,
         "Satellite_Attitude_Q2": placeholder_neg999,
         "Satellite_Attitude_Q3": placeholder_neg999,
-        "Azimuth": placeholder_neg999,
-        "Elevation": placeholder_neg999,
+        "Azimuth": azimuth.astype(np.float32),
+        "Elevation": elevation.astype(np.float32),
         "Line_Of_Sight": placeholder_3d_neg999_f32,
         "Radius_of_Satellite_from_Center_of_Earth": placeholder_neg9999_f64,
         "Cone_Angle": placeholder_neg999,
@@ -395,7 +514,7 @@ def _package_l1b_product(
         "Clock_Angle": placeholder_neg999,
         "Clock_Angle_Rate": placeholder_neg999,
         # Instrument
-        "Operational_Mode": np.full(shape=data_length, fill_value=-128, dtype=np.int8),  # radiometer OBSID?
+        "Operational_Mode": operational_mode.astype(np.uint16),
         "Filtered_Radiance_SW": calculated_radiance_by_channel.get(
             ChannelName.SHORTWAVE.value, placeholder_neg999
         ).astype(np.float32),
@@ -423,9 +542,40 @@ def _package_l1b_product(
     distance = sun.distance.to(u.AU)  # Get the distance in AU
 
     dynamic_attributes = {
+        "algorithm_version": libera_rad_version(),
         "Earth_Sun_Distance_AU": distance,
     }
     return l1b_dataset, dynamic_attributes
+
+
+def _calculate_operational_mode(rad_data: xr.Dataset, timestamps: np.ndarray) -> np.ndarray:
+    """
+    Map packet-level OBSID to the 100 Hz L1B output time grid via nearest-neighbor in time.
+
+    Parameters
+    ----------
+    rad_data : xr.Dataset
+        L1A radiometer sample dataset containing packet time and OBSID.
+    timestamps : np.ndarray
+        100 Hz output timestamps as ``datetime64[ns]``.
+
+    Returns
+    -------
+    np.ndarray
+        `uint16` array of operational modes, shape `(N,)`.
+    """
+    pkt_times = rad_data["PACKET_ICIE_TIME"].values.astype("datetime64[ns]").astype(np.int64)
+    pkt_obsid = rad_data["ICIE__RAD_OBSID_RAD"].values.astype(np.uint16)
+    t_out = np.asarray(timestamps, dtype="datetime64[ns]").astype(np.int64)
+
+    # Nearest-neighbor selection over monotonic packet times.
+    idx = np.searchsorted(pkt_times, t_out, side="left")
+    idx = np.clip(idx, 0, len(pkt_times) - 1)
+    left = np.maximum(idx - 1, 0)
+    choose_left = np.abs(pkt_times[left] - t_out) <= np.abs(pkt_times[idx] - t_out)
+    nearest = np.where(choose_left, left, idx)
+
+    return pkt_obsid[nearest]
 
 
 def calculate_data_quality_flags(data_length: int) -> np.ndarray:

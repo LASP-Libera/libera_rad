@@ -80,7 +80,7 @@ class TestDownsampleSignal:
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0)
+        result = downsample_libera_signal(signal_data, from_rate=200, to_rate=100)
 
         # Should have half the samples
         assert len(result) == 100
@@ -92,7 +92,7 @@ class TestDownsampleSignal:
         """Test downsampling by larger factor."""
         signal_data = np.random.randn(400)
 
-        result = downsample_libera_signal(signal_data, from_rate=400.0, to_rate=100.0)
+        result = downsample_libera_signal(signal_data, from_rate=400, to_rate=100)
 
         assert len(result) == 100
 
@@ -102,8 +102,8 @@ class TestDownsampleSignal:
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
-        # Downsampling rounds to the nearest integer factor, where factor = from_rate / to_rate.
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=49.9)
+        # 200/49 ≈ 4.08, which rounds to decimation factor 4.
+        result = downsample_libera_signal(signal_data, from_rate=200, to_rate=49)
 
         # Factor rounds to 4, so rate = 200 / 4 = 50
         assert len(result) == 50
@@ -114,8 +114,8 @@ class TestDownsampleSignal:
         t = np.linspace(0, 1, 200, endpoint=False)
         signal_data = np.sin(2 * np.pi * 5 * t)  # 5 Hz sine wave
 
-        # Downsampling rounds to the nearest integer factor, where factor = from_rate / to_rate.
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=50.1)
+        # 200/51 ≈ 3.92, which rounds to decimation factor 4.
+        result = downsample_libera_signal(signal_data, from_rate=200, to_rate=51)
 
         # Factor rounds to 4, so rate = 200 / 4 = 50
         assert len(result) == 50
@@ -125,7 +125,7 @@ class TestDownsampleSignal:
         # Constant signal (DC only)
         signal_data = np.ones(200) * 5.0
 
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0)
+        result = downsample_libera_signal(signal_data, from_rate=200, to_rate=100)
 
         # Mean should be approximately preserved
         np.testing.assert_almost_equal(np.mean(result), 5.0, decimal=1)
@@ -135,7 +135,7 @@ class TestDownsampleSignal:
         signal_data = np.random.randn(300)
 
         # 300 Hz -> 100 Hz (factor of 3)
-        result = downsample_libera_signal(signal_data, from_rate=300.0, to_rate=100.0)
+        result = downsample_libera_signal(signal_data, from_rate=300, to_rate=100)
 
         assert len(result) == 100
 
@@ -153,7 +153,7 @@ class TestDownsampleSignal:
         signal_data = np.array([])
 
         # This should work but return empty array
-        result = downsample_libera_signal(signal_data, from_rate=200.0, to_rate=100.0)
+        result = downsample_libera_signal(signal_data, from_rate=200, to_rate=100)
         assert len(result) == 0
 
     def test_negative_from_rate(self):
@@ -162,7 +162,7 @@ class TestDownsampleSignal:
 
         # Should raise ValueError
         with pytest.raises(ValueError, match="from_rate must be positive"):
-            downsample_libera_signal(signal_data, from_rate=-200.0, to_rate=100.0)
+            downsample_libera_signal(signal_data, from_rate=-200, to_rate=100)
 
     def test_negative_to_rate(self):
         """Test behavior with negative to_rate input."""
@@ -170,7 +170,7 @@ class TestDownsampleSignal:
 
         # Should raise ValueError
         with pytest.raises(ValueError, match="to_rate must be positive"):
-            downsample_libera_signal(signal_data, from_rate=200.0, to_rate=-100.0)
+            downsample_libera_signal(signal_data, from_rate=200, to_rate=-100)
 
     def test_from_rate_less_than_to_rate(self):
         """Test behavior with to_rate higher than from_rate input."""
@@ -178,7 +178,7 @@ class TestDownsampleSignal:
 
         # Should raise ValueError
         with pytest.raises(ValueError, match="from_rate must be greater than to_rate"):
-            downsample_libera_signal(signal_data, from_rate=100.0, to_rate=200.0)
+            downsample_libera_signal(signal_data, from_rate=100, to_rate=200)
 
 
 class TestApplyGainCalibration:

@@ -30,9 +30,13 @@ from libera_rad.calibration.constants import (
 from libera_rad.config import l1b_ground_calibration_path
 from libera_rad.radiometer.gain_calibration import (
     apply_gain_calibration,
+    decimation_factor,
     downsample_libera_signal,
     get_ground_cal_response_function,
 )
+
+_RAD_SAMPLE_HZ = 200
+_L1B_OUTPUT_HZ = 100
 
 logger = logging.getLogger(__name__)
 
@@ -753,7 +757,7 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
     --------
     Logs a warning if no variable is found matching a channel's enum identifier.
     """
-    raw_times = rad_data["RAD_SAMPLE_FPE_TIME"].values.astype(np.float64)
+    raw_times = rad_data["RAD_SAMPLE_FPE_TIME"].values
 
     calibrated_data_by_channel = {}
     calibrated_data_points = 0
@@ -775,15 +779,18 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
         )
 
         # Downsample to 100Hz
-        calibrated_100hz_rad_data = downsample_libera_signal(channel_calibrated_rad_data)
+        calibrated_100hz_rad_data = downsample_libera_signal(
+            channel_calibrated_rad_data, from_rate=_RAD_SAMPLE_HZ, to_rate=_L1B_OUTPUT_HZ
+        )
         calibrated_data_by_channel[channel_name] = calibrated_100hz_rad_data
         if not calibrated_data_points:
             calibrated_data_points = len(calibrated_100hz_rad_data)
 
     # TODO[LIBSDC-720]: double check with Dave on timestamp downsampling
-    first_time = raw_times[0]
-    last_time = raw_times[-1]
-    timestamps = np.linspace(first_time, last_time, num=calibrated_data_points)
+    if not np.issubdtype(raw_times.dtype, np.datetime64):
+        raise ValueError("RAD_SAMPLE_FPE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
+    factor = decimation_factor(_RAD_SAMPLE_HZ, _L1B_OUTPUT_HZ)
+    timestamps = raw_times[::factor][:calibrated_data_points]
     return timestamps, calibrated_data_by_channel
 
 
@@ -812,9 +819,17 @@ def interpolate_temperatures(timestamps: np.ndarray, nom_hk_data: xr.Dataset) ->
     """
     # TODO[LIBSDC-713]: Compare interpolation of temperature data with average temperature for period
     #     and consult IE team with results.
+    hk_times = nom_hk_data["PACKET_ICIE_TIME"].values
+    if not np.issubdtype(hk_times.dtype, np.datetime64):
+        raise ValueError("PACKET_ICIE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
+    hk_x = hk_times.astype(np.int64)
+    ts_x = np.asarray(timestamps).astype(np.int64)
+
     return pd.Series(
         np.interp(
-            timestamps, nom_hk_data["PACKET_ICIE_TIME"].to_series(), nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series()
+            ts_x,
+            hk_x,
+            nom_hk_data["ICIE__FPE_TSCOPE_TEMP"].to_series().to_numpy(dtype=np.float64),
         )
     )
 
