@@ -14,8 +14,14 @@ from curryer import spicetime
 from curryer import spicierpy as sp
 from curryer.compute import spatial
 from libera_utils.libera_spice.kernel_manager import KernelManager
+from spiceypy.utils.exceptions import SpiceyError
 
 logger = logging.getLogger(__name__)
+
+# Default SPICE sampling stride for motor az/el (100 Hz output → ~10 Hz pxform calls).
+AZ_EL_SPICE_STRIDE = 10
+
+_TWO_PI = float(2.0 * np.pi)
 
 
 def _subsatellite_lla_from_ecef(sc_xyz_df: pd.DataFrame) -> pd.DataFrame:
@@ -214,16 +220,138 @@ def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
     )
 
 
+def _az_el_from_et(et: float) -> tuple[float, float] | None:
+    """
+    Motor encoder azimuth and elevation (degrees) at one ET epoch.
+
+    Angles are Euler angles from the CK frame chain
+    ``LIBERA_BASE_COORD → LIBERA_AZ_COORD → LIBERA_EL_COORD``, matching
+    ``libera_utils`` tier-0 kernel tests. Returns None when SPICE has no transform.
+    """
+    # Adopt curryer frame_euler + spice_error_to_val when curryer#158 lands.
+    try:
+        m_az = sp.pxform("LIBERA_BASE_COORD", "LIBERA_AZ_COORD", et)
+        az_rad = float(sp.m2eul(m_az, 1, 2, 3)[2])
+        az_deg = np.degrees((az_rad + _TWO_PI) % _TWO_PI)
+
+        m_el = sp.pxform("LIBERA_AZ_COORD", "LIBERA_EL_COORD", et)
+        el_rad = float(sp.m2eul(m_el, 1, 2, 3)[0])
+        el_deg = np.degrees(el_rad)
+    except SpiceyError:
+        logger.debug("SPICE frame transform unavailable at ET %.6f", et, exc_info=True)
+        return None
+
+    return az_deg, el_deg
+
+
+def _coarse_sample_indices(n_samples: int, spice_stride: int) -> np.ndarray:
+    """Output indices for coarse SPICE sampling (always includes first and last)."""
+    if spice_stride <= 1 or n_samples <= 1:
+        return np.arange(n_samples, dtype=np.int64)
+    indices = list(range(0, n_samples, spice_stride))
+    if indices[-1] != n_samples - 1:
+        indices.append(n_samples - 1)
+    return np.asarray(indices, dtype=np.int64)
+
+
+def _az_el_on_et_times(et_times: np.ndarray, fill_value: float) -> tuple[np.ndarray, np.ndarray]:
+    """Compute az/el at every ET sample (full-resolution SPICE path)."""
+    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+
+    for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
+        result = _az_el_from_et(float(et))
+        if result is not None:
+            az[i] = np.float32(result[0])
+            el[i] = np.float32(result[1])
+
+    return az, el
+
+
+def _interpolate_az_el_to_full_grid(
+    coarse_indices: np.ndarray,
+    az_coarse: np.ndarray,
+    el_coarse: np.ndarray,
+    n_output: int,
+    fill_value: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Linearly interpolate coarse az/el onto the full output index grid.
+
+    Azimuth is unwrapped before interpolation and re-wrapped to [0, 360).
+    Segments bounded by fill-valued coarse samples are left as fill.
+    """
+    az_out = np.full(n_output, fill_value, dtype=np.float32)
+    el_out = np.full(n_output, fill_value, dtype=np.float32)
+    fill = float(fill_value)
+
+    valid = (az_coarse != fill) & np.isfinite(az_coarse) & np.isfinite(el_coarse)
+
+    for j, out_idx in enumerate(coarse_indices):
+        if valid[j]:
+            az_out[out_idx] = np.float32(az_coarse[j])
+            el_out[out_idx] = np.float32(el_coarse[j])
+
+    for k in range(len(coarse_indices) - 1):
+        if not (valid[k] and valid[k + 1]):
+            continue
+        i0 = int(coarse_indices[k])
+        i1 = int(coarse_indices[k + 1])
+        if i1 <= i0:
+            continue
+
+        out_slice = np.arange(i0, i1 + 1, dtype=np.float64)
+        x_coarse = np.array([i0, i1], dtype=np.float64)
+
+        az_seg = np.array([az_coarse[k], az_coarse[k + 1]], dtype=np.float64)
+        az_unwrapped = np.unwrap(np.radians(az_seg))
+        az_interp_deg = np.degrees(np.interp(out_slice, x_coarse, az_unwrapped)) % 360.0
+
+        el_interp = np.interp(out_slice, x_coarse, [el_coarse[k], el_coarse[k + 1]])
+
+        az_out[out_slice.astype(np.int64)] = az_interp_deg.astype(np.float32)
+        el_out[out_slice.astype(np.int64)] = el_interp.astype(np.float32)
+
+    return az_out, el_out
+
+
+def _az_el_with_coarse_stride(
+    et_times: np.ndarray,
+    fill_value: float,
+    spice_stride: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute az/el on a coarse ET grid and interpolate to the full output length."""
+    n_output = len(et_times)
+    coarse_indices = _coarse_sample_indices(n_output, spice_stride)
+    az_coarse = np.full(len(coarse_indices), fill_value, dtype=np.float64)
+    el_coarse = np.full(len(coarse_indices), fill_value, dtype=np.float64)
+
+    for j, out_idx in enumerate(coarse_indices):
+        result = _az_el_from_et(float(et_times[out_idx]))
+        if result is not None:
+            az_coarse[j], el_coarse[j] = result
+
+    return _interpolate_az_el_to_full_grid(coarse_indices, az_coarse, el_coarse, n_output, fill_value)
+
+
 def calculate_azimuth_elevation_for_timestamps(
     km: KernelManager,
     timestamps: np.ndarray,
     fill_value: float = -999.0,
+    spice_stride: int = AZ_EL_SPICE_STRIDE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate instrument azimuth and elevation angles for the given timestamps.
 
-    Angles are derived from SPICE CK frame transformations (motor kernels) using the same Euler angle
-    conventions validated in `libera_utils` tier-0 kernel tests.
+    Angles are motor encoder Euler angles from SPICE CK frame transforms:
+    azimuth from ``LIBERA_BASE_COORD → LIBERA_AZ_COORD`` and elevation from
+    ``LIBERA_AZ_COORD → LIBERA_EL_COORD``, using conventions validated in
+    ``libera_utils`` tier-0 kernel tests. They are relative to the motor encoder
+    frames, not nadir or spacecraft attitude.
+
+    When ``spice_stride`` > 1, SPICE is evaluated on a coarse subsample of the
+    output grid and linearly interpolated (azimuth unwrapped) to 100 Hz. Fill is
+    preserved across CK coverage gaps.
 
     Parameters
     ----------
@@ -233,6 +361,9 @@ def calculate_azimuth_elevation_for_timestamps(
         Radiometer timestamps aligned to the L1B output time grid as ``datetime64[ns]``.
     fill_value : float
         Fill value for samples where SPICE frame transforms are unavailable (coverage gaps).
+    spice_stride : int
+        Evaluate SPICE every N output samples (1 = full resolution). Default
+        ``AZ_EL_SPICE_STRIDE`` (~10 Hz when output is 100 Hz).
 
     Returns
     -------
@@ -243,31 +374,13 @@ def calculate_azimuth_elevation_for_timestamps(
 
     # TODO[LIBSDC-788]: Pre-flight CK coverage check via KernelManager before az/el pxform loop.
 
+    if spice_stride < 1:
+        raise ValueError(f"spice_stride must be >= 1, got {spice_stride}")
+
     dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
     et_times = spicetime.adapt(dt64_times, "dt64", "et")
-    az = np.full(shape=len(dt64_times), fill_value=fill_value, dtype=np.float32)
-    el = np.full(shape=len(dt64_times), fill_value=fill_value, dtype=np.float32)
 
-    two_pi = float(2.0 * np.pi)
-    for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
-        try:
-            # Match libera_utils/tests/integration/test_tier0_kernel.py conventions
-            m_az = sp.pxform("LIBERA_BASE_COORD", "LIBERA_AZ_COORD", float(et))
-            az_rad = float(sp.m2eul(m_az, 1, 2, 3)[2])
-            az_deg = np.degrees((az_rad + two_pi) % two_pi)
+    if spice_stride <= 1 or len(et_times) <= 1:
+        return _az_el_on_et_times(et_times, fill_value)
 
-            m_el = sp.pxform("LIBERA_AZ_COORD", "LIBERA_EL_COORD", float(et))
-            el_rad = float(sp.m2eul(m_el, 1, 2, 3)[0])
-            el_deg = np.degrees(el_rad)
-
-            az[i] = np.float32(az_deg)
-            el[i] = np.float32(el_deg)
-        except Exception:
-            logger.debug(
-                "SPICE frame transform unavailable at ET %.6f; leaving azimuth/elevation fill",
-                et,
-                exc_info=True,
-            )
-            continue
-
-    return az, el
+    return _az_el_with_coarse_stride(et_times, fill_value, spice_stride)

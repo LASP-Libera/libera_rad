@@ -203,10 +203,10 @@ class TestL1bRegressionStatistics:
     # Expected values captured from the integration fixture output after implementation.
     # These numbers are intentionally tight to catch algorithm regressions;
     # update intentionally if kernels/config change.
-    _AZIMUTH_MEAN_DEG = np.float64(359.9995557023623)
-    _AZIMUTH_STD_DEG = np.float64(1.515310771555131e-05)
-    _ELEVATION_MEAN_DEG = np.float64(1.1046268158518922)
-    _ELEVATION_STD_DEG = np.float64(44.8208251340132)
+    _AZIMUTH_MEAN_DEG = np.float64(359.9995557293844)
+    _AZIMUTH_STD_DEG = np.float64(1.5156280262632314e-05)
+    _ELEVATION_MEAN_DEG = np.float64(1.24908591878155)
+    _ELEVATION_STD_DEG = np.float64(44.68460619040018)
 
     def test_azimuth_mean_std_pinned(self, l1b_product_dataset, product_definition):
         fill_value = product_definition["variables"]["Azimuth"]["attributes"]["_FillValue"]
@@ -306,7 +306,6 @@ class TestL1bPhysicalInvariants:
         assert np.all((colat[non_fill] >= 0) & (colat[non_fill] <= 180))
         assert np.all((subsat_colat[non_fill] >= 0) & (subsat_colat[non_fill] <= 180))
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     def test_non_fill_azimuth_elevation_within_valid_range(self, l1b_product_dataset):
         """Non-fill Azimuth/Elevation values must be within the product definition valid ranges."""
         az_fill = -999.0

@@ -2,7 +2,7 @@
 
 ## 0.5.6
 
-- Production geolocation: populate `Subsatellite_*` via `LIBERA_BASE` nadir (reusing jpss_only subsatellite function), motor `Azimuth`/`Elevation` from CK frames, and derive `Colatitude` from instrument latitude.
+- Production geolocation: populate `Subsatellite_*` from spacecraft ECEF position via `spatial.ecef_to_geodetic` (attitude-independent, aligned with v0.5.5 jpss_only approach); populate motor `Azimuth`/`Elevation` from CK encoder frame transforms with coarse-grid SPICE sampling (`AZ_EL_SPICE_STRIDE`, default 10) and linear interpolation to 100 Hz; derive `Colatitude` from instrument latitude.
 
 ## 0.5.5
 
