@@ -319,7 +319,7 @@ def process_l1a_to_l1b(
     # Process radiometer data: timestamps are datetime64[ns] from decoded L1A FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
     n_samples = len(timestamps)
-    subsatellite_lat_lon: pd.DataFrame | None = None
+    geometry_ancillary: pd.DataFrame | None = None
 
     if not use_geo:
         lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(n_samples)
@@ -329,15 +329,16 @@ def process_l1a_to_l1b(
             raise ValueError("SPICE kernel sources are required for geolocation when jpss_only_mode is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-            lat_lon_alt = geolocation.calculate_libera_base_subsatellite_geolocation(km, timestamps)
-        subsatellite_lat_lon = lat_lon_alt
+            geometry_ancillary = geolocation.calculate_geometry_ancillary(km, timestamps)
+        lat_lon_alt = geolocation.subsatellite_lat_lon_alt(geometry_ancillary)
         azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
     else:
         if not dynamic_kernel_sources:
             raise ValueError("SPICE kernel sources are required for geolocation when use_geo is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-            lat_lon_alt, subsatellite_lat_lon = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            geometry_ancillary = geolocation.calculate_geometry_ancillary(km, timestamps)
             azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
 
     # Interpolate temperatures
@@ -356,7 +357,7 @@ def process_l1a_to_l1b(
         operational_mode=operational_mode,
         azimuth=azimuth,
         elevation=elevation,
-        subsatellite_lat_lon=subsatellite_lat_lon,
+        geometry_ancillary=geometry_ancillary,
     )
 
     return l1b_product, attributes
@@ -412,7 +413,7 @@ def _package_l1b_product(
     operational_mode: np.ndarray,
     azimuth: np.ndarray,
     elevation: np.ndarray,
-    subsatellite_lat_lon: pd.DataFrame | None = None,
+    geometry_ancillary: pd.DataFrame | None = None,
 ) -> tuple[dict[str, ndarray], dict[str, Any]]:
     """
     Package L1B product according to product definition.
@@ -423,10 +424,10 @@ def _package_l1b_product(
         Radiometer measurement timestamps at 100Hz.
     lat_lon_alt : pd.DataFrame
         Instrument geolocation (latitude, longitude, altitude) on the L1B time grid.
-    subsatellite_lat_lon : pd.DataFrame, optional
-        Subsatellite point geolocation. When omitted, ``Subsatellite_*`` fields are
-        filled with product placeholders. In ``jpss_only`` mode this matches
-        ``lat_lon_alt``.
+    geometry_ancillary : pd.DataFrame, optional
+        Curryer ``GeometryData`` ancillary fields (subsatellite / subsolar points and
+        satellite radius). When omitted, those product fields are filled with
+        placeholders.
     calculated_radiance_by_channel : dict[str, np.ndarray]
         Calculated radiance values for each channel.
 
@@ -456,14 +457,22 @@ def _package_l1b_product(
     lon = lat_lon_alt["lon"].to_numpy().astype(np.float32)
     alt = lat_lon_alt["alt"].to_numpy().astype(np.float32)
     colat = _colatitude_from_latitude(lat)
-    if subsatellite_lat_lon is not None:
-        subsatellite_lat = subsatellite_lat_lon["lat"].to_numpy().astype(np.float32)
-        subsatellite_lon = subsatellite_lat_lon["lon"].to_numpy().astype(np.float32)
-        subsatellite_colat = _colatitude_from_latitude(subsatellite_lat)
+    if geometry_ancillary is not None:
+        subsatellite_lat = geometry_ancillary["subsatellite_latitude"].to_numpy().astype(np.float32)
+        subsatellite_lon = geometry_ancillary["subsatellite_longitude"].to_numpy().astype(np.float32)
+        subsatellite_colat = geometry_ancillary["subsatellite_colatitude"].to_numpy().astype(np.float32)
+        subsolar_lat = geometry_ancillary["subsolar_latitude"].to_numpy().astype(np.float32)
+        subsolar_lon = geometry_ancillary["subsolar_longitude"].to_numpy().astype(np.float32)
+        subsolar_colat = geometry_ancillary["subsolar_colatitude"].to_numpy().astype(np.float32)
+        satellite_radius = geometry_ancillary["spacecraft_radius"].to_numpy().astype(np.float64)
     else:
         subsatellite_lat = placeholder_neg999
         subsatellite_lon = placeholder_neg999
         subsatellite_colat = placeholder_neg999
+        subsolar_lat = placeholder_neg999
+        subsolar_lon = placeholder_neg999
+        subsolar_colat = placeholder_neg999
+        satellite_radius = placeholder_neg9999_f64
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
@@ -476,11 +485,11 @@ def _package_l1b_product(
         "Altitude": alt,
         "Terrain_Corrected_Altitude": placeholder_neg9999,
         "Subsatellite_Latitude": subsatellite_lat,
-        "Subsolar_Latitude": placeholder_neg999,
+        "Subsolar_Latitude": subsolar_lat,
         "Subsatellite_Colatitude": subsatellite_colat,
-        "Subsolar_Colatitude": placeholder_neg999,
+        "Subsolar_Colatitude": subsolar_colat,
         "Subsatellite_Longitude": subsatellite_lon,
-        "Subsolar_Longitude": placeholder_neg999,
+        "Subsolar_Longitude": subsolar_lon,
         # Geometry
         "Along_Track_Angle": placeholder_neg999,
         "Cross_Track_Angle": placeholder_neg999,
@@ -499,7 +508,7 @@ def _package_l1b_product(
         "Azimuth": azimuth.astype(np.float32),
         "Elevation": elevation.astype(np.float32),
         "Line_Of_Sight": placeholder_3d_neg999_f32,
-        "Radius_of_Satellite_from_Center_of_Earth": placeholder_neg9999_f64,
+        "Radius_of_Satellite_from_Center_of_Earth": satellite_radius,
         "Cone_Angle": placeholder_neg999,
         "Cone_Angle_Rate": placeholder_neg999,
         "Clock_Angle": placeholder_neg999,
