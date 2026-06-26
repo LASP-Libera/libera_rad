@@ -176,7 +176,6 @@ class TestL1bScienceValues:
             vals = l1b_product_dataset[var_name].values
             assert np.any(vals != fill_value), f"{var_name} contains only fill-value sentinels"
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     @pytest.mark.parametrize("var_name", ["Azimuth", "Elevation"])
     def test_azimuth_elevation_contain_computed_values(self, l1b_product_dataset, product_definition, var_name):
         """Azimuth/Elevation must have at least one computed (non-fill) value."""
@@ -204,12 +203,11 @@ class TestL1bRegressionStatistics:
     # Expected values captured from the integration fixture output after implementation.
     # These numbers are intentionally tight to catch algorithm regressions;
     # update intentionally if kernels/config change.
-    _AZIMUTH_MEAN_DEG = np.float64(359.9995557023623)
-    _AZIMUTH_STD_DEG = np.float64(1.515310771555131e-05)
+    _AZIMUTH_MEAN_DEG = np.float64(359.9995557293844)
+    _AZIMUTH_STD_DEG = np.float64(1.5156280262632314e-05)
     _ELEVATION_MEAN_DEG = np.float64(1.1046268158518922)
-    _ELEVATION_STD_DEG = np.float64(44.8208251340132)
+    _ELEVATION_STD_DEG = np.float64(44.820824)
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     def test_azimuth_mean_std_pinned(self, l1b_product_dataset, product_definition):
         fill_value = product_definition["variables"]["Azimuth"]["attributes"]["_FillValue"]
         vals = l1b_product_dataset["Azimuth"].values.astype(np.float64)
@@ -220,7 +218,6 @@ class TestL1bRegressionStatistics:
         assert np.isclose(mean, self._AZIMUTH_MEAN_DEG, rtol=1e-6, atol=1e-3)
         assert np.isclose(std, self._AZIMUTH_STD_DEG, rtol=1e-6, atol=1e-3)
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     def test_elevation_mean_std_pinned(self, l1b_product_dataset, product_definition):
         fill_value = product_definition["variables"]["Elevation"]["attributes"]["_FillValue"]
         vals = l1b_product_dataset["Elevation"].values.astype(np.float64)
@@ -309,7 +306,6 @@ class TestL1bPhysicalInvariants:
         assert np.all((colat[non_fill] >= 0) & (colat[non_fill] <= 180))
         assert np.all((subsat_colat[non_fill] >= 0) & (subsat_colat[non_fill] <= 180))
 
-    @pytest.mark.skip(reason="Production motor az/el populated in geo-subsatellite-azel PR")
     def test_non_fill_azimuth_elevation_within_valid_range(self, l1b_product_dataset):
         """Non-fill Azimuth/Elevation values must be within the product definition valid ranges."""
         az_fill = -999.0

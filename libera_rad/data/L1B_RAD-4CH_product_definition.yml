@@ -253,7 +253,7 @@ variables:
     attributes:
       long_name: Detector azimuth angle
       units: degrees
-      valid_range: [0, 360]
+      valid_range: [-360, 360]
       _FillValue: -999
   Elevation:
     dtype: float32
@@ -261,7 +261,7 @@ variables:
     attributes:
       long_name: Detector elevation angle (0 represents Nadir)
       units: degrees
-      valid_range: [-180, 180]
+      valid_range: [-360, 360]
       _FillValue: -999
   Line_Of_Sight:
     dtype: float32

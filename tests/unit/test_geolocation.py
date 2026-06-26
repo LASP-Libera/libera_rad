@@ -1,9 +1,10 @@
 """Unit tests for geolocation helpers."""
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
+from spiceypy.utils.exceptions import SpiceyError
 
 from libera_rad import geolocation
 
@@ -65,3 +66,24 @@ def test_create_placeholder_geolocation_dataframe():
     assert np.all(result["lat"].to_numpy() == np.float32(-999))
     assert np.all(result["lon"].to_numpy() == np.float32(-999))
     assert np.all(result["alt"].to_numpy() == np.float32(-9999))
+
+
+def test_az_el_from_et_returns_none_on_spice_error():
+    with patch("libera_rad.geolocation.sp.pxform", side_effect=SpiceyError("SPICE(NOFRAME)")):
+        assert geolocation._az_el_from_et(0.0) is None
+
+
+def test_calculate_azimuth_elevation_for_timestamps():
+    timestamps = np.array(["2025-01-01T00:00:00", "2025-01-01T00:00:01"], dtype="datetime64[ns]")
+    et_times = np.array([1.0, 2.0])
+    km = Mock()
+    with (
+        patch.object(
+            geolocation, "_az_el_on_et_times", return_value=(np.zeros(2, np.float32), np.zeros(2, np.float32))
+        ) as mock_full,
+        patch("libera_rad.geolocation.spicetime.adapt", return_value=et_times),
+    ):
+        geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+
+    km.ensure_known_kernels_are_furnished.assert_called_once()
+    mock_full.assert_called_once_with(et_times, -999.0)

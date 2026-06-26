@@ -1,5 +1,9 @@
 # Version Changes
 
+## 0.5.6
+
+- Production geolocation: populate `Subsatellite_*` from spacecraft ECEF position via `spatial.ecef_to_geodetic` (attitude-independent, aligned with v0.5.5 jpss_only approach); populate motor `Azimuth`/`Elevation` from CK encoder frame; derive `Colatitude` from instrument latitude.
+
 ## 0.5.5
 
 - Add `jpss_only` manifest configuration: load only JPSS-SPK and JPSS-CK dynamic kernels, query LIBERA*BASE spacecraft ECEF position via SPICE and derive subsatellite geolocation with `spatial.ecef_to_geodetic` (no motor CK or instrument pointing kernels), populate instrument and `Subsatellite*\*`lat/lon/colat from a single call, and write Azimuth/Elevation as 0°. Production mode derives subsatellite lat/lon from`sc_xyz_df`returned by the existing`LIBERA_SW_RAD` ellipsoid intersection. Warn when other SPICE files are listed but skipped.

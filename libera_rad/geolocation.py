@@ -14,6 +14,7 @@ from curryer import spicetime
 from curryer import spicierpy as sp
 from curryer.compute import spatial
 from libera_utils.libera_spice.kernel_manager import KernelManager
+from spiceypy.utils.exceptions import SpiceyError
 
 logger = logging.getLogger(__name__)
 
@@ -212,3 +213,80 @@ def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
             "alt": np.full(shape=n_samples, fill_value=-9999, dtype=np.float32),
         }
     )
+
+
+def _az_el_from_et(et: float) -> tuple[float, float] | None:
+    """
+    Motor encoder azimuth and elevation (degrees) at one ET epoch.
+
+    Angles are Euler angles from the CK frame chain
+    ``LIBERA_BASE_COORD → LIBERA_AZ_COORD → LIBERA_EL_COORD``, matching
+    ``libera_utils`` tier-0 kernel tests. Returns None when SPICE has no transform.
+    """
+    # TODO[LIBSDC-739]: Use curryer frame_euler + spice_error_to_val when curryer#158 lands.
+    try:
+        # TODO[LIBSDC-611]: Re-evaluate the naming of the frames.
+        _TWO_PI = float(2.0 * np.pi)
+        m_az = sp.pxform("LIBERA_BASE_COORD", "LIBERA_AZ_COORD", et)
+        az_rad = float(sp.m2eul(m_az, 1, 2, 3)[2])
+        az_deg = np.degrees((az_rad + _TWO_PI) % _TWO_PI)
+
+        m_el = sp.pxform("LIBERA_AZ_COORD", "LIBERA_EL_COORD", et)
+        el_rad = float(sp.m2eul(m_el, 1, 2, 3)[0])
+        el_deg = np.degrees(el_rad)
+    except SpiceyError:
+        logger.debug("SPICE frame transform unavailable at ET %.6f", et, exc_info=True)
+        return None
+
+    return az_deg, el_deg
+
+
+def _az_el_on_et_times(et_times: np.ndarray, fill_value: float) -> tuple[np.ndarray, np.ndarray]:
+    """Compute az/el at every ET sample (full-resolution SPICE path)."""
+    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+
+    for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
+        result = _az_el_from_et(float(et))
+        if result is not None:
+            az[i] = np.float32(result[0])
+            el[i] = np.float32(result[1])
+
+    return az, el
+
+
+def calculate_azimuth_elevation_for_timestamps(
+    km: KernelManager,
+    timestamps: np.ndarray,
+    fill_value: float = -999.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate instrument azimuth and elevation angles for the given timestamps.
+
+    Angles are motor encoder Euler angles from SPICE CK frame transforms:
+    azimuth from ``LIBERA_BASE_COORD → LIBERA_AZ_COORD`` and elevation from
+    ``LIBERA_AZ_COORD → LIBERA_EL_COORD``, using conventions validated in
+    ``libera_utils`` tier-0 kernel tests. They are relative to the motor encoder
+    frames, not nadir or spacecraft attitude.
+
+    Parameters
+    ----------
+    km : KernelManager
+        Initialized kernel manager with loaded SPICE kernels.
+    timestamps : np.ndarray
+        Radiometer timestamps aligned to the L1B output time grid as ``datetime64[ns]``.
+    fill_value : float
+        Fill value for samples where SPICE frame transforms are unavailable (coverage gaps).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float32.
+    """
+    km.ensure_known_kernels_are_furnished()
+
+    # TODO[LIBSDC-788]: CK coverage check (via KernelManager?) before az/el pxform loop.
+
+    dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
+    et_times = spicetime.adapt(dt64_times, "dt64", "et")
+    return _az_el_on_et_times(et_times, fill_value)
