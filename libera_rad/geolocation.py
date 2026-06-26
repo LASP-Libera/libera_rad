@@ -19,47 +19,16 @@ from spiceypy.utils.exceptions import SpiceyError
 logger = logging.getLogger(__name__)
 
 
-def _subsatellite_lla_from_ecef(sc_xyz_df: pd.DataFrame) -> pd.DataFrame:
-    """Derive subsatellite geodetic coordinates from spacecraft ECEF position."""
-    lla = spatial.ecef_to_geodetic(sc_xyz_df[["x", "y", "z"]].to_numpy(), meters=False, degrees=True)
-    return pd.DataFrame({"lat": lla[..., 1], "lon": lla[..., 0], "alt": lla[..., 2]})
-
-
-def _spacecraft_ecef_positions(u_gps_times: np.ndarray, spice_body_name: str = "JPSS4_SC") -> pd.DataFrame:
-    """
-    Query spacecraft ECEF positions at each time (no instrument kernel or pointing).
-
-    Uses ``SpatialQueries.query_rotation_and_position`` for ``spkezp`` in ITRF93;
-    only the position vector is retained. Gaps or kernel errors leave NaN rows.
-    """
-    instrument = sp.obj.Body(spice_body_name, frame=True)
-    et_times = spicetime.adapt(u_gps_times, to="et")
-    positions = np.full((len(et_times), 3), np.nan)
-
-    for ith, et_time in enumerate(et_times):
-        (_, position), _ = spatial.SpatialQueries.query_rotation_and_position(
-            et_time, instrument, "NONE", allow_nans=True
-        )
-        if np.isfinite(position).all():
-            positions[ith, :] = position
-
-    index = pd.Index(np.asarray(u_gps_times).ravel(), name="ugps")
-    return pd.DataFrame(positions, columns=["x", "y", "z"], index=index)
-
-
 def calculate_lat_lon_altitude(
     kernel_manager: KernelManager,
     time_range: pd.DatetimeIndex,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """
-    Calculate instrument and subsatellite geolocation (convenience function).
+    Calculate instrument geolocation (latitude/longitude/altitude).
 
-    This function handles all kernel loading and cleanup automatically.
-    For multiple calculations, use KernelManager directly for better performance.
-
-    Instrument lat/lon/alt come from ``LIBERA_SW_RAD`` ellipsoid intersection.
-    Subsatellite lat/lon/alt come from spacecraft ECEF position via
-    ``spatial.ecef_to_geodetic`` (attitude-independent).
+    Instrument lat/lon/alt come from the ``LIBERA_SW_RAD`` boresight ellipsoid
+    intersection. The subsatellite point and the other ancillary geometry fields come
+    from :func:`calculate_geometry_ancillary`.
 
     Parameters
     ----------
@@ -70,29 +39,25 @@ def calculate_lat_lon_altitude(
 
     Returns
     -------
-    tuple[pd.DataFrame, pd.DataFrame]
-        Instrument geolocation and subsatellite geolocation DataFrames with
-        columns ``lat``, ``lon``, and ``alt``.
+    pd.DataFrame
+        Instrument geolocation with columns ``lat``, ``lon``, and ``alt``.
     """
     kernel_manager.ensure_known_kernels_are_furnished()
 
     u_gps_times = spicetime.adapt(time_range, "iso")
 
-    ellips_lla_df, sc_xyz_df, _ = spatial.compute_ellipsoid_intersection(
+    ellips_lla_df, _, _ = spatial.compute_ellipsoid_intersection(
         u_gps_times, sp.obj.Body("LIBERA_SW_RAD", frame=True), give_geodetic_output=True, give_lat_lon_in_degrees=True
     )
-    subsatellite_lla_df = _subsatellite_lla_from_ecef(sc_xyz_df)
 
-    logger.debug("Calculation complete, generated %d instrument and subsatellite points", len(ellips_lla_df))
+    logger.debug("Instrument geolocation: generated %d points", len(ellips_lla_df))
 
-    return ellips_lla_df, subsatellite_lla_df
+    return ellips_lla_df
 
 
-def calculate_geolocation_for_timestamps(
-    km: KernelManager, timestamps: np.ndarray
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def calculate_geolocation_for_timestamps(km: KernelManager, timestamps: np.ndarray) -> pd.DataFrame:
     """
-    Calculate instrument and subsatellite geolocation for given timestamps.
+    Calculate instrument geolocation for given timestamps.
 
     Parameters
     ----------
@@ -103,10 +68,9 @@ def calculate_geolocation_for_timestamps(
 
     Returns
     -------
-    tuple[pd.DataFrame, pd.DataFrame]
-        Instrument geolocation and subsatellite geolocation DataFrames.
+    pd.DataFrame
+        Instrument geolocation DataFrame with columns ``lat``, ``lon``, ``alt``.
     """
-    # TODO[LIBSDC-739]: Add all geolocation values into the data product
     return calculate_lat_lon_altitude(km, pd.DatetimeIndex(timestamps))
 
 
@@ -162,11 +126,10 @@ def calculate_geometry_ancillary(
     """
     Compute position-derived geometry ancillary fields via curryer ``GeometryData``.
 
-    Replaces the hand-rolled spacecraft-ECEF query and ``ecef_to_geodetic`` derivation
-    with curryer's selective-compute registry: each SPICE input is queried once and
-    vectorized, with coverage gaps surfaced as NaN. One call yields the subsatellite
-    and subsolar points (latitude / longitude / colatitude), the satellite radius, and
-    the Earth-Sun distance -- product ancillary fields otherwise filled with -999.
+    curryer's selective-compute registry queries each SPICE input once, vectorized,
+    with coverage gaps surfaced as NaN. One call yields the subsatellite and subsolar
+    points (latitude / longitude / colatitude) plus the satellite radius and altitude
+    -- product ancillary fields otherwise filled with -999.
 
     Parameters
     ----------
@@ -180,48 +143,43 @@ def calculate_geometry_ancillary(
     Returns
     -------
     pd.DataFrame
-        Indexed by uGPS; columns are the curryer field columns
-        (``subsatellite_latitude`` / ``_longitude`` / ``_colatitude``, ``subsolar_*``,
-        ``spacecraft_radius``, ``earth_sun_distance``).
+        Indexed by uGPS; columns are the curryer field columns (subsatellite and
+        subsolar latitude / longitude / colatitude, ``spacecraft_radius``,
+        ``spacecraft_altitude``).
     """
     kernel_manager.ensure_known_kernels_are_furnished()
     u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
     return geometry.GeometryData(observer).get_geometry(
         u_gps_times,
-        fields=["subsatellite", "subsolar", "sc_radius", "earth_sun_distance"],
+        fields=["subsatellite", "subsolar", "sc_radius", "sc_altitude"],
     )
 
 
-def calculate_libera_base_subsatellite_geolocation(
-    kernel_manager: KernelManager,
-    timestamps: np.ndarray,
-) -> pd.DataFrame:
+def subsatellite_lat_lon_alt(geometry_ancillary: pd.DataFrame) -> pd.DataFrame:
     """
-    Subsatellite geolocation from the spacecraft ECEF position via curryer.
+    Extract subsatellite ``lat``/``lon``/``alt`` from the ancillary fields.
 
-    Wraps :func:`calculate_geometry_ancillary` and returns the subsatellite point in
-    the ``lat`` / ``lon`` columns the product packager consumes. Uses JPSS dynamic
-    kernels (SPK) plus static FK; requires no motor azimuth/elevation CK or instrument
-    pointing kernels.
+    The subsatellite ground point's latitude/longitude plus the spacecraft geodetic
+    altitude, in the columns the product packager consumes. Used as the geolocation in
+    ``jpss_only`` mode, where no instrument pointing is available.
 
     Parameters
     ----------
-    kernel_manager : KernelManager
-        Kernel manager with JPSS and static kernels already loaded.
-    timestamps : np.ndarray
-        Radiometer timestamps on the L1B 100 Hz grid.
+    geometry_ancillary : pd.DataFrame
+        Output of :func:`calculate_geometry_ancillary`.
 
     Returns
     -------
     pd.DataFrame
-        Columns ``lat``, ``lon`` (degrees) for the subsatellite point.
+        Columns ``lat``, ``lon``, ``alt``.
     """
-    ancillary = calculate_geometry_ancillary(kernel_manager, timestamps)
-    subsatellite = ancillary[["subsatellite_latitude", "subsatellite_longitude"]].rename(
-        columns={"subsatellite_latitude": "lat", "subsatellite_longitude": "lon"}
+    return pd.DataFrame(
+        {
+            "lat": geometry_ancillary["subsatellite_latitude"].to_numpy(),
+            "lon": geometry_ancillary["subsatellite_longitude"].to_numpy(),
+            "alt": geometry_ancillary["spacecraft_altitude"].to_numpy(),
+        }
     )
-    logger.debug("Subsatellite geolocation via curryer GeometryData: %d points", len(subsatellite))
-    return subsatellite
 
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
