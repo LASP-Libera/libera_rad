@@ -42,6 +42,31 @@ def test_subsatellite_lla_from_ecef():
     assert result["alt"].iloc[0] == 0.1
 
 
+def test_calculate_libera_base_subsatellite_geolocation_uses_curryer():
+    timestamps = np.array(["2025-01-01T00:00:00", "2025-01-01T00:00:01"], dtype="datetime64[ns]")
+    km = Mock()
+    fields_df = pd.DataFrame(
+        {
+            "subsatellite_latitude": [10.0, 11.0],
+            "subsatellite_longitude": [20.0, 21.0],
+            "subsatellite_colatitude": [80.0, 79.0],
+        }
+    )
+    mock_geo = Mock()
+    mock_geo.get_geometry.return_value = fields_df
+    with (
+        patch("libera_rad.geolocation.geometry.GeometryData", return_value=mock_geo) as mock_cls,
+        patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([1, 2])),
+    ):
+        result = geolocation.calculate_libera_base_subsatellite_geolocation(km, timestamps)
+
+    km.ensure_known_kernels_are_furnished.assert_called_once()
+    mock_cls.assert_called_once_with("JPSS4_SC")
+    assert list(result.columns) == ["lat", "lon"]
+    assert result["lat"].tolist() == [10.0, 11.0]
+    assert result["lon"].tolist() == [20.0, 21.0]
+
+
 def test_create_placeholder_azimuth_elevation():
     az, el = geolocation.create_placeholder_azimuth_elevation(4, fill_value=-999.0)
     assert az.shape == (4,)

@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from curryer import spicetime
 from curryer import spicierpy as sp
-from curryer.compute import spatial
+from curryer.compute import geometry, spatial
 from libera_utils.libera_spice.kernel_manager import KernelManager
 from spiceypy.utils.exceptions import SpiceyError
 
@@ -154,17 +154,55 @@ def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarra
     return zeros, zeros
 
 
+def calculate_geometry_ancillary(
+    kernel_manager: KernelManager,
+    timestamps: np.ndarray,
+    observer: str = "JPSS4_SC",
+) -> pd.DataFrame:
+    """
+    Compute position-derived geometry ancillary fields via curryer ``GeometryData``.
+
+    Replaces the hand-rolled spacecraft-ECEF query and ``ecef_to_geodetic`` derivation
+    with curryer's selective-compute registry: each SPICE input is queried once and
+    vectorized, with coverage gaps surfaced as NaN. One call yields the subsatellite
+    and subsolar points (latitude / longitude / colatitude), the satellite radius, and
+    the Earth-Sun distance -- product ancillary fields otherwise filled with -999.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the spacecraft SPK (and required FK) kernels furnished.
+    timestamps : np.ndarray
+        Radiometer timestamps on the L1B output time grid.
+    observer : str
+        SPICE body name for the spacecraft. Default ``"JPSS4_SC"``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by uGPS; columns are the curryer field columns
+        (``subsatellite_latitude`` / ``_longitude`` / ``_colatitude``, ``subsolar_*``,
+        ``spacecraft_radius``, ``earth_sun_distance``).
+    """
+    kernel_manager.ensure_known_kernels_are_furnished()
+    u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
+    return geometry.GeometryData(observer).get_geometry(
+        u_gps_times,
+        fields=["subsatellite", "subsolar", "sc_radius", "earth_sun_distance"],
+    )
+
+
 def calculate_libera_base_subsatellite_geolocation(
     kernel_manager: KernelManager,
     timestamps: np.ndarray,
 ) -> pd.DataFrame:
     """
-    Subsatellite geolocation from LIBERA_BASE spacecraft ECEF position.
+    Subsatellite geolocation from the spacecraft ECEF position via curryer.
 
-    Uses JPSS dynamic kernels (SPK/CK) plus static FK; does not require motor
-    azimuth/elevation CK or instrument pointing kernels. Spacecraft ECEF position
-    is queried via SPICE ``spkezp``; subsatellite lat/lon come from
-    ``spatial.ecef_to_geodetic``.
+    Wraps :func:`calculate_geometry_ancillary` and returns the subsatellite point in
+    the ``lat`` / ``lon`` columns the product packager consumes. Uses JPSS dynamic
+    kernels (SPK) plus static FK; requires no motor azimuth/elevation CK or instrument
+    pointing kernels.
 
     Parameters
     ----------
@@ -176,15 +214,14 @@ def calculate_libera_base_subsatellite_geolocation(
     Returns
     -------
     pd.DataFrame
-        Columns ``lat``, ``lon``, ``alt`` in degrees / kilometers.
+        Columns ``lat``, ``lon`` (degrees) for the subsatellite point.
     """
-    kernel_manager.ensure_known_kernels_are_furnished()
-    u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
-
-    sc_xyz_df = _spacecraft_ecef_positions(u_gps_times)
-    subsatellite_lla_df = _subsatellite_lla_from_ecef(sc_xyz_df)
-    logger.debug("LIBERA_BASE subsatellite geolocation: %d points", len(subsatellite_lla_df))
-    return subsatellite_lla_df
+    ancillary = calculate_geometry_ancillary(kernel_manager, timestamps)
+    subsatellite = ancillary[["subsatellite_latitude", "subsatellite_longitude"]].rename(
+        columns={"subsatellite_latitude": "lat", "subsatellite_longitude": "lon"}
+    )
+    logger.debug("Subsatellite geolocation via curryer GeometryData: %d points", len(subsatellite))
+    return subsatellite
 
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
