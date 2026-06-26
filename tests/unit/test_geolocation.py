@@ -68,90 +68,22 @@ def test_create_placeholder_geolocation_dataframe():
     assert np.all(result["alt"].to_numpy() == np.float32(-9999))
 
 
-def test_coarse_sample_indices_includes_endpoints():
-    indices = geolocation._coarse_sample_indices(100, 10)
-    assert indices[0] == 0
-    assert indices[-1] == 99
-    assert len(indices) == 11
-
-
-def test_interpolate_az_el_preserves_fill_across_gap():
-    fill = -999.0
-    coarse_indices = np.array([0, 5, 10], dtype=np.int64)
-    az_coarse = np.array([0.0, fill, 20.0], dtype=np.float64)
-    el_coarse = np.array([1.0, fill, 21.0], dtype=np.float64)
-
-    az, el = geolocation._interpolate_az_el_to_full_grid(coarse_indices, az_coarse, el_coarse, 11, fill)
-
-    assert az[0] == np.float32(0.0)
-    assert el[0] == np.float32(1.0)
-    assert az[5] == np.float32(fill)
-    assert el[5] == np.float32(fill)
-    assert np.all(az[1:5] == np.float32(fill))
-    assert np.all(el[1:5] == np.float32(fill))
-    assert az[10] == np.float32(20.0)
-    assert el[10] == np.float32(21.0)
-
-
-def test_interpolate_az_el_linear_segment():
-    fill = -999.0
-    coarse_indices = np.array([0, 4], dtype=np.int64)
-    az_coarse = np.array([10.0, 30.0], dtype=np.float64)
-    el_coarse = np.array([5.0, 15.0], dtype=np.float64)
-
-    az, el = geolocation._interpolate_az_el_to_full_grid(coarse_indices, az_coarse, el_coarse, 5, fill)
-
-    np.testing.assert_allclose(az, [10.0, 15.0, 20.0, 25.0, 30.0], rtol=0, atol=1e-5)
-    np.testing.assert_allclose(el, [5.0, 7.5, 10.0, 12.5, 15.0], rtol=0, atol=1e-5)
-
-
-def test_interpolate_az_el_azimuth_wrap():
-    fill = -999.0
-    coarse_indices = np.array([0, 4], dtype=np.int64)
-    az_coarse = np.array([350.0, 10.0], dtype=np.float64)
-    el_coarse = np.array([0.0, 0.0], dtype=np.float64)
-
-    az, _ = geolocation._interpolate_az_el_to_full_grid(coarse_indices, az_coarse, el_coarse, 5, fill)
-
-    assert az[0] == np.float32(350.0)
-    assert az[4] == np.float32(10.0)
-    assert az[2] == np.float32(0.0)
-
-
 def test_az_el_from_et_returns_none_on_spice_error():
     with patch("libera_rad.geolocation.sp.pxform", side_effect=SpiceyError("SPICE(NOFRAME)")):
         assert geolocation._az_el_from_et(0.0) is None
 
 
-def test_calculate_azimuth_elevation_stride_one_uses_full_path():
+def test_calculate_azimuth_elevation_for_timestamps():
     timestamps = np.array(["2025-01-01T00:00:00", "2025-01-01T00:00:01"], dtype="datetime64[ns]")
+    et_times = np.array([1.0, 2.0])
     km = Mock()
     with (
         patch.object(
             geolocation, "_az_el_on_et_times", return_value=(np.zeros(2, np.float32), np.zeros(2, np.float32))
         ) as mock_full,
-        patch.object(geolocation, "_az_el_with_coarse_stride") as mock_coarse,
-        patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([1.0, 2.0])),
+        patch("libera_rad.geolocation.spicetime.adapt", return_value=et_times),
     ):
-        geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps, spice_stride=1)
+        geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
 
     km.ensure_known_kernels_are_furnished.assert_called_once()
-    mock_full.assert_called_once()
-    mock_coarse.assert_not_called()
-
-
-def test_calculate_azimuth_elevation_coarse_stride():
-    timestamps = pd.date_range("2025-01-01", periods=10, freq="s").to_numpy(dtype="datetime64[ns]")
-    km = Mock()
-    with (
-        patch.object(
-            geolocation, "_az_el_with_coarse_stride", return_value=(np.zeros(10, np.float32), np.zeros(10, np.float32))
-        ) as mock_coarse,
-        patch.object(geolocation, "_az_el_on_et_times") as mock_full,
-        patch("libera_rad.geolocation.spicetime.adapt", return_value=np.arange(10, dtype=np.float64)),
-    ):
-        geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps, spice_stride=5)
-
-    km.ensure_known_kernels_are_furnished.assert_called_once()
-    mock_coarse.assert_called_once()
-    mock_full.assert_not_called()
+    mock_full.assert_called_once_with(et_times, -999.0)

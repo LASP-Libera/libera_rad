@@ -205,8 +205,8 @@ class TestL1bRegressionStatistics:
     # update intentionally if kernels/config change.
     _AZIMUTH_MEAN_DEG = np.float64(359.9995557293844)
     _AZIMUTH_STD_DEG = np.float64(1.5156280262632314e-05)
-    _ELEVATION_MEAN_DEG = np.float64(1.24908591878155)
-    _ELEVATION_STD_DEG = np.float64(44.68460619040018)
+    _ELEVATION_MEAN_DEG = np.float64(1.1046268158518922)
+    _ELEVATION_STD_DEG = np.float64(44.820824)
 
     def test_azimuth_mean_std_pinned(self, l1b_product_dataset, product_definition):
         fill_value = product_definition["variables"]["Azimuth"]["attributes"]["_FillValue"]
