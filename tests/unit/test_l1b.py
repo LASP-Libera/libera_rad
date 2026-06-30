@@ -486,7 +486,7 @@ class TestProcessL1aToL1b:
         assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
         # Subsolar point and satellite radius are now populated from curryer.
         assert not np.any(result["Subsolar_Latitude"] == np.float32(-999))
-        assert np.all(result["Radius_of_Satellite_from_Center_of_Earth"] == 7000.0)
+        assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
         assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
 
     @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])
