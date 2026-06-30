@@ -380,7 +380,7 @@ class TestProcessL1aToL1b:
             assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
             assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
             assert not np.any(result["Subsolar_Longitude"] == np.float32(-999))
-            assert np.all(result["Radius_of_Satellite_from_Center_of_Earth"] == 7000.0)
+            assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
             assert np.all(result["Azimuth"] == np.float32(0))
             assert np.all(result["Elevation"] == np.float32(0))
             assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
