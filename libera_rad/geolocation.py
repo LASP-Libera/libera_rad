@@ -171,14 +171,15 @@ def subsatellite_lat_lon_alt(geometry_ancillary: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Columns ``lat``, ``lon``, ``alt``.
+        Columns ``lat``, ``lon``, ``alt``, on the input's uGPS index.
     """
     return pd.DataFrame(
         {
             "lat": geometry_ancillary["subsatellite_latitude"].to_numpy(),
             "lon": geometry_ancillary["subsatellite_longitude"].to_numpy(),
             "alt": geometry_ancillary["spacecraft_altitude"].to_numpy(),
-        }
+        },
+        index=geometry_ancillary.index,
     )
 
 

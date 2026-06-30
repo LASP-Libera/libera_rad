@@ -44,7 +44,7 @@ dependencies = [
     # GeometryData ancillary fields (subsatellite/subsolar/sc_radius/
     # earth_sun_distance/sc_position). Revert to the released version once curryer
     # ships these. See lasp/curryer#157.
-    "lasp-curryer @ git+ssh://git@github.com/lasp/curryer.git@geometry-foundation",
+    "lasp-curryer @ git+https://github.com/lasp/curryer.git@geometry-foundation",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",
