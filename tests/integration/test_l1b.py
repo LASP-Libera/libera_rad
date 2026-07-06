@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import xarray as xr
 import yaml
-from libera_utils.io.filenaming import LiberaDataProductFilename
+from libera_utils.io.filenaming import LiberaDataProductFilename, format_from_semantic_version
 from libera_utils.io.manifest import Manifest, ManifestType
 
 from libera_rad import l1b
@@ -136,9 +136,11 @@ class TestL1bProductDefinitionCompliance:
                 f"Required global attribute '{attr_name}' not found in output dataset"
             )
 
-    def test_algorithm_version_matches_package(self, l1b_product_dataset):
-        """The algorithm_version global attribute must match the installed package version."""
+    def test_algorithm_version_matches_package(self, l1b_product_dataset, l1b_product_file_path):
+        """The algorithm_version global attribute and filename version must match the installed package version."""
         assert l1b_product_dataset.attrs["algorithm_version"] == libera_rad_version()
+        filename = LiberaDataProductFilename.from_file_path(l1b_product_file_path)
+        assert filename.filename_parts.version == format_from_semantic_version(libera_rad_version())
 
 
 class TestL1bScienceValues:

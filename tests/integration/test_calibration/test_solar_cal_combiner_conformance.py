@@ -53,6 +53,7 @@ def test_solar_cal_algorithm_end_to_end_face1_conforms_to_product_definition(
         assert int(source_obsids) == 384
     assert_cal_product_conformance(
         dataset,
+        output_file,
         cal_solar_product_definitions,
         DataProductIdentifier.cal_solar_face1_combined,
         "SOLAR-FACE1-COMBINED",

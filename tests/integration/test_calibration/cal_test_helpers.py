@@ -7,6 +7,7 @@ import xarray as xr
 from cloudpathlib import S3Path
 from libera_utils import smart_copy_file, smart_open
 from libera_utils.constants import DataProductIdentifier, LiberaApid
+from libera_utils.io.filenaming import LiberaDataProductFilename, format_from_semantic_version
 from libera_utils.io.netcdf import NetcdfEngine, write_libera_data_product
 from libera_utils.io.product_definition import LiberaDataProductDefinition
 from libera_utils.l1a.l1a_packet_configs import get_l1a_product_definition_path
@@ -48,6 +49,7 @@ def load_cal_netcdf(path: Path | S3Path | str) -> xr.Dataset:
 
 def assert_cal_product_conformance(
     dataset: xr.Dataset,
+    product_path: Path | S3Path | str,
     product_definitions: dict[DataProductIdentifier, Path],
     product_identifier: DataProductIdentifier,
     expected_product_id: str,
@@ -57,6 +59,8 @@ def assert_cal_product_conformance(
         variable.encoding.clear()
     assert dataset.attrs["ProductID"] == expected_product_id
     assert dataset.attrs["algorithm_version"] == libera_rad_version()
+    filename = LiberaDataProductFilename.from_file_path(product_path)
+    assert filename.filename_parts.version == format_from_semantic_version(libera_rad_version())
     definition = LiberaDataProductDefinition.from_yaml(product_definitions[product_identifier])
     conformed = definition.enforce_dataset_conformance(dataset)
     errors = definition.check_dataset_conformance(conformed, strict=True)

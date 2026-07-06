@@ -41,6 +41,7 @@ def test_gain_cal_algorithm_end_to_end_conforms_to_product_definition(
     dataset = load_cal_netcdf(output_file)
     assert_cal_product_conformance(
         dataset,
+        output_file,
         cal_gain_product_definitions,
         DataProductIdentifier.cal_gain_combined,
         "GAIN-COMBINED",
