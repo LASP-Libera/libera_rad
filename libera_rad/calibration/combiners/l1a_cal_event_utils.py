@@ -16,7 +16,10 @@ from pathlib import Path
 
 import numpy as np
 import xarray as xr
+from libera_utils import Manifest
 from libera_utils.io.filenaming import LiberaDataProductFilename
+
+from libera_rad.l1b import read_all_input_data
 
 logger = logging.getLogger(__name__)
 
@@ -421,3 +424,20 @@ def slice_dataset_to_time_window(
         )
 
     return ds.isel(sel)
+
+
+def read_calibration_manifest_data(input_manifest: Manifest) -> dict[str, xr.Dataset]:
+    """Load decoded L1A datasets from a calibration combiner input manifest.
+
+    Calibration combiners do not use SPICE/geolocation. Input manifests therefore
+    default to ``use_geo: false`` so :func:`~libera_rad.l1b.read_all_input_data`
+    does not require SPICE kernel products.
+    """
+    if input_manifest.configuration.get("use_geo", True):
+        read_manifest = input_manifest.model_copy(
+            update={"configuration": {**input_manifest.configuration, "use_geo": False}}
+        )
+    else:
+        read_manifest = input_manifest
+    all_data, _ = read_all_input_data(read_manifest)
+    return all_data

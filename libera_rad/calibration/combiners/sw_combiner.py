@@ -10,8 +10,8 @@ from libera_utils.io.netcdf import write_libera_data_product
 from libera_utils.logutil import configure_task_logging
 
 from libera_rad.calibration.combiners import l1a_combine
+from libera_rad.calibration.combiners.l1a_cal_event_utils import read_calibration_manifest_data
 from libera_rad.config import cal_sw_product_definitions
-from libera_rad.l1b import read_all_input_data
 from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
 
     # Step 2: Read and store ALL input data from manifest files
     logger.info("Step 2: Reading all input data from manifest files")
-    all_data, _ = read_all_input_data(input_manifest)
+    all_data = read_calibration_manifest_data(input_manifest)
 
     # Set the output location to write to in the output dropbox
     dropbox_path = os.getenv("PROCESSING_PATH")

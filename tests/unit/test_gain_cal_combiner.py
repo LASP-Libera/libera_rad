@@ -14,11 +14,11 @@ from libera_rad.config import cal_gain_product_definitions
 @patch("libera_rad.calibration.combiners.gain_combiner.Manifest.output_manifest_from_input_manifest")
 @patch("libera_rad.calibration.combiners.gain_combiner.write_libera_data_product")
 @patch("libera_rad.calibration.combiners.gain_combiner.l1a_combine.merge_l1a_decoded_datasets")
-@patch("libera_rad.calibration.combiners.gain_combiner.read_all_input_data")
+@patch("libera_rad.calibration.combiners.gain_combiner.read_calibration_manifest_data")
 @patch("libera_rad.calibration.combiners.gain_combiner.Manifest.from_file")
 def test_algorithm_uses_rad_full_time_variable_and_expected_product_definition(
     mock_manifest_from_file,
-    mock_read_all_input_data,
+    mock_read_calibration_manifest_data,
     mock_merge_l1a,
     mock_write_product,
     mock_output_manifest_from_input,
@@ -30,7 +30,7 @@ def test_algorithm_uses_rad_full_time_variable_and_expected_product_definition(
     input_manifest.files = ["a", "b", "c"]
     mock_manifest_from_file.return_value = input_manifest
 
-    mock_read_all_input_data.return_value = ({"mock.nc": xr.Dataset()}, [])
+    mock_read_calibration_manifest_data.return_value = {"mock.nc": xr.Dataset()}
     mock_merge_l1a.return_value = xr.Dataset()
     mock_write_product.return_value = SimpleNamespace(path=Path("/tmp/mock_output.nc"))
 

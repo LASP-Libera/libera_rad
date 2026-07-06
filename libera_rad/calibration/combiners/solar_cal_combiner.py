@@ -36,7 +36,7 @@ from libera_rad.calibration.constants import (
     COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER,
 )
 from libera_rad.config import cal_solar_product_definitions
-from libera_rad.l1b import extract_input_dataset, read_all_input_data
+from libera_rad.l1b import extract_input_dataset
 from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
 
     # Step 2: Load all input data from manifest files
     logger.info("Step 2: Reading all input data from manifest files")
-    all_data, _dynamic_kernel_sources = read_all_input_data(input_manifest)
+    all_data = l1a_cal_event_utils.read_calibration_manifest_data(input_manifest)
 
     # Step 3: Detect solar-cal face from NOM-HK OBSIDs
     logger.info("Step 3: Detecting solar-cal face from NOM-HK OBSIDs")
