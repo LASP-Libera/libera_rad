@@ -313,7 +313,8 @@ def process_l1a_to_l1b(
     """
 
     # Extract input datasets
-    rad_data, nom_hk_data = _extract_radiometer_datasets(all_input_data)
+    rad_data = extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_rad_sample_decoded)
+    nom_hk_data = extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_nom_hk_decoded)
 
     # Process radiometer data: timestamps are datetime64[ns] from decoded L1A FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
@@ -361,52 +362,41 @@ def process_l1a_to_l1b(
     return l1b_product, attributes
 
 
-def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple[xr.Dataset, xr.Dataset]:
+def extract_input_dataset(
+    all_input_data: dict[str, xr.Dataset], data_product_identifier: DataProductIdentifier
+) -> xr.Dataset:
     """
-    Extract radiometer and housekeeping datasets from input data.
-
-    Searches through the input data dictionary to identify and extract the radiometer sample data and nominal
-    housekeeping data based on filename patterns.
+    Searches through the input data dictionary to identify and extract the dataset for a given data product identifier.
 
     Parameters
     ----------
     all_input_data : dict[str, xr.Dataset]
         Dictionary of input datasets keyed by filename.
+    data_product_identifier : DataProductIdentifier
+        DataProduct identifier matching the dataset to be selected.
 
     Returns
     -------
     xr.Dataset
-        Radiometer sample dataset containing raw radiometer measurements.
-    xr.Dataset
-        Nominal housekeeping dataset containing temperature and other ancillary measurements.
+        Dataset matching the requested data product identifier.
 
     Raises
     ------
     ValueError
-        If radiometer sample data (filename containing 'rad_sample') is not found.
-    ValueError
-        If nominal housekeeping data (filename containing 'nom_hk') is not found.
+        If no input dataset matches the requested data product identifier.
 
     Notes
     -----
-    Files are identified by searching for 'rad_sample' and 'nom_hk' substrings in the filename keys.
+    Files are identified by parsing each filename and comparing its
+    ``data_product_id`` to ``data_product_identifier``.
     """
-    rad_data = xr.Dataset()
-    nom_hk_data = xr.Dataset()
 
     for file_name, dataset in all_input_data.items():
         libera_filename = LiberaDataProductFilename.from_file_path(file_name)
-        if libera_filename.data_product_id == DataProductIdentifier.l1a_icie_rad_sample_decoded.value:
-            rad_data = dataset
-        elif libera_filename.data_product_id == DataProductIdentifier.l1a_icie_nom_hk_decoded.value:
-            nom_hk_data = dataset
+        if libera_filename.data_product_id == data_product_identifier.value:
+            return dataset
 
-    if not rad_data:
-        raise ValueError("No radiometer sample data found in input files")
-    if not nom_hk_data:
-        raise ValueError("No nominal housekeeping data found in input files")
-
-    return rad_data, nom_hk_data
+    raise ValueError("No dataset found in input files: " + data_product_identifier.value)
 
 
 def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarray:
@@ -649,13 +639,14 @@ def create_and_write_data_product(
     # Step 5: Write the data product file
     logger.info("Step 5: Writing data product to environment specified file")
 
+    product_attributes = {**dynamic_attributes, "algorithm_version": libera_rad_version()}
     output_file_path = write_libera_data_product(
         data_product_definition=product_config_path,
         data=processed_data,
         output_path=output_path,
         time_variable="radiometer_time",
         strict=True,
-        dynamic_product_attributes=dynamic_attributes,
+        dynamic_product_attributes=product_attributes,
     )
     logger.info(f"Saving to {output_file_path}")
     return output_file_path

@@ -1,6 +1,6 @@
 [project]
 name = "libera_rad"
-version = "0.5.6"
+version = "0.6.0"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
     { name = "Stephane Beland" },
@@ -46,7 +46,7 @@ dependencies = [
     "scipy >= 1.7.0, <2.0",
     "pydantic >2.0.3, <3.0",
     "matplotlib >=3.5.0, <4.0",
-    "astropy (>=7.2.0,<8.0.0)"
+    "astropy (>=7.2.0,<8.0.0)",
 ] # These are the dependencies used in the package metadata when building the project
 
 [project.scripts]
@@ -58,6 +58,7 @@ include = ["LICENSE.txt", "README.md"]
 
 [tool.poetry.group.dev.dependencies]
 bandit = "*"
+moto = {extras = ["s3"], version = "*"}
 pre-commit = "*"
 pytest-cov = "*"
 pytest-randomly = "*"

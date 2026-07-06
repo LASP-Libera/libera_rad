@@ -1,5 +1,12 @@
 # Version Changes
 
+## 0.6.0
+
+- Add calibration L1A combiners into `libera_rad.calibration.combiners`, remove offline `run_*_cal_event` scripts in favor of integration tests under `tests/integration/test_calibration/`, and update tests to use canonical import paths.
+- Require `libera-utils >= 5.8.1` (tier-0 calibration product identifiers and definitions).
+- Align calibration product identifiers with `libera_utils` naming (`GAIN-COMBINED`, `LW-TEMP*-COMBINED`, `SW-COMBINED`, `SOLAR-FACE*-COMBINED`) and update combiner time-variable selection.
+- Rebuild calibration combined product definition YAMLs (gain/LW/SW/solar) and enforce strict product-definition conformance in calibration integration tests.
+
 ## 0.5.6
 
 - Production geolocation: populate `Subsatellite_*` from spacecraft ECEF position via `spatial.ecef_to_geodetic` (attitude-independent, aligned with v0.5.5 jpss_only approach); populate motor `Azimuth`/`Elevation` from CK encoder frame; derive `Colatitude` from instrument latitude.
