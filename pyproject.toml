@@ -40,11 +40,7 @@ classifiers = [
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
     "libera-utils >= 5.8.4,<6.0.0",
-    # Pre-release: pin curryer to the geometry-foundation branch for the new
-    # GeometryData ancillary fields (subsatellite/subsolar/sc_radius/
-    # earth_sun_distance/sc_position). Revert to the released version once curryer
-    # ships these. See lasp/curryer#157.
-    "lasp-curryer @ git+https://github.com/lasp/curryer.git@geometry-foundation",
+    "lasp-curryer >=0.4.0,<0.5.0",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",
