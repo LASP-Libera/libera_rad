@@ -23,6 +23,16 @@ def test_calculate_geometry_uses_curryer():
             "subsolar_colatitude": [95.0, 94.0],
             "spacecraft_radius": [7000.0, 7001.0],
             "spacecraft_altitude": [800.0, 801.0],
+            "spacecraft_position_inertial_x": [5000.0, 5001.0],
+            "spacecraft_position_inertial_y": [4000.0, 4001.0],
+            "spacecraft_position_inertial_z": [1000.0, 1001.0],
+            "spacecraft_velocity_inertial_x": [-2.9, -2.9],
+            "spacecraft_velocity_inertial_y": [3.5, 3.5],
+            "spacecraft_velocity_inertial_z": [6.0, 6.0],
+            "attitude_q0": [1.0, 1.0],
+            "attitude_q1": [0.0, 0.0],
+            "attitude_q2": [0.0, 0.0],
+            "attitude_q3": [0.0, 0.0],
         }
     )
     instrument_df = pd.DataFrame(
@@ -34,6 +44,10 @@ def test_calculate_geometry_uses_curryer():
             "relative_azimuth": [150.0, 151.0],
             "cone_angle": [5.0, 6.0],
             "cone_angle_rate": [0.5, -0.5],
+            "clock_angle": [90.0, 270.0],
+            "clock_angle_rate": [1.0, -1.0],
+            "along_track_angle": [-0.16, -0.16],
+            "cross_track_angle": [-30.0, 30.0],
         }
     )
     spacecraft_geo = Mock()
@@ -55,6 +69,46 @@ def test_calculate_geometry_uses_curryer():
     assert instrument_geo.get_geometry.call_args.kwargs["fields"] == list(geolocation._INSTRUMENT_FIELDS)
     assert "spacecraft_altitude" in result.columns
     assert "cone_angle" in result.columns
+    assert "attitude_q0" in result.columns
+    assert "clock_angle" in result.columns
+
+
+def test_calculate_start_of_hour_state():
+    # "Start of hour" is a mission timetag convention: the 24 top-of-hour epochs of the
+    # granule's UTC day, queried from curryer's generic position/velocity fields.
+    timestamps = np.array(["2025-11-20T17:59:50", "2025-11-20T18:00:20"], dtype="datetime64[ns]")
+    km = Mock()
+    hourly_df = pd.DataFrame(
+        {
+            "spacecraft_position_inertial_x": np.arange(24, dtype=float),
+            "spacecraft_position_inertial_y": np.arange(24, dtype=float) + 100.0,
+            "spacecraft_position_inertial_z": np.arange(24, dtype=float) + 200.0,
+            "spacecraft_velocity_inertial_x": np.arange(24, dtype=float) + 300.0,
+            "spacecraft_velocity_inertial_y": np.arange(24, dtype=float) + 400.0,
+            "spacecraft_velocity_inertial_z": np.arange(24, dtype=float) + 500.0,
+        }
+    )
+    mock_geo = Mock()
+    mock_geo.get_geometry.return_value = hourly_df
+    with (
+        patch("libera_rad.geolocation.geometry.GeometryData", return_value=mock_geo) as mock_cls,
+        patch("libera_rad.geolocation.spicetime.adapt", side_effect=lambda t, _fmt: np.arange(len(t))) as mock_adapt,
+    ):
+        position, velocity = geolocation.calculate_start_of_hour_state(km, timestamps)
+
+    km.ensure_known_kernels_are_furnished.assert_called_once()
+    mock_cls.assert_called_once_with("JPSS4_SC")
+    assert mock_geo.get_geometry.call_args.kwargs["fields"] == ["sc_position_inertial", "sc_velocity_inertial"]
+    assert position.shape == (24, 3)
+    assert velocity.shape == (24, 3)
+    np.testing.assert_allclose(position[:, 0], np.arange(24))
+    np.testing.assert_allclose(velocity[:, 0], np.arange(24) + 300.0)
+
+    # The queried epochs are the top of each hour of the granule's start day.
+    queried = mock_adapt.call_args.args[0]
+    assert len(queried) == 24
+    assert list(queried.hour) == list(range(24))
+    assert (queried.normalize() == pd.Timestamp("2025-11-20")).all()
 
 
 def test_calculate_geometry_raises_friendly_message_on_spice_error():

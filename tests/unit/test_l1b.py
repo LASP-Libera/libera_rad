@@ -287,6 +287,22 @@ class TestCalculateDataQualityFlags:
         assert len(result) == 0
 
 
+def test_gate_clock_rate_near_nadir():
+    # The clock angle is an azimuth about nadir, so its rate is undefined there. Samples
+    # inside the cone gate are filled; samples at or beyond it are kept; and a coverage gap
+    # (NaN cone) stays NaN rather than being turned into a fill value.
+    rate = np.array([1.0, 2.0, 3.0, np.nan], dtype=np.float32)
+    cone = np.array([2.0, 6.0, 45.0, np.nan], dtype=np.float32)
+
+    gated = l1b._gate_clock_rate_near_nadir(rate, cone)
+
+    assert gated[0] == np.float32(-999.0)  # inside the nadir cone -> filled
+    assert gated[1] == np.float32(2.0)  # exactly at the gate -> kept
+    assert gated[2] == np.float32(3.0)
+    assert np.isnan(gated[3])  # coverage gap stays NaN
+    assert gated.dtype == np.float32
+
+
 class TestProcessL1aToL1b:
     """Integration tests for process_l1a_to_l1b function."""
 
@@ -327,6 +343,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
             patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
+            patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -359,6 +376,12 @@ class TestProcessL1aToL1b:
                     "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
                     "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
                     "spacecraft_altitude": np.zeros(100, dtype=np.float32),
+                    "spacecraft_position_inertial_x": np.full(100, 5000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_y": np.full(100, 4000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_z": np.full(100, 3000.0, dtype=np.float64),
+                    "boresight_inertial_x": np.full(100, -1.0, dtype=np.float64),
+                    "boresight_inertial_y": np.zeros(100, dtype=np.float64),
+                    "boresight_inertial_z": np.zeros(100, dtype=np.float64),
                     "viewing_zenith": np.linspace(10, 20, 100, dtype=np.float64),
                     "solar_zenith": np.linspace(40, 50, 100, dtype=np.float64),
                     "viewing_azimuth": np.linspace(100, 110, 100, dtype=np.float64),
@@ -366,8 +389,20 @@ class TestProcessL1aToL1b:
                     "relative_azimuth": np.linspace(150, 160, 100, dtype=np.float64),
                     "cone_angle": np.linspace(5, 15, 100, dtype=np.float64),
                     "cone_angle_rate": np.linspace(-1, 1, 100, dtype=np.float64),
+                    "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
+                    "spacecraft_velocity_inertial_y": np.full(100, 3.5, dtype=np.float64),
+                    "spacecraft_velocity_inertial_z": np.full(100, 6.0, dtype=np.float64),
+                    "attitude_q0": np.full(100, 1.0, dtype=np.float64),
+                    "attitude_q1": np.zeros(100, dtype=np.float64),
+                    "attitude_q2": np.zeros(100, dtype=np.float64),
+                    "attitude_q3": np.zeros(100, dtype=np.float64),
+                    "clock_angle": np.linspace(90, 270, 100, dtype=np.float64),
+                    "clock_angle_rate": np.linspace(-5, 5, 100, dtype=np.float64),
+                    "along_track_angle": np.full(100, -0.16, dtype=np.float64),
+                    "cross_track_angle": np.linspace(-60, 60, 100, dtype=np.float64),
                 }
             )
+            mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
             mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
@@ -398,6 +433,27 @@ class TestProcessL1aToL1b:
             assert np.allclose(result["Relative_Azimuth_Surface"], np.linspace(150, 160, 100), atol=1e-4)
             assert np.allclose(result["Cone_Angle"], np.linspace(5, 15, 100), atol=1e-4)
             assert np.allclose(result["Cone_Angle_Rate"], np.linspace(-1, 1, 100), atol=1e-4)
+            assert result["Satellite_Position"].shape == (len(result["Latitude"]), 3)
+            assert result["Line_Of_Sight"].shape == (len(result["Latitude"]), 3)
+            assert not np.any(result["Satellite_Position"] == np.float64(-9999))
+            # Motion / attitude / orbital-frame fields from curryer.
+            assert result["Satellite_Velocity"].shape == (len(result["Latitude"]), 3)
+            assert np.allclose(result["Satellite_Attitude_Q0"], 1.0)
+            assert not np.any(result["Clock_Angle"] == np.float32(-999))
+            assert np.allclose(result["Along_Track_Angle"], -0.16, atol=1e-4)
+            assert np.allclose(result["Cross_Track_Angle"], np.linspace(-60, 60, 100), atol=1e-3)
+            # Clock rate is filled inside the 6 deg nadir cone (mocked cone spans 5..15 deg).
+            inside_cone = np.linspace(5, 15, 100) < 6.0
+            # Guard: the mocked cone angles must straddle the gate so both sides are exercised.
+            assert inside_cone.any()
+            assert not inside_cone.all()
+            assert np.all(result["Clock_Angle_Rate"][inside_cone] == np.float32(-999))
+            assert not np.any(result["Clock_Angle_Rate"][~inside_cone] == np.float32(-999))
+            # Start-of-hour state on the fixed 24-hour grid.
+            assert result["Satellite_Position_Start_Of_Hour"].shape == (24, 3)
+            assert result["Satellite_Velocity_Start_Of_Hour"].shape == (24, 3)
+            assert np.allclose(result["Satellite_Position_Start_Of_Hour"], 7000.0)
+            assert np.allclose(result["Satellite_Velocity_Start_Of_Hour"], 7.5)
 
     def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
         """use_geo false should bypass KernelManager and SPICE geolocation."""
@@ -462,6 +518,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
+            patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -484,7 +541,13 @@ class TestProcessL1aToL1b:
                     "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
                     "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
                     "spacecraft_altitude": np.zeros(100, dtype=np.float32),
+                    "spacecraft_position_inertial_x": np.full(100, 5000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_y": np.full(100, 4000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_z": np.full(100, 3000.0, dtype=np.float64),
                     # No motor CK in jpss_only, so the boresight-derived fields are NaN.
+                    "boresight_inertial_x": np.full(100, np.nan),
+                    "boresight_inertial_y": np.full(100, np.nan),
+                    "boresight_inertial_z": np.full(100, np.nan),
                     "viewing_zenith": np.full(100, np.nan),
                     "solar_zenith": np.full(100, np.nan),
                     "viewing_azimuth": np.full(100, np.nan),
@@ -492,8 +555,22 @@ class TestProcessL1aToL1b:
                     "relative_azimuth": np.full(100, np.nan),
                     "cone_angle": np.full(100, np.nan),
                     "cone_angle_rate": np.full(100, np.nan),
+                    "clock_angle": np.full(100, np.nan),
+                    "clock_angle_rate": np.full(100, np.nan),
+                    "along_track_angle": np.full(100, np.nan),
+                    "cross_track_angle": np.full(100, np.nan),
+                    # Velocity and body attitude come from the spacecraft observer, so they
+                    # resolve in jpss_only (SPK + JPSS CK) even without the motor CK.
+                    "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
+                    "spacecraft_velocity_inertial_y": np.full(100, 3.5, dtype=np.float64),
+                    "spacecraft_velocity_inertial_z": np.full(100, 6.0, dtype=np.float64),
+                    "attitude_q0": np.full(100, 1.0, dtype=np.float64),
+                    "attitude_q1": np.zeros(100, dtype=np.float64),
+                    "attitude_q2": np.zeros(100, dtype=np.float64),
+                    "attitude_q3": np.zeros(100, dtype=np.float64),
                 }
             )
+            mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
@@ -514,11 +591,21 @@ class TestProcessL1aToL1b:
             "Solar_Zenith_Surface",
             "Viewing_Zenith_Surface",
             "Viewing_Azimuth_Surface_WRT_North",
+            "Solar_Azimuth_Surface_WRT_North",
             "Relative_Azimuth_Surface",
             "Cone_Angle",
             "Cone_Angle_Rate",
+            "Clock_Angle",
+            "Clock_Angle_Rate",
+            "Along_Track_Angle",
+            "Cross_Track_Angle",
         ):
             assert np.all(np.isnan(result[name])), f"{name} should be NaN in jpss_only mode"
+        # Spacecraft-observer fields still resolve without the motor CK.
+        assert not np.any(result["Satellite_Position"] == np.float64(-9999))
+        assert not np.any(result["Satellite_Velocity"] == np.float64(-999))
+        assert np.allclose(result["Satellite_Attitude_Q0"], 1.0)
+        assert np.allclose(result["Satellite_Position_Start_Of_Hour"], 7000.0)
 
     @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])
     def test_process_l1a_to_l1b_requires_kernel_sources_when_use_geo_true(
