@@ -448,6 +448,8 @@ def _package_l1b_product(
     placeholder_neg999 = np.full(shape=data_length, fill_value=-999, dtype=np.float32)
     placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999, dtype=np.float32)
     placeholder_3d_neg999 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float64)
+    placeholder_3d_neg9999 = np.full(shape=[data_length, 3], fill_value=-9999, dtype=np.float64)
+    placeholder_3d_neg999_f32 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float32)
     placeholder_hourly_3d_neg999 = np.full(shape=[24, 3], fill_value=-999, dtype=np.float64)  # 24 hours per day
     placeholder_hourly_3d_neg9999 = np.full(shape=[24, 3], fill_value=-9999, dtype=np.float64)  # 24 hours per day
     radiometer_time = np.asarray(timestamps, dtype="datetime64[ns]")
@@ -463,22 +465,6 @@ def _package_l1b_product(
     subsolar_lon = geometry_data["subsolar_longitude"].to_numpy().astype(np.float32)
     subsolar_colat = geometry_data["subsolar_colatitude"].to_numpy().astype(np.float32)
     satellite_radius = geometry_data["spacecraft_radius"].to_numpy().astype(np.float64)
-    satellite_position = np.stack(
-        [
-            geometry_data["spacecraft_position_x"].to_numpy(),
-            geometry_data["spacecraft_position_y"].to_numpy(),
-            geometry_data["spacecraft_position_z"].to_numpy(),
-        ],
-        axis=1,
-    ).astype(np.float64)
-    line_of_sight = np.stack(
-        [
-            geometry_data["boresight_x"].to_numpy(),
-            geometry_data["boresight_y"].to_numpy(),
-            geometry_data["boresight_z"].to_numpy(),
-        ],
-        axis=1,
-    ).astype(np.float32)
     viewing_zenith = geometry_data["viewing_zenith"].to_numpy().astype(np.float32)
     solar_zenith = geometry_data["solar_zenith"].to_numpy().astype(np.float32)
     viewing_azimuth = geometry_data["viewing_azimuth"].to_numpy().astype(np.float32)
@@ -509,7 +495,7 @@ def _package_l1b_product(
         "Relative_Azimuth_Surface": relative_azimuth,
         "Viewing_Zenith_Surface": viewing_zenith,
         "Viewing_Azimuth_Surface_WRT_North": viewing_azimuth,
-        "Satellite_Position": satellite_position,
+        "Satellite_Position": placeholder_3d_neg9999,
         "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,
         "Satellite_Velocity": placeholder_3d_neg999,
         "Satellite_Velocity_Start_Of_Hour": placeholder_hourly_3d_neg999,
@@ -519,7 +505,7 @@ def _package_l1b_product(
         "Satellite_Attitude_Q3": placeholder_neg999,
         "Azimuth": azimuth.astype(np.float32),
         "Elevation": elevation.astype(np.float32),
-        "Line_Of_Sight": line_of_sight,
+        "Line_Of_Sight": placeholder_3d_neg999_f32,
         "Radius_of_Satellite_from_Center_of_Earth": satellite_radius,
         "Cone_Angle": cone_angle,
         "Cone_Angle_Rate": cone_angle_rate,

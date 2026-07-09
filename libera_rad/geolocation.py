@@ -28,10 +28,8 @@ _SPACECRAFT_FIELDS = (
     geometry.GeometryField.SUBSOLAR,
     geometry.GeometryField.SC_RADIUS,
     geometry.GeometryField.SC_ALTITUDE,
-    geometry.GeometryField.SC_POSITION,
 )
 _INSTRUMENT_FIELDS = (
-    geometry.GeometryField.BORESIGHT,
     geometry.GeometryField.VIEWING_ZENITH,
     geometry.GeometryField.SOLAR_ZENITH,
     geometry.GeometryField.VIEWING_AZIMUTH,
@@ -211,11 +209,10 @@ def calculate_geometry(
     curryer's selective-compute registry queries each SPICE input once, vectorized, with
     coverage gaps surfaced as NaN. Two calls, joined on the shared uGPS index:
 
-    - the **spacecraft** observer yields the position-only fields (subsatellite and
-      subsolar points, satellite radius, altitude, and ECEF position);
+    - the **spacecraft** observer yields the position-derived fields (subsatellite and
+      subsolar points, satellite radius, and geodetic altitude);
     - the **instrument** observer yields the boresight surface geometry (viewing and
-      solar zenith / azimuth, relative azimuth, cone angle and its rate, and the
-      boresight vector).
+      solar zenith / azimuth, relative azimuth, and cone angle with its rate).
 
     The split is by necessity, not preference. The spacecraft observer resolves a valid
     position in every mode, whereas the boresight fields require the instrument frame. In
@@ -253,7 +250,7 @@ def calculate_geometry(
     u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
     # Spacecraft fields resolve in every mode, so all-NaN means the kernels miss the granule.
     spacecraft = _query_geometry(spacecraft_observer, u_gps_times, _SPACECRAFT_FIELDS, require_coverage=True)
-    # Boresight fields are legitimately all-NaN in jpss_only (no motor CK).
+    # Instrument surface fields are legitimately all-NaN in jpss_only (no motor CK).
     instrument = _query_geometry(instrument_observer, u_gps_times, _INSTRUMENT_FIELDS, require_coverage=False)
     return spacecraft.join(instrument)
 
@@ -311,7 +308,6 @@ def create_placeholder_geometry(n_samples: int) -> pd.DataFrame:
     distance_columns = {
         geometry.GeometryField.SC_RADIUS.columns[0],
         geometry.GeometryField.SC_ALTITUDE.columns[0],
-        *geometry.GeometryField.SC_POSITION.columns,
     }
     data = {
         column: (distance_fill if column in distance_columns else angle_fill)

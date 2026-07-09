@@ -23,16 +23,10 @@ def test_calculate_geometry_uses_curryer():
             "subsolar_colatitude": [95.0, 94.0],
             "spacecraft_radius": [7000.0, 7001.0],
             "spacecraft_altitude": [800.0, 801.0],
-            "spacecraft_position_x": [5000.0, 5001.0],
-            "spacecraft_position_y": [4000.0, 4001.0],
-            "spacecraft_position_z": [1000.0, 1001.0],
         }
     )
     instrument_df = pd.DataFrame(
         {
-            "boresight_x": [-1.0, -1.0],
-            "boresight_y": [0.0, 0.0],
-            "boresight_z": [0.0, 0.0],
             "viewing_zenith": [10.0, 11.0],
             "solar_zenith": [40.0, 41.0],
             "viewing_azimuth": [100.0, 101.0],
