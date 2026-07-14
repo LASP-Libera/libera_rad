@@ -1,6 +1,6 @@
 [project]
 name = "libera_rad"
-version = "0.6.0"
+version = "0.6.1"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
     { name = "Stephane Beland" },
@@ -40,7 +40,9 @@ classifiers = [
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
     "libera-utils >= 5.8.4,<6.0.0",
-    "lasp-curryer >=0.4.0,<0.5.0",
+    # Temporary branch pin for the GeometryField enum (curryer #159, unreleased). Swap to the
+    # released version once the curryer geometry stack merges.
+    "lasp-curryer @ git+https://github.com/lasp/curryer.git@geometry-boresight-surface",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",

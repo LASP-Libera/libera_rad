@@ -19,6 +19,29 @@ from spiceypy.utils.exceptions import SpiceyError
 logger = logging.getLogger(__name__)
 
 
+# Spacecraft-observer geometry fields curryer computes for the L1B product, as GeometryField
+# enum members (interchangeable with their string selectors; ``.columns`` gives the output keys).
+_GEOMETRY_FIELDS = (
+    geometry.GeometryField.SUBSATELLITE,
+    geometry.GeometryField.SUBSOLAR,
+    geometry.GeometryField.SC_RADIUS,
+    geometry.GeometryField.SC_ALTITUDE,
+)
+
+
+def _spice_error_message(err: SpiceyError) -> str:
+    """User-facing description of a SPICE failure.
+
+    Uses curryer's SPICE-error classifier when the installed curryer provides it, otherwise
+    falls back to the raw exception text. (The classifier ships in a later curryer release.)
+    """
+    try:
+        from curryer.spicierpy.ext import spice_error_message
+    except ImportError:
+        return str(err)
+    return spice_error_message(err)
+
+
 def calculate_lat_lon_altitude(
     kernel_manager: KernelManager,
     time_range: pd.DatetimeIndex,
@@ -27,8 +50,8 @@ def calculate_lat_lon_altitude(
     Calculate instrument geolocation (latitude/longitude/altitude).
 
     Instrument lat/lon/alt come from the ``LIBERA_SW_RAD`` boresight ellipsoid
-    intersection. The subsatellite point and the other ancillary geometry fields come
-    from :func:`calculate_geometry_ancillary`.
+    intersection. The subsatellite point and the other geometry fields come
+    from :func:`calculate_geometry`.
 
     Parameters
     ----------
@@ -118,18 +141,18 @@ def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarra
     return zeros, zeros
 
 
-def calculate_geometry_ancillary(
+def calculate_geometry(
     kernel_manager: KernelManager,
     timestamps: np.ndarray,
     observer: str = "JPSS4_SC",
+    require_coverage: bool = True,
 ) -> pd.DataFrame:
     """
-    Compute position-derived geometry ancillary fields via curryer ``GeometryData``.
+    Compute the position-derived geometry fields via curryer ``GeometryData``.
 
     curryer's selective-compute registry queries each SPICE input once, vectorized,
     with coverage gaps surfaced as NaN. One call yields the subsatellite and subsolar
-    points (latitude / longitude / colatitude) plus the satellite radius and altitude
-    -- product ancillary fields otherwise filled with -999.
+    points (latitude / longitude / colatitude) plus the satellite radius and altitude.
 
     Parameters
     ----------
@@ -139,6 +162,11 @@ def calculate_geometry_ancillary(
         Radiometer timestamps on the L1B output time grid.
     observer : str
         SPICE body name for the spacecraft. Default ``"JPSS4_SC"``.
+    require_coverage : bool
+        If True (default), raise when *every* value is NaN -- for the spacecraft observer
+        that means the kernels do not cover the granule at all (a misconfiguration), rather
+        than an expected per-sample gap. Instrument-observer callers that are legitimately
+        all-NaN in ``jpss_only`` mode pass False.
 
     Returns
     -------
@@ -146,18 +174,31 @@ def calculate_geometry_ancillary(
         Indexed by uGPS; columns are the curryer field columns (subsatellite and
         subsolar latitude / longitude / colatitude, ``spacecraft_radius``,
         ``spacecraft_altitude``).
+
+    Raises
+    ------
+    RuntimeError
+        If the curryer SPICE query fails outright (e.g. an unparseable time or a missing
+        kernel), or -- when ``require_coverage`` -- if it returns no coverage at all. Both
+        carry a parsed, user-facing description of the cause.
     """
     kernel_manager.ensure_known_kernels_are_furnished()
     u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
-    return geometry.GeometryData(observer).get_geometry(
-        u_gps_times,
-        fields=["subsatellite", "subsolar", "sc_radius", "sc_altitude"],
-    )
+    try:
+        result = geometry.GeometryData(observer).get_geometry(u_gps_times, fields=list(_GEOMETRY_FIELDS))
+    except SpiceyError as err:
+        raise RuntimeError(f"curryer geometry query failed: {_spice_error_message(err)}") from err
+    if require_coverage and bool(result.isna().to_numpy().all()):
+        raise RuntimeError(
+            f"curryer geometry returned no coverage for observer {observer!r} over the granule; "
+            "check that the SPICE kernels cover the requested times."
+        )
+    return result
 
 
-def subsatellite_lat_lon_alt(geometry_ancillary: pd.DataFrame) -> pd.DataFrame:
+def subsatellite_lat_lon_alt(geometry_data: pd.DataFrame) -> pd.DataFrame:
     """
-    Extract subsatellite ``lat``/``lon``/``alt`` from the ancillary fields.
+    Extract subsatellite ``lat``/``lon``/``alt`` from the geometry fields.
 
     The subsatellite ground point's latitude/longitude plus the spacecraft geodetic
     altitude, in the columns the product packager consumes. Used as the geolocation in
@@ -165,22 +206,56 @@ def subsatellite_lat_lon_alt(geometry_ancillary: pd.DataFrame) -> pd.DataFrame:
 
     Parameters
     ----------
-    geometry_ancillary : pd.DataFrame
-        Output of :func:`calculate_geometry_ancillary`.
+    geometry_data : pd.DataFrame
+        Output of :func:`calculate_geometry`.
 
     Returns
     -------
     pd.DataFrame
         Columns ``lat``, ``lon``, ``alt``, on the input's uGPS index.
     """
+    subsatellite_lat, subsatellite_lon, _ = geometry.GeometryField.SUBSATELLITE.columns
+    (spacecraft_altitude,) = geometry.GeometryField.SC_ALTITUDE.columns
     return pd.DataFrame(
         {
-            "lat": geometry_ancillary["subsatellite_latitude"].to_numpy(),
-            "lon": geometry_ancillary["subsatellite_longitude"].to_numpy(),
-            "alt": geometry_ancillary["spacecraft_altitude"].to_numpy(),
+            "lat": geometry_data[subsatellite_lat].to_numpy(),
+            "lon": geometry_data[subsatellite_lon].to_numpy(),
+            "alt": geometry_data[spacecraft_altitude].to_numpy(),
         },
-        index=geometry_ancillary.index,
+        index=geometry_data.index,
     )
+
+
+def create_placeholder_geometry(n_samples: int) -> pd.DataFrame:
+    """
+    Placeholder geometry fields for ``use_geo`` false mode.
+
+    Mirrors :func:`calculate_geometry`'s columns filled with the product fill values, so the
+    packager always reads a geometry DataFrame and never branches on ``None``. Angular fields
+    (subsatellite / subsolar points) use -999; distance fields (radius, altitude) use -9999.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+
+    Returns
+    -------
+    pd.DataFrame
+        One column per :data:`_GEOMETRY_FIELDS` output column, filled with the fill value.
+    """
+    angle_fill = np.full(n_samples, -999.0, dtype=np.float32)
+    distance_fill = np.full(n_samples, -9999.0, dtype=np.float64)
+    distance_columns = {
+        geometry.GeometryField.SC_RADIUS.columns[0],
+        geometry.GeometryField.SC_ALTITUDE.columns[0],
+    }
+    data = {
+        column: (distance_fill if column in distance_columns else angle_fill)
+        for field in _GEOMETRY_FIELDS
+        for column in field.columns
+    }
+    return pd.DataFrame(data)
 
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:

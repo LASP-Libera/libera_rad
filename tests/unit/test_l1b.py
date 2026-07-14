@@ -326,7 +326,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
-            patch("libera_rad.geolocation.calculate_geometry_ancillary") as mock_ancillary,
+            patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
             patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -349,7 +349,7 @@ class TestProcessL1aToL1b:
             )
             mock_geoloc.return_value = instrument_lla
             subsat_lat = np.linspace(29, 30, 100, dtype=np.float32)
-            mock_ancillary.return_value = pd.DataFrame(
+            mock_geometry.return_value = pd.DataFrame(
                 {
                     "subsatellite_latitude": subsat_lat,
                     "subsatellite_longitude": np.linspace(-101, -100, 100, dtype=np.float32),
@@ -447,7 +447,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
-            patch("libera_rad.geolocation.calculate_geometry_ancillary") as mock_ancillary,
+            patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -460,7 +460,7 @@ class TestProcessL1aToL1b:
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
             subsat_lat = np.linspace(10, 11, 100, dtype=np.float32)
-            mock_ancillary.return_value = pd.DataFrame(
+            mock_geometry.return_value = pd.DataFrame(
                 {
                     "subsatellite_latitude": subsat_lat,
                     "subsatellite_longitude": np.linspace(-80, -79, 100, dtype=np.float32),
@@ -477,7 +477,7 @@ class TestProcessL1aToL1b:
             result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
 
         mock_prod_geo.assert_not_called()
-        mock_ancillary.assert_called_once()
+        mock_geometry.assert_called_once()
         assert np.all(result["Azimuth"] == 0)
         assert np.all(result["Elevation"] == 0)
         assert np.allclose(result["Subsatellite_Latitude"], result["Latitude"])
