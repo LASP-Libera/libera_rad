@@ -181,6 +181,14 @@ variables:
       units: degrees
       valid_range: [0, 360]
       _FillValue: -999
+  Solar_Azimuth_Surface_WRT_North:
+    dtype: float32
+    dimensions: ["RADIOMETER_TIME"]
+    attributes:
+      long_name: Solar azimuth angle at the surface with respect to North
+      units: degrees
+      valid_range: [0, 360]
+      _FillValue: -999
   Satellite_Position:
     dtype: float64
     dimensions: ["RADIOMETER_TIME", "EUCLIDEAN_DIM"]

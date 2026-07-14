@@ -30,6 +30,7 @@ def test_calculate_geometry_uses_curryer():
             "viewing_zenith": [10.0, 11.0],
             "solar_zenith": [40.0, 41.0],
             "viewing_azimuth": [100.0, 101.0],
+            "solar_azimuth": [120.0, 121.0],
             "relative_azimuth": [150.0, 151.0],
             "cone_angle": [5.0, 6.0],
             "cone_angle_rate": [0.5, -0.5],

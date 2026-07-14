@@ -33,6 +33,7 @@ _INSTRUMENT_FIELDS = (
     geometry.GeometryField.VIEWING_ZENITH,
     geometry.GeometryField.SOLAR_ZENITH,
     geometry.GeometryField.VIEWING_AZIMUTH,
+    geometry.GeometryField.SOLAR_AZIMUTH,
     geometry.GeometryField.RELATIVE_AZIMUTH,
     geometry.GeometryField.CONE_ANGLE,
     geometry.GeometryField.CONE_ANGLE_RATE,

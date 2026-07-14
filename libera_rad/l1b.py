@@ -468,6 +468,7 @@ def _package_l1b_product(
     viewing_zenith = geometry_data["viewing_zenith"].to_numpy().astype(np.float32)
     solar_zenith = geometry_data["solar_zenith"].to_numpy().astype(np.float32)
     viewing_azimuth = geometry_data["viewing_azimuth"].to_numpy().astype(np.float32)
+    solar_azimuth = geometry_data["solar_azimuth"].to_numpy().astype(np.float32)
     relative_azimuth = geometry_data["relative_azimuth"].to_numpy().astype(np.float32)
     cone_angle = geometry_data["cone_angle"].to_numpy().astype(np.float32)
     cone_angle_rate = geometry_data["cone_angle_rate"].to_numpy().astype(np.float32)
@@ -495,6 +496,7 @@ def _package_l1b_product(
         "Relative_Azimuth_Surface": relative_azimuth,
         "Viewing_Zenith_Surface": viewing_zenith,
         "Viewing_Azimuth_Surface_WRT_North": viewing_azimuth,
+        "Solar_Azimuth_Surface_WRT_North": solar_azimuth,
         "Satellite_Position": placeholder_3d_neg9999,
         "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,
         "Satellite_Velocity": placeholder_3d_neg999,
