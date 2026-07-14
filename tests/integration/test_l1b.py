@@ -38,6 +38,20 @@ _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     "Relative_Azimuth_Surface",
     "Cone_Angle",
     "Cone_Angle_Rate",
+    # Motion, attitude, and orbital-frame fields.
+    "Clock_Angle",
+    "Clock_Angle_Rate",
+    "Along_Track_Angle",
+    "Cross_Track_Angle",
+    "Satellite_Position",
+    "Satellite_Velocity",
+    "Satellite_Position_Start_Of_Hour",
+    "Satellite_Velocity_Start_Of_Hour",
+    "Satellite_Attitude_Q0",
+    "Satellite_Attitude_Q1",
+    "Satellite_Attitude_Q2",
+    "Satellite_Attitude_Q3",
+    "Line_Of_Sight",
 )
 
 # Mapping from ChannelName enum values to L1B product variable names
@@ -47,6 +61,35 @@ _CHANNEL_TO_RADIANCE_VAR: dict[str, str] = {
     ChannelName.TOTAL.value: "Filtered_Radiance_Tot",
     ChannelName.SPLIT_SHORTWAVE.value: "Filtered_Radiance_SSW",
 }
+
+# Geometry product fields populated from curryer that are computed in full-pointing production
+# mode (subsatellite fields are covered separately by the colatitude/jpss_only checks below).
+_GEOMETRY_PRODUCT_FIELDS: tuple[str, ...] = (
+    "Subsolar_Latitude",
+    "Subsolar_Longitude",
+    "Subsolar_Colatitude",
+    "Radius_of_Satellite_from_Center_of_Earth",
+    "Viewing_Zenith_Surface",
+    "Solar_Zenith_Surface",
+    "Viewing_Azimuth_Surface_WRT_North",
+    "Solar_Azimuth_Surface_WRT_North",
+    "Relative_Azimuth_Surface",
+    "Cone_Angle",
+    "Cone_Angle_Rate",
+    "Clock_Angle",
+    "Clock_Angle_Rate",
+    "Along_Track_Angle",
+    "Cross_Track_Angle",
+    "Satellite_Position",
+    "Satellite_Velocity",
+    "Satellite_Position_Start_Of_Hour",
+    "Satellite_Velocity_Start_Of_Hour",
+    "Satellite_Attitude_Q0",
+    "Satellite_Attitude_Q1",
+    "Satellite_Attitude_Q2",
+    "Satellite_Attitude_Q3",
+    "Line_Of_Sight",
+)
 
 
 @pytest.fixture(scope="module")
