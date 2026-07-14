@@ -142,6 +142,27 @@ def test_calculate_geometry_raises_when_no_coverage():
             geolocation.calculate_geometry(km, timestamps)
 
 
+def test_calculate_geometry_raises_when_only_subsolar_covered():
+    # Out of spacecraft coverage the subsolar point (Sun ephemeris only) stays finite while the
+    # spacecraft-derived fields go NaN; coverage is judged by the spacecraft fields, so this must
+    # still raise rather than emit a product with NaN positions.
+    timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
+    km = Mock()
+    spacecraft_df = pd.DataFrame(
+        {column: [np.nan] for field in geolocation._SPACECRAFT_FIELDS for column in field.columns}
+    )
+    for column in geolocation.geometry.GeometryField.SUBSOLAR.columns:
+        spacecraft_df[column] = [1.0]
+    mock_geo = Mock()
+    mock_geo.get_geometry.return_value = spacecraft_df
+    with (
+        patch("libera_rad.geolocation.geometry.GeometryData", return_value=mock_geo),
+        patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([1])),
+    ):
+        with pytest.raises(RuntimeError, match="no coverage"):
+            geolocation.calculate_geometry(km, timestamps)
+
+
 def test_calculate_geometry_allows_all_nan_instrument_fields():
     # In jpss_only the instrument observer is legitimately all-NaN; only the spacecraft
     # observer requires coverage, so this must not raise.

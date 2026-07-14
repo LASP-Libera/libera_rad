@@ -211,6 +211,7 @@ def _query_geometry(
     u_gps_times: np.ndarray,
     fields: tuple,
     require_coverage: bool,
+    coverage_fields: tuple = (),
     **data_kwargs,
 ) -> pd.DataFrame:
     """
@@ -227,9 +228,14 @@ def _query_geometry(
     fields : tuple of GeometryField
         Fields to compute for this observer.
     require_coverage : bool
-        If True, raise when *every* value is NaN -- the kernels do not cover the granule at
-        all (a misconfiguration). The instrument observer passes False, since its fields are
-        legitimately all-NaN in ``jpss_only`` mode.
+        If True, raise when the coverage fields are entirely NaN -- the kernels do not cover
+        the granule at all (a misconfiguration). The instrument observer passes False, since
+        its fields are legitimately all-NaN in ``jpss_only`` mode.
+    coverage_fields : tuple of GeometryField, optional
+        Fields whose all-NaN state signals no coverage; defaults to every requested field. The
+        spacecraft observer restricts this to an ephemeris-derived field, since the subsolar
+        point is computed from the Sun ephemeris alone and stays finite even when the
+        spacecraft kernels miss the granule.
 
     Returns
     -------
@@ -247,11 +253,13 @@ def _query_geometry(
         result = geometry.GeometryData(observer, **data_kwargs).get_geometry(u_gps_times, fields=list(fields))
     except SpiceyError as err:
         raise RuntimeError(f"curryer geometry query failed for {observer!r}: {_spice_error_message(err)}") from err
-    if require_coverage and bool(result.isna().to_numpy().all()):
-        raise RuntimeError(
-            f"curryer geometry returned no coverage for observer {observer!r} over the granule; "
-            "check that the SPICE kernels cover the requested times."
-        )
+    if require_coverage:
+        coverage_columns = [column for field in (coverage_fields or fields) for column in field.columns]
+        if bool(result[coverage_columns].isna().to_numpy().all()):
+            raise RuntimeError(
+                f"curryer geometry returned no coverage for observer {observer!r} over the granule; "
+                "check that the SPICE kernels cover the requested times."
+            )
     return result
 
 
@@ -318,7 +326,12 @@ def calculate_geometry(
     # Spacecraft fields resolve in every mode, so all-NaN means the kernels miss the granule. The
     # attitude quaternion is Earth-fixed (product convention); the inertial fields keep J2000.
     spacecraft = _query_geometry(
-        spacecraft_observer, u_gps_times, _SPACECRAFT_FIELDS, require_coverage=True, attitude_frame=spatial.EARTH_FRAME
+        spacecraft_observer,
+        u_gps_times,
+        _SPACECRAFT_FIELDS,
+        require_coverage=True,
+        coverage_fields=(geometry.GeometryField.SUBSATELLITE,),
+        attitude_frame=spatial.EARTH_FRAME,
     )
     # Instrument fields are legitimately all-NaN in jpss_only (no motor CK).
     instrument = _query_geometry(instrument_observer, u_gps_times, _INSTRUMENT_FIELDS, require_coverage=False)
