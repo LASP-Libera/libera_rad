@@ -178,7 +178,7 @@ def calculate_geometry(
     Raises
     ------
     RuntimeError
-        If the curryer SPICE query fails outright (e.g. an unparseable time or a missing
+        If the curryer SPICE query fails outright (e.g. an unparsable time or a missing
         kernel), or -- when ``require_coverage`` -- if it returns no coverage at all. Both
         carry a parsed, user-facing description of the cause.
     """
