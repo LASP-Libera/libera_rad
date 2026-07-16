@@ -22,6 +22,7 @@ runs:
       run: echo "week=$(date +'%Y-%W')" >> $GITHUB_OUTPUT
 
     - name: Setup Python
+      id: setup-python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
@@ -98,14 +99,17 @@ runs:
         virtualenvs-in-project: true
 
     - name: Restore virtualenv cache
-      # Key rotates weekly so the cache refreshes with the latest installed packages once per
-      # week. restore-keys ensures a warm restore even on a weekly miss (new key, old prefix).
+      # Key uses the exact patch version installed by setup-python: a venv hard-codes its
+      # interpreter path, so a venv cached under one patch release breaks when a runner image
+      # update replaces that interpreter. Key rotates weekly so the cache refreshes with the
+      # latest installed packages once per week. restore-keys ensures a warm restore even on
+      # a weekly miss (new key, old prefix).
       uses: actions/cache@v4
       with:
         path: .venv
-        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ steps.date.outputs.week }}
+        key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ steps.date.outputs.week }}
         restore-keys: |
-          venv-${{ runner.os }}-${{ inputs.python-version }}-
+          venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-
 
     - name: Install dependencies
       shell: bash
