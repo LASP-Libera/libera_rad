@@ -48,7 +48,7 @@ runs:
         else
           # Fall back to a stable weekly key so an unreachable NAIF server doesn't fail the job
           echo "::warning::Could not read Last-Modified from $CSPICE_URL (NAIF may be down); using weekly CSPICE cache key"
-          CACHE_KEY="week-$(date +'%Y-%W')"
+          CACHE_KEY="week-${{ steps.date.outputs.week }}"
         fi
         echo "key=${CACHE_KEY}" >> $GITHUB_OUTPUT
 
