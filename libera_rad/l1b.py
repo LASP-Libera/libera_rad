@@ -45,6 +45,11 @@ _REQUIRED_SPICE_PRODUCTION: tuple[DataProductIdentifier, ...] = (
     DataProductIdentifier.spice_jpss_spk,
     DataProductIdentifier.spice_jpss_ck,
 )
+# Calibration combine needs motor encoder angles only (no lat/lon / JPSS).
+REQUIRED_SPICE_CAL_AZEL: tuple[DataProductIdentifier, ...] = (
+    DataProductIdentifier.spice_az_ck,
+    DataProductIdentifier.spice_el_ck,
+)
 
 
 def _require_spice_inputs(
@@ -157,7 +162,11 @@ def algorithm(manifest_path: Path | S3Path) -> Path | S3Path:
     return output_manifest_filepath
 
 
-def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset], list[str]]:
+def read_all_input_data(
+    input_manifest: Manifest,
+    *,
+    required_spice: tuple[DataProductIdentifier, ...] | None = None,
+) -> tuple[dict[str, xr.Dataset], list[str]]:
     """
     Read and store all input data from manifest files.
 
@@ -170,17 +179,21 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     ----------
     input_manifest : Manifest
         The input manifest containing file information.
+    required_spice : tuple of DataProductIdentifier, optional
+        Override the default required SPICE product set. When omitted, production
+        uses ``_REQUIRED_SPICE_PRODUCTION`` (or ``_REQUIRED_SPICE_JPSS_ONLY`` when
+        ``configuration.jpss_only`` is true). Calibration combine passes
+        ``REQUIRED_SPICE_CAL_AZEL`` (AZROT-CK + ELSCAN-CK only).
 
     Returns
     -------
     dict[str, xr.Dataset]
         Dictionary with filenames as keys and loaded xarray datasets as values.
     list[str]
-        Manifest paths for dynamic SPICE kernels in required furnish order
-        (``_REQUIRED_SPICE_JPSS_ONLY`` or ``_REQUIRED_SPICE_PRODUCTION``).
+        Manifest paths for dynamic SPICE kernels in required furnish order.
         Empty when ``input_manifest.configuration.use_geo`` is false and SPICE
-        kernels are not required. When ``configuration.jpss_only`` is true,
-        only JPSS-SPK and JPSS-CK paths are collected.
+        kernels are not required. When ``configuration.jpss_only`` is true and
+        ``required_spice`` is omitted, only JPSS-SPK and JPSS-CK paths are collected.
 
     Raises
     ------
@@ -202,6 +215,13 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
     all_data: dict[str, xr.Dataset] = {}
     spice_files: dict[DataProductIdentifier, str] = {}
 
+    if required_spice is not None:
+        spice_allowlist = set(required_spice)
+    elif jpss_only_mode:
+        spice_allowlist = set(_REQUIRED_SPICE_JPSS_ONLY)
+    else:
+        spice_allowlist = None
+
     for i, file_info in enumerate(input_manifest.files):
         logger.info(f"Reading file {i + 1}/{len(input_manifest.files)}: {file_info.filename}")
 
@@ -215,9 +235,9 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
                     continue
 
                 product_id = LiberaDataProductFilename.from_file_path(file_info.filename).data_product_id
-                if jpss_only_mode and product_id not in _REQUIRED_SPICE_JPSS_ONLY:
+                if spice_allowlist is not None and product_id not in spice_allowlist:
                     logger.warning(
-                        "jpss_only mode: skipping SPICE file %s (%s)",
+                        "Skipping SPICE file %s (%s); not in required set",
                         file_info.filename,
                         product_id,
                     )
@@ -247,9 +267,14 @@ def read_all_input_data(input_manifest: Manifest) -> tuple[dict[str, xr.Dataset]
 
     dynamic_kernel_sources: list[str] = []
     if use_geo:
-        required_spice = _REQUIRED_SPICE_JPSS_ONLY if jpss_only_mode else _REQUIRED_SPICE_PRODUCTION
-        _require_spice_inputs(spice_files, required_spice)
-        dynamic_kernel_sources = [spice_files[product_id] for product_id in required_spice]
+        if required_spice is not None:
+            spice_to_require = required_spice
+        elif jpss_only_mode:
+            spice_to_require = _REQUIRED_SPICE_JPSS_ONLY
+        else:
+            spice_to_require = _REQUIRED_SPICE_PRODUCTION
+        _require_spice_inputs(spice_files, spice_to_require)
+        dynamic_kernel_sources = [spice_files[product_id] for product_id in spice_to_require]
 
     logger.info(
         "Successfully loaded %d datasets and %d SPICE kernel paths",

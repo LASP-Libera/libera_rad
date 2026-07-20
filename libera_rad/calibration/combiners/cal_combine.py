@@ -19,8 +19,10 @@ from libera_utils.logutil import configure_task_logging
 
 from libera_rad.calibration.combiners import gain_combiner, lw_cal_combiner, solar_cal_combiner, sw_combiner
 from libera_rad.calibration.combiners.l1a_cal_event_utils import (
+    attach_azimuth_elevation_positions,
     confirm_obsid_matches_hk,
     extract_nom_hk_dataset,
+    family_needs_azimuth_elevation_positions,
     read_calibration_manifest_data,
 )
 from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV, CalEventSpec
@@ -107,7 +109,11 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
         raise ValueError("PROCESSING_PATH environment variable is not set")
 
     logger.info("Step 2: Reading all input data from manifest files")
-    all_data = read_calibration_manifest_data(input_manifest)
+    needs_azel = family_needs_azimuth_elevation_positions(event_spec.family)
+    use_geo = bool(input_manifest.configuration.get("use_geo", True)) and needs_azel
+    if needs_azel and not use_geo:
+        logger.info("use_geo is false: placeholder Azimuth_Position / Elevation_Position will be used.")
+    all_data, dynamic_kernel_sources = read_calibration_manifest_data(input_manifest, require_azel_kernels=needs_azel)
 
     logger.info("Step 3: Confirming NOM-HK ObsID matches environment")
     nom_hk = extract_nom_hk_dataset(all_data, event_spec)
@@ -117,6 +123,10 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
     cal_event = _build_event_dataset(all_data, event_spec)
     # NOM-HK inputs carry their own ProductID; overwrite before product write.
     cal_event.attrs["ProductID"] = event_spec.cal_product.value
+
+    if family_needs_azimuth_elevation_positions(event_spec.family):
+        logger.info("Step 4b: Attaching Azimuth_Position / Elevation_Position")
+        cal_event = attach_azimuth_elevation_positions(cal_event, dynamic_kernel_sources, use_geo=use_geo)
 
     logger.info("Step 5: Writing data product %s", event_spec.cal_product.value)
     product_definition = get_cal_product_definition(event_spec)

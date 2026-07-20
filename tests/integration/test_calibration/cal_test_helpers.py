@@ -78,6 +78,9 @@ def build_cal_event_manifest(
     sample_dir: Path,
     filenames: list[str],
     input_dir: Path | S3Path,
+    *,
+    configuration: dict | None = None,
+    spice_kernel_dir: Path | None = None,
 ) -> Path | S3Path:
     """Copy selected sample files and write a per-event calibration input manifest.
 
@@ -89,6 +92,10 @@ def build_cal_event_manifest(
         Exact Libera filenames to include (one event only).
     input_dir : Path or S3Path
         Destination directory for copied inputs and the manifest.
+    configuration : dict, optional
+        Manifest configuration (e.g. ``{"use_geo": False}``).
+    spice_kernel_dir : Path, optional
+        Directory containing AZROT-CK / ELSCAN-CK ``.bc`` files to include.
 
     Returns
     -------
@@ -101,11 +108,39 @@ def build_cal_event_manifest(
         dest = copy_cal_input_file(source, input_dir / name)
         copied.append(dest)
 
-    manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
+    if spice_kernel_dir is not None:
+        for kernel_path in sorted(spice_kernel_dir.glob("LIBERA_SPICE_*.bc")):
+            dest = copy_cal_input_file(kernel_path, input_dir / kernel_path.name)
+            copied.append(dest)
+
+    manifest = Manifest(
+        manifest_type=ManifestType.INPUT,
+        files=[],
+        configuration=configuration if configuration is not None else {},
+    )
     manifest.add_files(*copied)
     start_datetime, end_datetime = cal_desired_time_range()
     manifest.add_desired_time_range(start_datetime=start_datetime, end_datetime=end_datetime)
     return manifest.write(out_path=input_dir)
+
+
+def assert_azimuth_elevation_positions(
+    dataset: xr.Dataset,
+    *,
+    expect_fill: bool = False,
+) -> None:
+    """Assert Azimuth_Position / Elevation_Position exist on RAD_SAMPLE_FPE_TIME."""
+    for name in ("Azimuth_Position", "Elevation_Position"):
+        assert name in dataset, f"Missing {name}"
+        assert dataset[name].dims == ("RAD_SAMPLE_FPE_TIME",)
+        values = np.asarray(dataset[name].values, dtype=np.float64)
+        if expect_fill:
+            # Product write may encode _FillValue=-999 as NaN on read-back.
+            is_fill = np.isnan(values) | (values == -999.0)
+            assert np.all(is_fill), f"{name} expected fill -999 (or NaN after decode)"
+        else:
+            finite = np.isfinite(values) & (values != -999.0)
+            assert np.any(finite), f"{name} expected finite SPICE-derived values"
 
 
 def assert_companions_within_nom_hk_window(dataset: xr.Dataset) -> None:

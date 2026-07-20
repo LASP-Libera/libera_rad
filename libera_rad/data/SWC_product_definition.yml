@@ -266,6 +266,28 @@ variables:
     attributes:
       long_name: Packet index for radiometer sample data
       comment: Maps each radiometer sample to its originating packet index
+  Azimuth_Position:
+    dtype: float32
+    dimensions:
+      - RAD_SAMPLE_FPE_TIME
+    attributes:
+      long_name: Corrected motor encoder azimuth angle from SPICE CK
+      units: degrees
+      valid_range:
+        - -360
+        - 360
+      _FillValue: -999
+  Elevation_Position:
+    dtype: float32
+    dimensions:
+      - RAD_SAMPLE_FPE_TIME
+    attributes:
+      long_name: Corrected motor encoder elevation angle from SPICE CK
+      units: degrees
+      valid_range:
+        - -360
+        - 360
+      _FillValue: -999
   NOM_HK_PKT_APID:
     dtype: uint16
     dimensions:

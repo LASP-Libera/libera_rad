@@ -11,15 +11,20 @@ Shared helpers for ObsID-dispatched calibration combiners:
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
+from pathlib import Path
 
 import numpy as np
 import xarray as xr
+from cloudpathlib import S3Path
 from libera_utils import Manifest
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.filenaming import LiberaDataProductFilename
+from libera_utils.libera_spice.kernel_manager import KernelManager
 
+from libera_rad import geolocation
 from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV, CalEventSpec
-from libera_rad.l1b import extract_input_dataset, read_all_input_data
+from libera_rad.l1b import REQUIRED_SPICE_CAL_AZEL, extract_input_dataset, read_all_input_data
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +35,12 @@ _COMPANION_SECONDARY_TIME_DIM: dict[DataProductIdentifier, str] = {
     DataProductIdentifier.l1a_icie_rad_full_decoded: "RAD_FULL_FPE_TIME",
     DataProductIdentifier.l1a_icie_cal_full_decoded: "CAL_FULL_FPE_TIME",
 }
+
+#: Families that receive SPICE-derived Azimuth_Position / Elevation_Position.
+_AZEL_POSITION_FAMILIES = frozenset({"swc", "lwc", "solar"})
+_RAD_SAMPLE_FPE_TIME = "RAD_SAMPLE_FPE_TIME"
+_AZIMUTH_POSITION = "Azimuth_Position"
+_ELEVATION_POSITION = "Elevation_Position"
 
 
 def slice_dataset_to_time_window(
@@ -92,21 +103,102 @@ def slice_dataset_to_time_window(
     return ds.isel(sel)
 
 
-def read_calibration_manifest_data(input_manifest: Manifest) -> dict[str, xr.Dataset]:
-    """Load decoded L1A datasets from a calibration combiner input manifest.
+def read_calibration_manifest_data(
+    input_manifest: Manifest,
+    *,
+    require_azel_kernels: bool = True,
+) -> tuple[dict[str, xr.Dataset], list[str]]:
+    """Load decoded L1A datasets and optional AZROT/ELSCAN kernels from a cal manifest.
 
-    Calibration combiners do not use SPICE/geolocation. Input manifests therefore
-    default to ``use_geo: false`` so :func:`~libera_rad.l1b.read_all_input_data`
-    does not require SPICE kernel products.
+    When ``require_azel_kernels`` is true, honors ``configuration.use_geo`` like L1B:
+    when true (default), requires AZROT-CK and ELSCAN-CK and returns their paths.
+    When false, SPICE kernels are skipped and an empty kernel list is returned.
+
+    When ``require_azel_kernels`` is false (GAIN family), SPICE products are never
+    required; any ``.bc``/``.bsp`` files on the manifest are skipped.
+
+    Parameters
+    ----------
+    input_manifest : Manifest
+        Calibration combiner input manifest.
+    require_azel_kernels : bool, optional
+        Whether this calibration family needs motor AZROT/ELSCAN kernels.
+
+    Returns
+    -------
+    dict of {str : xr.Dataset}
+        Decoded L1A datasets keyed by filename.
+    list of str
+        Dynamic kernel paths in furnish order (AZROT then ELSCAN), or empty
+        when kernels are not required or ``use_geo`` is false.
     """
-    if input_manifest.configuration.get("use_geo", True):
+    if not require_azel_kernels:
         read_manifest = input_manifest.model_copy(
             update={"configuration": {**input_manifest.configuration, "use_geo": False}}
         )
+        return read_all_input_data(read_manifest)
+
+    return read_all_input_data(input_manifest, required_spice=REQUIRED_SPICE_CAL_AZEL)
+
+
+def attach_azimuth_elevation_positions(
+    cal_event: xr.Dataset,
+    dynamic_kernel_sources: Sequence[str | Path | S3Path],
+    *,
+    use_geo: bool,
+) -> xr.Dataset:
+    """Attach ``Azimuth_Position`` / ``Elevation_Position`` on radiometer FPE time.
+
+    Parameters
+    ----------
+    cal_event : xr.Dataset
+        Merged SWC/LWC/SOLAR calibration event dataset.
+    dynamic_kernel_sources : sequence of str, Path, or S3Path
+        AZROT-CK and ELSCAN-CK paths from the input manifest. Required when
+        ``use_geo`` is true.
+    use_geo : bool
+        When true, compute motor encoder angles via SPICE. When false, write
+        product fill values (``-999``).
+
+    Returns
+    -------
+    xr.Dataset
+        ``cal_event`` with ``Azimuth_Position`` and ``Elevation_Position`` assigned.
+
+    Raises
+    ------
+    ValueError
+        If ``RAD_SAMPLE_FPE_TIME`` is missing, or ``use_geo`` is true and kernel
+        sources are empty.
+    """
+    if _RAD_SAMPLE_FPE_TIME not in cal_event:
+        raise ValueError(f"Calibration event dataset is missing {_RAD_SAMPLE_FPE_TIME}")
+
+    timestamps = np.asarray(cal_event[_RAD_SAMPLE_FPE_TIME].values)
+    n_samples = len(timestamps)
+
+    if not use_geo:
+        logger.info("use_geo is false: writing placeholder Azimuth_Position / Elevation_Position")
+        azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
     else:
-        read_manifest = input_manifest
-    all_data, _ = read_all_input_data(read_manifest)
-    return all_data
+        if not dynamic_kernel_sources:
+            raise ValueError("SPICE kernel sources are required for Azimuth_Position when use_geo is True")
+        with KernelManager() as km:
+            km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
+            azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+
+    cal_event = cal_event.assign(
+        {
+            _AZIMUTH_POSITION: (_RAD_SAMPLE_FPE_TIME, np.asarray(azimuth, dtype=np.float32)),
+            _ELEVATION_POSITION: (_RAD_SAMPLE_FPE_TIME, np.asarray(elevation, dtype=np.float32)),
+        }
+    )
+    return cal_event
+
+
+def family_needs_azimuth_elevation_positions(family: str) -> bool:
+    """Return True when the calibration family writes Azimuth/Elevation positions."""
+    return family in _AZEL_POSITION_FAMILIES
 
 
 def extract_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:

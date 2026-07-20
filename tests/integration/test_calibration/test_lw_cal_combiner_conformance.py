@@ -6,6 +6,7 @@ from libera_utils import Manifest, ManifestType
 from libera_rad.calibration.combiners.cal_combine import algorithm
 from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV
 from tests.integration.test_calibration.cal_test_helpers import (
+    assert_azimuth_elevation_positions,
     assert_cal_product_conformance,
     cal_desired_time_range,
     load_cal_netcdf,
@@ -33,7 +34,7 @@ def test_lw_cal_algorithm_end_to_end_conforms_to_product_definition(test_l1a_cal
     write_time_aligned_companion(test_l1a_cal_data_path / "short_pec.nc", pec, t0, t1)
     write_time_aligned_companion(test_l1a_cal_data_path / "short_pev.nc", pev, t0, t1)
 
-    manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
+    manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={"use_geo": False})
     manifest.add_files(rad_sample, nom_hk, pec, pev)
     start_datetime, end_datetime = cal_desired_time_range()
     manifest.add_desired_time_range(start_datetime=start_datetime, end_datetime=end_datetime)
@@ -48,3 +49,4 @@ def test_lw_cal_algorithm_end_to_end_conforms_to_product_definition(test_l1a_cal
     output_file = output_manifest.files[0].filename
     dataset = load_cal_netcdf(output_file)
     assert_cal_product_conformance(dataset, output_file, event_spec)
+    assert_azimuth_elevation_positions(dataset, expect_fill=True)
