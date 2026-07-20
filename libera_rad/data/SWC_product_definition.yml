@@ -1,9 +1,29 @@
 attributes:
-  ProductID: LW-TEMP1-COMBINED
+  ProductID: SWC-365NM
   algorithm_version: null
   date_created: null
   input_files: null
 coordinates:
+  CAL_SAMPLE_PACKET_ICIE_TIME:
+    dtype: datetime64[ns]
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: Packet timestamp from ICIE main processor
+    encoding:
+      units: nanoseconds since 1958-01-01
+      calendar: standard
+      dtype: int64
+  CAL_SAMPLE_FPE_TIME:
+    dtype: datetime64[ns]
+    dimensions:
+      - CAL_SAMPLE_FPE_TIME
+    attributes:
+      long_name: Calibration downsampled sample timestamp from FPE (samples at 200Hz)
+    encoding:
+      units: nanoseconds since 1958-01-01
+      calendar: standard
+      dtype: int64
   RAD_SAMPLE_PACKET_ICIE_TIME:
     dtype: datetime64[ns]
     dimensions:
@@ -58,6 +78,89 @@ coordinates:
       calendar: standard
       dtype: int64
 variables:
+  CAL_SAMPLE_PKT_APID:
+    dtype: uint16
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: Packet application ID
+      valid_range:
+        - 0
+        - 2047
+  CAL_SAMPLE_SRC_SEQ_CTR:
+    dtype: uint16
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: Source sequence counter
+      valid_range:
+        - 0
+        - 16383
+  CAL_SAMPLE_PKT_LEN:
+    dtype: uint16
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: Packet length
+      units: bytes
+  ICIE__TM_DAY_CAL_SAMPLE:
+    dtype: uint16
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: ICIE telemetry day for packet
+      units: integer days
+  ICIE__TM_MS_CAL_SAMPLE:
+    dtype: uint32
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: ICIE telemetry milliseconds for packet
+      units: integer milliseconds
+      valid_range:
+        - 0
+        - 86399999
+  ICIE__TM_US_CAL_SAMPLE:
+    dtype: uint16
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: ICIE telemetry microseconds for packet
+      units: integer microseconds
+      valid_range:
+        - 0
+        - 999
+  ICIE__CAL_OBSID_RAD:
+    dtype: uint16
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: ICIE calibration observation ID for radiometer
+  ICIE__CAL_OBSID_WFOV:
+    dtype: uint16
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: ICIE calibration observation ID for wide field of view camera
+  ICIE__CAL_SAMPLE_CHECKSUM:
+    dtype: uint32
+    dimensions:
+      - CAL_SAMPLE_PACKET
+    attributes:
+      long_name: ICIE calibration downsampled packet checksum
+  ICIE__CAL_SAMPLE:
+    dtype: float32
+    dimensions:
+      - CAL_SAMPLE_FPE_TIME
+    attributes:
+      long_name: ICIE calibration downsampled radiometer sample
+  CAL_SAMPLE_packet_index:
+    dtype: int64
+    dimensions:
+      - CAL_SAMPLE_FPE_TIME
+    attributes:
+      long_name: Packet index for calibration downsampled data
+      comment: Maps each calibration downsampled sample to its originating packet index
   RAD_SAMPLE_PKT_APID:
     dtype: uint16
     dimensions:

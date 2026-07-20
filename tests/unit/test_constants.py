@@ -2,11 +2,8 @@ import xarray as xr
 from libera_utils.constants import DataProductIdentifier
 
 from libera_rad.calibration.constants import (
-    COMBINER_GAIN_OBSID_TO_PRODUCT_IDENTIFIER,
-    COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER,
-    COMBINER_SOLAR_FACE_BASE_OBSIDS,
-    COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER,
-    COMBINER_SW_OBSID_TO_PRODUCT_IDENTIFIER,
+    CAL_EVENT_BY_OBSID,
+    SOLAR_FACE_BASE_OBSIDS,
     ChannelName,
     find_channel_variable,
     get_channel_name_enum,
@@ -60,24 +57,41 @@ class TestGetChannelNameEnum:
         assert result is None
 
 
-class TestCombinerObsidMappings:
-    """Tests for calibration combiner OBSID → product identifier maps."""
+class TestCalEventByObsid:
+    """Tests for the ObsID → CalEventSpec registry."""
 
-    def test_gain_obsid_maps_to_gain_combined(self):
-        assert COMBINER_GAIN_OBSID_TO_PRODUCT_IDENTIFIER[512] == DataProductIdentifier.cal_gain_combined
+    def test_gain_obsid(self):
+        spec = CAL_EVENT_BY_OBSID[512]
+        assert spec.cal_product == DataProductIdentifier.cal_gain
+        assert spec.family == "gain"
+        assert spec.trimmed_product == DataProductIdentifier.l1a_icie_nom_hk_gain_trimmed
 
-    def test_sw_obsid_maps_to_sw_combined(self):
-        assert COMBINER_SW_OBSID_TO_PRODUCT_IDENTIFIER[257] == DataProductIdentifier.cal_sw_combined
+    def test_products_match_libera_utils_registry(self):
+        """CAL/TRIMMED ProductIDs are owned by libera_utils.obsids."""
+        from libera_utils.obsids import NomHkObsidSource, get_obsid_spec
 
-    def test_lw_obsids_map_to_temp_combined_products(self):
-        assert COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER[320] == DataProductIdentifier.cal_lw_temp1_combined
-        assert COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER[321] == DataProductIdentifier.cal_lw_temp2_combined
-        assert COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER[322] == DataProductIdentifier.cal_lw_temp3_combined
+        for obsid, spec in CAL_EVENT_BY_OBSID.items():
+            utils_spec = get_obsid_spec(NomHkObsidSource.RAD, obsid)
+            assert spec.cal_product is utils_spec.cal_product
+            assert spec.trimmed_product is utils_spec.trimmed_product
 
-    def test_solar_face_obsids_map_to_expected_products(self):
-        assert COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER[384] == DataProductIdentifier.cal_solar_face1_combined
-        assert COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER[388] == DataProductIdentifier.cal_solar_face2_combined
-        assert COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER[392] == DataProductIdentifier.cal_solar_face3_combined
+    def test_swc_obsid(self):
+        spec = CAL_EVENT_BY_OBSID[257]
+        assert spec.cal_product == DataProductIdentifier.cal_swc_405nm
+        assert spec.family == "swc"
+
+    def test_lwc_obsids(self):
+        assert CAL_EVENT_BY_OBSID[320].cal_product == DataProductIdentifier.cal_lwc_temp1
+        assert CAL_EVENT_BY_OBSID[321].cal_product == DataProductIdentifier.cal_lwc_temp2
+        assert CAL_EVENT_BY_OBSID[322].cal_product == DataProductIdentifier.cal_lwc_temp3
+
+    def test_solar_obsids(self):
+        assert CAL_EVENT_BY_OBSID[384].cal_product == DataProductIdentifier.cal_solar_ssw_pri
+        assert CAL_EVENT_BY_OBSID[389].cal_product == DataProductIdentifier.cal_solar_tot_sec
+        assert CAL_EVENT_BY_OBSID[395].cal_product == DataProductIdentifier.cal_solar_sw_ter
 
     def test_solar_face_base_obsids(self):
-        assert COMBINER_SOLAR_FACE_BASE_OBSIDS == {1: 384, 2: 388, 3: 392}
+        assert SOLAR_FACE_BASE_OBSIDS == {1: 384, 2: 388, 3: 392}
+
+    def test_registry_has_22_events(self):
+        assert len(CAL_EVENT_BY_OBSID) == 22

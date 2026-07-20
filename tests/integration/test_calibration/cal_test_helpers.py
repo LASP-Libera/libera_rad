@@ -2,16 +2,19 @@
 
 from datetime import UTC, date, datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+import numpy as np
 import xarray as xr
 from cloudpathlib import S3Path
-from libera_utils import smart_copy_file, smart_open
-from libera_utils.constants import DataProductIdentifier, LiberaApid
+from libera_utils import Manifest, ManifestType, smart_copy_file, smart_open
+from libera_utils.constants import LiberaApid
 from libera_utils.io.filenaming import LiberaDataProductFilename, format_from_semantic_version
 from libera_utils.io.netcdf import NetcdfEngine, write_libera_data_product
-from libera_utils.io.product_definition import LiberaDataProductDefinition
 from libera_utils.l1a.l1a_packet_configs import get_l1a_product_definition_path
 
+from libera_rad.calibration.constants import CalEventSpec
+from libera_rad.config import get_cal_product_definition
 from libera_rad.version import version as libera_rad_version
 
 
@@ -26,6 +29,103 @@ def cal_desired_time_range() -> tuple[datetime, datetime]:
 def copy_cal_input_file(source: Path, dest: Path | S3Path) -> Path | S3Path:
     """Copy a fixture NetCDF into the test input location."""
     return smart_copy_file(source, dest)
+
+
+def remap_dataset_times_into_window(
+    dataset: xr.Dataset,
+    t0: np.datetime64,
+    t1: np.datetime64,
+) -> xr.Dataset:
+    """Remap packet and FPE time coordinates into ``[t0, t1]`` for short fixtures."""
+    remapped = dataset.copy(deep=True)
+    t0_i = np.datetime64(t0, "ns").astype(np.int64)
+    t1_i = np.datetime64(t1, "ns").astype(np.int64)
+    n_packets = remapped.sizes["PACKET"]
+    packet_times = np.linspace(t0_i, t1_i, n_packets).astype("datetime64[ns]")
+    remapped = remapped.assign_coords(PACKET_ICIE_TIME=("PACKET", packet_times))
+    if "PACKET_ICIE_TIME" in remapped.data_vars:
+        remapped["PACKET_ICIE_TIME"] = ("PACKET", packet_times)
+
+    for dim in remapped.dims:
+        if not str(dim).endswith("FPE_TIME"):
+            continue
+        n_fpe = remapped.sizes[dim]
+        fpe_times = np.linspace(t0_i, t1_i, n_fpe).astype("datetime64[ns]")
+        remapped = remapped.assign_coords({dim: (dim, fpe_times)})
+        if dim in remapped.data_vars:
+            remapped[dim] = (dim, fpe_times)
+    return remapped
+
+
+def write_time_aligned_companion(
+    source: Path,
+    dest: Path | S3Path,
+    t0: np.datetime64,
+    t1: np.datetime64,
+) -> Path | S3Path:
+    """Load a short companion fixture, remap times into ``[t0, t1]``, and copy to ``dest``."""
+    dataset = xr.open_dataset(source).load()
+    for variable in dataset.variables.values():
+        variable.encoding.clear()
+    aligned = remap_dataset_times_into_window(dataset, t0, t1)
+    with TemporaryDirectory() as tmp_dir:
+        local_out = Path(tmp_dir) / Path(dest.name).name
+        aligned.to_netcdf(local_out)
+        return smart_copy_file(local_out, dest)
+
+
+def build_cal_event_manifest(
+    sample_dir: Path,
+    filenames: list[str],
+    input_dir: Path | S3Path,
+) -> Path | S3Path:
+    """Copy selected sample files and write a per-event calibration input manifest.
+
+    Parameters
+    ----------
+    sample_dir : Path
+        Directory containing the real L1A sample fixtures.
+    filenames : list of str
+        Exact Libera filenames to include (one event only).
+    input_dir : Path or S3Path
+        Destination directory for copied inputs and the manifest.
+
+    Returns
+    -------
+    Path or S3Path
+        Path to the written input manifest.
+    """
+    copied: list[Path | S3Path] = []
+    for name in filenames:
+        source = sample_dir / name
+        dest = copy_cal_input_file(source, input_dir / name)
+        copied.append(dest)
+
+    manifest = Manifest(manifest_type=ManifestType.INPUT, files=[], configuration={})
+    manifest.add_files(*copied)
+    start_datetime, end_datetime = cal_desired_time_range()
+    manifest.add_desired_time_range(start_datetime=start_datetime, end_datetime=end_datetime)
+    return manifest.write(out_path=input_dir)
+
+
+def assert_companions_within_nom_hk_window(dataset: xr.Dataset) -> None:
+    """Assert companion packet/FPE times lie within the NOM-HK event window."""
+    if "NOM_HK_PACKET_ICIE_TIME" not in dataset:
+        raise AssertionError("Merged calibration product is missing NOM_HK_PACKET_ICIE_TIME")
+    t0 = np.datetime64(dataset["NOM_HK_PACKET_ICIE_TIME"].values.min())
+    t1 = np.datetime64(dataset["NOM_HK_PACKET_ICIE_TIME"].values.max())
+
+    for name, values in dataset.variables.items():
+        if name == "NOM_HK_PACKET_ICIE_TIME":
+            continue
+        if not (name.endswith("_PACKET_ICIE_TIME") or name.endswith("_FPE_TIME") or name.endswith("FPE_TIME")):
+            continue
+        if values.size == 0:
+            raise AssertionError(f"{name} is empty after event-window slicing")
+        vmin = np.datetime64(values.values.min())
+        vmax = np.datetime64(values.values.max())
+        assert vmin >= t0, f"{name} starts before NOM-HK window: {vmin} < {t0}"
+        assert vmax <= t1, f"{name} ends after NOM-HK window: {vmax} > {t1}"
 
 
 def write_nom_hk_fixture(dataset: xr.Dataset, output_dir: Path | S3Path) -> Path | S3Path:
@@ -50,18 +150,16 @@ def load_cal_netcdf(path: Path | S3Path | str) -> xr.Dataset:
 def assert_cal_product_conformance(
     dataset: xr.Dataset,
     product_path: Path | S3Path | str,
-    product_definitions: dict[DataProductIdentifier, Path],
-    product_identifier: DataProductIdentifier,
-    expected_product_id: str,
+    event_spec: CalEventSpec,
 ) -> None:
     """Validate a combined calibration product against its product definition."""
     for variable in dataset.variables.values():
         variable.encoding.clear()
-    assert dataset.attrs["ProductID"] == expected_product_id
+    assert dataset.attrs["ProductID"] == event_spec.cal_product.value
     assert dataset.attrs["algorithm_version"] == libera_rad_version()
     filename = LiberaDataProductFilename.from_file_path(product_path)
     assert filename.filename_parts.version == format_from_semantic_version(libera_rad_version())
-    definition = LiberaDataProductDefinition.from_yaml(product_definitions[product_identifier])
+    definition = get_cal_product_definition(event_spec)
     conformed = definition.enforce_dataset_conformance(dataset)
     errors = definition.check_dataset_conformance(conformed, strict=True)
     assert errors == [], "\n".join(errors[:30])

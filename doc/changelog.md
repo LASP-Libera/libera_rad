@@ -1,5 +1,15 @@
 # Version Changes
 
+## 0.7.0
+
+- BREAKING: Replace calibration-type combiners with ObsID-dispatched `cal-combine` (requires `LIBERA_CAL_OBSID` and `libera-utils >= 5.10.0`). Outputs ObsID-specific products (`GAIN`, `SWC-{λ}NM`, `LWC-TEMP*`, `SOLAR-{ch}-{PRI,SEC,TER}`) instead of `*-COMBINED`.
+- FEAT: CLI subcommand `libera-rad cal-combine <manifest>`; docker-compose `cal-combine` service reuses the `libera-rad` image with that entrypoint.
+- FEAT: Family product-definition YAML templates with ProductID set from the ObsID registry at write time; NOM-HK ObsID confirmation fail-closed against `LIBERA_CAL_OBSID`.
+- FEAT: Crop all cal-family companion streams to the TRIMMED (or decoded) NOM-HK event window before merge; only `event_spec.companion_products` are merged (stray manifest files are ignored).
+- MAINT: `CAL_EVENT_BY_OBSID` resolves CAL/TRIMMED ProductIDs from `libera_utils.obsids` (no duplicated ObsID→product table). Lunar ObsIDs 448/449 are cataloged in utils for TRIMMED outputs; rad cal-combine for lunar remains deferred.
+- MAINT: Remove unused L1A directory/file-scan helpers from `l1a_cal_event_utils` (`detect_value_runs`, `load_l1a_product`, etc.); keep the manifest-driven select/slice path.
+- NOTE (CDK follow-on): Register ~22 `cal-*` processing steps that share ECR `cal-rad-docker-repo`, set `batch_job_environment={"LIBERA_CAL_OBSID": "<obsid>"}` per Job Definition, and wire DAG edges from each `NOM-HK-*-TRIMMED` L1A product to the matching cal step. Reuse one ECR construct when `ProcessingStepIdentifier.ecr_name` collides.
+
 ## 0.6.1
 
 - Migrate geolocation onto `curryer.compute.geometry.GeometryData`: remove the in-house SPICE subsatellite implementation (`_spacecraft_ecef_positions`, `_subsatellite_lla_from_ecef`, `calculate_libera_base_subsatellite_geolocation`) in favor of a single vectorized `calculate_geometry` call, and return instrument geolocation as one lat/lon/alt DataFrame.

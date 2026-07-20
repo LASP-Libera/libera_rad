@@ -1,46 +1,46 @@
-"""Unit tests for solar_cal_combiner helper behavior."""
+"""Unit tests for solar family merge helpers."""
 
-from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
-import pytest
 import xarray as xr
-from libera_utils.constants import DataProductIdentifier
 
-from libera_rad.calibration.combiners.solar_cal_combiner import (
-    get_product_definition_for_solar_cal_face,
-    get_solar_cal_face,
-)
-from libera_rad.config import cal_solar_product_definitions
+from libera_rad.calibration.combiners.solar_cal_combiner import build_event_dataset, solar_obsids
+from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID
 
 
-def _all_data_for_obsids(obsids: list[int]) -> dict[str, xr.Dataset]:
-    nom_hk = xr.Dataset({"ICIE__SW_OBSID_RAD": ("PACKET", np.array(obsids, dtype=np.int32))})
-    return {"LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc": nom_hk}
+def test_solar_obsids_cover_face_range():
+    assert solar_obsids() == set(range(384, 396))
 
 
-@pytest.mark.parametrize(
-    ("obsid", "expected_face"),
-    [
-        (384, DataProductIdentifier.cal_solar_face1_combined),
-        (385, DataProductIdentifier.cal_solar_face1_combined),
-        (388, DataProductIdentifier.cal_solar_face2_combined),
-        (389, DataProductIdentifier.cal_solar_face2_combined),
-        (392, DataProductIdentifier.cal_solar_face3_combined),
-        (393, DataProductIdentifier.cal_solar_face3_combined),
-    ],
-)
-def test_get_solar_cal_face_returns_expected_identifier(obsid, expected_face):
-    assert get_solar_cal_face(_all_data_for_obsids([obsid])) == expected_face
+def test_solar_event_specs_are_per_obsid():
+    assert CAL_EVENT_BY_OBSID[384].cal_product.value == "SOLAR-SSW-PRI"
+    assert CAL_EVENT_BY_OBSID[389].cal_product.value == "SOLAR-TOT-SEC"
 
 
-def test_get_solar_cal_face_raises_for_multiple_faces():
-    with pytest.raises(ValueError, match="more than one solar-cal face"):
-        get_solar_cal_face(_all_data_for_obsids([384, 388]))
+@patch("libera_rad.calibration.combiners.solar_cal_combiner.l1a_combine.merge_l1a_decoded_datasets")
+@patch("libera_rad.calibration.combiners.solar_cal_combiner.l1a_cal_event_utils.select_and_slice_event_inputs")
+@patch("libera_rad.calibration.combiners.solar_cal_combiner.extract_nom_hk_dataset")
+def test_build_event_dataset_filters_obsid_and_sets_attrs(mock_extract, mock_select, mock_merge):
+    event_spec = CAL_EVENT_BY_OBSID[385]
+    times = np.array(
+        ["2025-01-01T00:00:00", "2025-01-01T00:01:00", "2025-01-01T00:02:00"],
+        dtype="datetime64[ns]",
+    )
+    nom_hk = xr.Dataset(
+        {"ICIE__SW_OBSID_RAD": ("PACKET", np.array([2, 385, 385], dtype=np.int32))},
+        coords={"PACKET_ICIE_TIME": ("PACKET", times)},
+    )
+    mock_extract.return_value = nom_hk
+    mock_select.return_value = [nom_hk.isel(PACKET=[1, 2])]
+    mock_merge.return_value = xr.Dataset()
 
+    result = build_event_dataset({"a.nc": xr.Dataset()}, event_spec)
 
-@pytest.mark.parametrize("face_identifier", list(cal_solar_product_definitions))
-def test_get_product_definition_for_solar_cal_face(face_identifier):
-    result = get_product_definition_for_solar_cal_face(face_identifier)
-    assert isinstance(result, Path)
-    assert result == cal_solar_product_definitions[face_identifier]
+    assert result.attrs["solar_cal_face"] == 1
+    assert result.attrs["event_pass_index"] == 1
+    assert result.attrs["source_obsids"] == [385]
+    assert "algorithm_version" in result.attrs
+    selected_nom_hk = mock_select.call_args.kwargs["nom_hk"]
+    assert selected_nom_hk.sizes["PACKET"] == 2
+    assert set(selected_nom_hk["ICIE__SW_OBSID_RAD"].values.tolist()) == {385}

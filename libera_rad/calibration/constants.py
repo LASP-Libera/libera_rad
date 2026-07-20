@@ -1,10 +1,13 @@
 """Constants for the libera_rad package used for retrieving calibration data"""
 
 # Standard
+from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
 import xarray as xr
 from libera_utils.constants import DataProductIdentifier
+from libera_utils.obsids import NomHkObsidSource, ObsIdKind, get_obsid_spec, iter_trim_eligible
 
 COMBINER_CCSDS_KEEP_FIELDS = ["PACKET", "PACKET_ICIE_TIME", "SRC_SEQ_CTR", "PKT_LEN", "PKT_APID"]
 
@@ -19,62 +22,155 @@ COMBINER_CCSDS_DROP_FIELDS = [
     "REUSABLE_SPARE_16",  # PEV-SW-STAT + RAD-SAMPLE
 ]
 
-#: Mapping of gain-cal OBSID → combined calibration product identifier.
-COMBINER_GAIN_OBSID_TO_PRODUCT_IDENTIFIER: dict[int, DataProductIdentifier] = {
-    512: DataProductIdentifier.cal_gain_combined,
+#: Environment variable that selects the calibration ObsID for ``cal-combine``.
+LIBERA_CAL_OBSID_ENV = "LIBERA_CAL_OBSID"
+
+CalFamily = Literal["gain", "swc", "lwc", "solar"]
+
+
+@dataclass(frozen=True)
+class CalEventSpec:
+    """Specification for one ObsID-specific calibration combine event."""
+
+    obsid: int
+    cal_product: DataProductIdentifier
+    trimmed_product: DataProductIdentifier
+    family: CalFamily
+    companion_products: tuple[DataProductIdentifier, ...]
+    time_variable: str
+
+
+_GAIN_COMPANIONS = (
+    DataProductIdentifier.l1a_icie_rad_full_decoded,
+    DataProductIdentifier.l1a_icie_cal_full_decoded,
+)
+
+_SWC_COMPANIONS = (
+    DataProductIdentifier.l1a_icie_cal_sample_decoded,
+    DataProductIdentifier.l1a_icie_rad_sample_decoded,
+    DataProductIdentifier.l1a_pec_sw_stat_decoded,
+    DataProductIdentifier.l1a_pev_sw_stat_decoded,
+)
+
+_LWC_COMPANIONS = (
+    DataProductIdentifier.l1a_icie_rad_sample_decoded,
+    DataProductIdentifier.l1a_pec_sw_stat_decoded,
+    DataProductIdentifier.l1a_pev_sw_stat_decoded,
+)
+
+_SOLAR_COMPANIONS = (
+    DataProductIdentifier.l1a_icie_rad_sample_decoded,
+    DataProductIdentifier.l1a_pev_sw_stat_decoded,
+)
+
+
+def _rad_products(obsid: int) -> tuple[DataProductIdentifier, DataProductIdentifier]:
+    """Resolve CAL and TRIMMED ProductIDs from the shared libera_utils ObsID registry."""
+    spec = get_obsid_spec(NomHkObsidSource.RAD, obsid)
+    if spec.cal_product is None or spec.trimmed_product is None:
+        raise ValueError(f"RAD ObsID {obsid} is not a trim-eligible calibration event")
+    return spec.cal_product, spec.trimmed_product
+
+
+def _gain(obsid: int) -> CalEventSpec:
+    cal, trimmed = _rad_products(obsid)
+    return CalEventSpec(
+        obsid=obsid,
+        cal_product=cal,
+        trimmed_product=trimmed,
+        family="gain",
+        companion_products=_GAIN_COMPANIONS,
+        time_variable="RAD_FULL_PACKET_ICIE_TIME",
+    )
+
+
+def _swc(obsid: int) -> CalEventSpec:
+    cal, trimmed = _rad_products(obsid)
+    return CalEventSpec(
+        obsid=obsid,
+        cal_product=cal,
+        trimmed_product=trimmed,
+        family="swc",
+        companion_products=_SWC_COMPANIONS,
+        time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
+    )
+
+
+def _lwc(obsid: int) -> CalEventSpec:
+    cal, trimmed = _rad_products(obsid)
+    return CalEventSpec(
+        obsid=obsid,
+        cal_product=cal,
+        trimmed_product=trimmed,
+        family="lwc",
+        companion_products=_LWC_COMPANIONS,
+        time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
+    )
+
+
+def _solar(obsid: int) -> CalEventSpec:
+    cal, trimmed = _rad_products(obsid)
+    return CalEventSpec(
+        obsid=obsid,
+        cal_product=cal,
+        trimmed_product=trimmed,
+        family="solar",
+        companion_products=_SOLAR_COMPANIONS,
+        time_variable="NOM_HK_PACKET_ICIE_TIME",
+    )
+
+
+#: Mapping of radiometer calibration ObsID → event specification.
+#: Product IDs come from ``libera_utils.obsids``; family/companions stay local.
+CAL_EVENT_BY_OBSID: dict[int, CalEventSpec] = {
+    # Gain
+    512: _gain(512),
+    # Shortwave LED
+    256: _swc(256),
+    257: _swc(257),
+    258: _swc(258),
+    259: _swc(259),
+    260: _swc(260),
+    261: _swc(261),
+    # Longwave blackbody
+    320: _lwc(320),
+    321: _lwc(321),
+    322: _lwc(322),
+    # Solar — Face 1 (primary)
+    384: _solar(384),
+    385: _solar(385),
+    386: _solar(386),
+    387: _solar(387),
+    # Solar — Face 2 (secondary)
+    388: _solar(388),
+    389: _solar(389),
+    390: _solar(390),
+    391: _solar(391),
+    # Solar — Face 3 (tertiary)
+    392: _solar(392),
+    393: _solar(393),
+    394: _solar(394),
+    395: _solar(395),
 }
 
-# TODO LIBSDC-564: Update with change to OBSID numbering in
-#: Mapping of shortwave-cal OBSID → combined calibration product identifier.
-COMBINER_SW_OBSID_TO_PRODUCT_IDENTIFIER: dict[int, DataProductIdentifier] = {
-    256: DataProductIdentifier.cal_sw_combined,  # 365 nm LED
-    257: DataProductIdentifier.cal_sw_combined,  # 405 nm LED
-    258: DataProductIdentifier.cal_sw_combined,  # 520 nm LED
-    259: DataProductIdentifier.cal_sw_combined,  # 635 nm LED
-    260: DataProductIdentifier.cal_sw_combined,  # 840 nm LED
-    261: DataProductIdentifier.cal_sw_combined,  # 1550 nm LED
+# Sanity: every CAL_EVENT_BY_OBSID key must exist as RAD_CAL in libera_utils.
+# Utils may list additional RAD_CAL ObsIDs (e.g. lunar) before rad combiners exist.
+_RAD_CAL_OBSIDS = {s.obsid for s in iter_trim_eligible(NomHkObsidSource.RAD) if s.kind is ObsIdKind.RAD_CAL}
+_EXTRA = set(CAL_EVENT_BY_OBSID) - _RAD_CAL_OBSIDS
+if _EXTRA:
+    raise RuntimeError(
+        f"CAL_EVENT_BY_OBSID contains ObsIDs missing from libera_utils RAD_CAL registry: {sorted(_EXTRA)}"
+    )
+
+#: Face number (1, 2, 3) for solar-cal ObsIDs (used for product attributes).
+SOLAR_OBSID_TO_FACE_NUM: dict[int, int] = {
+    **dict.fromkeys(range(384, 388), 1),
+    **dict.fromkeys(range(388, 392), 2),
+    **dict.fromkeys(range(392, 396), 3),
 }
 
-#: Mapping of longwave-cal OBSID → combined calibration product identifier.
-COMBINER_LW_OBSID_TO_PRODUCT_IDENTIFIER: dict[int, DataProductIdentifier] = {
-    320: DataProductIdentifier.cal_lw_temp1_combined,  #
-    321: DataProductIdentifier.cal_lw_temp2_combined,
-    322: DataProductIdentifier.cal_lw_temp3_combined,
-}
-
-# TODO LIBSDC-564: Update with change to OBSID numbering in
-#: Mapping of solar-cal OBSID → face-level combined calibration product identifier.
-#: OBSIDs per ICD:
-#:   384-387: Face 1 (primary diffuser)
-#:   388-391: Face 2 (secondary diffuser)
-#:   392-395: Face 3 (tertiary diffuser)
-COMBINER_SOLAR_OBSID_TO_PRODUCT_IDENTIFIER: dict[int, DataProductIdentifier] = {
-    # Face 1
-    384: DataProductIdentifier.cal_solar_face1_combined,  # Primary Face SSW Channel
-    385: DataProductIdentifier.cal_solar_face1_combined,  # Primary Face TOT Channel
-    386: DataProductIdentifier.cal_solar_face1_combined,  # Primary Face LW Channel
-    387: DataProductIdentifier.cal_solar_face1_combined,  # Primary Face SW Channel
-    # Face 2
-    388: DataProductIdentifier.cal_solar_face2_combined,  # Secondary Face SSW Channel
-    389: DataProductIdentifier.cal_solar_face2_combined,  # Secondary Face TOT Channel
-    390: DataProductIdentifier.cal_solar_face2_combined,  # Secondary Face LW Channel
-    391: DataProductIdentifier.cal_solar_face2_combined,  # Secondary Face SW Channel
-    # Face 3
-    392: DataProductIdentifier.cal_solar_face3_combined,  # Tertiary Face SSW Channel
-    393: DataProductIdentifier.cal_solar_face3_combined,  # Tertiary Face TOT Channel
-    394: DataProductIdentifier.cal_solar_face3_combined,  # Tertiary Face LW Channel
-    395: DataProductIdentifier.cal_solar_face3_combined,  # Tertiary Face SW Channel
-}
-
-#: Face number (1, 2, 3) keyed by solar-cal combined product identifier.
-COMBINER_SOLAR_FACE_IDENTIFIER_TO_FACE_NUM: dict[DataProductIdentifier, int] = {
-    DataProductIdentifier.cal_solar_face1_combined: 1,
-    DataProductIdentifier.cal_solar_face2_combined: 2,
-    DataProductIdentifier.cal_solar_face3_combined: 3,
-}
-
-#: First OBSID for each solar-cal face number (used to derive ``event_pass_index``).
-COMBINER_SOLAR_FACE_BASE_OBSIDS: dict[int, int] = {1: 384, 2: 388, 3: 392}
+#: First OBSID for each solar-cal face (used to derive ``event_pass_index``).
+SOLAR_FACE_BASE_OBSIDS: dict[int, int] = {1: 384, 2: 388, 3: 392}
 
 
 class BoardName(Enum):
