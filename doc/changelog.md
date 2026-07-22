@@ -4,7 +4,7 @@
 
 - BREAKING: Replace type-specific calibration combiners and `*-COMBINED` products with a single ObsID-dispatched `cal-combine` algorithm (requires `LIBERA_CAL_OBSID` and `libera-utils >= 5.10.0`). Invoke via `libera-rad cal-combine <manifest>` (docker-compose `cal-combine` service included). Outputs are ObsID-specific: `GAIN`, `SWC-{λ}NM`, `LWC-TEMP*`, `SOLAR-{ch}-{PRI,SEC,TER}`.
 - FEAT: Shared gain/swc/lwc/solar event pipeline — NOM-HK ObsID check against `LIBERA_CAL_OBSID`, crop each family's declared companions to the TRIMMED/decoded NOM-HK window, merge only those streams (stray manifest files ignored), and write with family product-definition YAML (`ProductID` set from the ObsID registry). `CAL_EVENT_BY_OBSID` is derived from `libera_utils.obsids`; lunar cals remain deferred.
-- FEAT: SWC, LWC, and SOLAR products include SPICE-derived `Azimuth_Position` / `Elevation_Position` on `RAD_SAMPLE_FPE_TIME` (requires AZROT-CK + ELSCAN-CK on the input manifest). GAIN does not attach motor attitude or require those kernels.
+- FEAT: SWC, LWC, and SOLAR products include SPICE-derived `Azimuth_Position` / `Elevation_Position` on `RAD_SAMPLE_FPE_TIME` (always requires AZROT-CK + ELSCAN-CK on the input manifest; cal-combine does not honor L1B's `use_geo` flag). GAIN does not attach motor attitude or require those kernels.
 - MAINT: Uniform product attrs across families (`source_obsids`; drop solar-only `solar_cal_face` / `event_pass_index`). Orchestration in `calibration/cal_algorithm.py` with `l1a_cal_event_utils.build_event_dataset`.
 
 ## 0.6.1

@@ -71,15 +71,18 @@ class TestCalEventRegistry:
 
     def test_registry_excludes_unsupported_rad_cal(self):
         """Lunar (and similar) RAD_CAL ObsIDs stay in utils but are not cal-combine yet."""
-        unsupported = []
+        supported: set[int] = set()
+        unsupported: set[int] = set()
         for obsid_spec in iter_trim_eligible(NomHkObsidSource.RAD):
             if obsid_spec.kind is not ObsIdKind.RAD_CAL or obsid_spec.cal_product is None:
                 continue
             if family_from_cal_product(obsid_spec.cal_product) is None:
-                unsupported.append(obsid_spec.obsid)
+                unsupported.add(obsid_spec.obsid)
+            else:
+                supported.add(obsid_spec.obsid)
         assert unsupported  # lunar entries exist in utils
-        assert set(unsupported).isdisjoint(CAL_EVENT_BY_OBSID)
-        assert len(CAL_EVENT_BY_OBSID) == 22
+        assert unsupported.isdisjoint(CAL_EVENT_BY_OBSID)
+        assert set(CAL_EVENT_BY_OBSID) == supported
 
     def test_family_from_cal_product(self):
         assert family_from_cal_product(DataProductIdentifier.cal_gain) == "gain"

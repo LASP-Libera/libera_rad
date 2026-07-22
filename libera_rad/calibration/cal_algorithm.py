@@ -2,6 +2,10 @@
 
 Selected by the ``LIBERA_CAL_OBSID`` environment variable and invoked via
 ``libera-rad cal-combine <manifest>``.
+
+SWC/LWC/SOLAR events always attach SPICE-derived Azimuth/Elevation from
+AZROT-CK and ELSCAN-CK on the input manifest. Unlike L1B, cal-combine does
+not honor ``configuration.use_geo``.
 """
 
 from __future__ import annotations
