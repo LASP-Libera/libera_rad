@@ -3,6 +3,7 @@ attributes:
   algorithm_version: null
   date_created: null
   input_files: null
+  source_obsids: null
 coordinates:
   RAD_FULL_PACKET_ICIE_TIME:
     dtype: datetime64[ns]

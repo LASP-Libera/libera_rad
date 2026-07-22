@@ -7,7 +7,7 @@ import pytest
 
 # Local
 from libera_rad import cli, l1b
-from libera_rad.calibration.combiners import cal_combine
+from libera_rad.calibration import cal_algorithm
 
 
 @pytest.mark.parametrize(
@@ -20,7 +20,7 @@ from libera_rad.calibration.combiners import cal_combine
         (["--version"], argparse.Namespace(func=cli.print_version_info, manifest=None, verbose=False, version=True)),
         (
             ["cal-combine", "cal_manifest.json"],
-            argparse.Namespace(func=cal_combine.algorithm, manifest="cal_manifest.json", verbose=False),
+            argparse.Namespace(func=cal_algorithm.algorithm, manifest="cal_manifest.json", verbose=False),
         ),
     ],
 )

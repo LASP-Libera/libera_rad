@@ -9,7 +9,7 @@ import sys
 
 # Local
 from libera_rad import l1b
-from libera_rad.calibration.combiners import cal_combine
+from libera_rad.calibration import cal_algorithm
 from libera_rad.version import version as libera_rad_version
 
 
@@ -56,7 +56,7 @@ def parse_cli_args(cli_args: list | None = None):
         cal_parser.add_argument("manifest", type=str, help="input manifest file")
         cal_parser.add_argument("-v", "--verbose", action="store_true", help="set DEBUG level logging output")
         parsed_args = cal_parser.parse_args(cli_args[1:])
-        parsed_args.func = cal_combine.algorithm
+        parsed_args.func = cal_algorithm.algorithm
         return parsed_args
 
     parser = argparse.ArgumentParser(prog="libera-rad", description="Libera radiometer science data processing CLI")

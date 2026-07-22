@@ -1,17 +1,18 @@
-"""L1A calibration event utilities — manifest load and event-window slicing.
+"""L1A calibration event utilities — manifest load, slicing, and event builders.
 
-Shared helpers for ObsID-dispatched calibration combiners:
+Shared helpers for ObsID-dispatched calibration products:
 
 - Load decoded L1A datasets from a calibration input manifest
 - Prefer TRIMMED NOM-HK inputs with legacy decoded fallback
 - Confirm NOM-HK ObsIDs against ``LIBERA_CAL_OBSID``
 - Select companion products and slice them to the NOM-HK event window
+- Build family event datasets (default merge path + family-specific overrides)
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -23,8 +24,15 @@ from libera_utils.io.filenaming import LiberaDataProductFilename
 from libera_utils.libera_spice.kernel_manager import KernelManager
 
 from libera_rad import geolocation
-from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV, CalEventSpec
+from libera_rad.calibration.combiners.l1a_combine import merge_l1a_decoded_datasets
+from libera_rad.calibration.constants import (
+    CAL_EVENT_BY_OBSID,
+    LIBERA_CAL_OBSID_ENV,
+    CalEventSpec,
+    CalFamily,
+)
 from libera_rad.l1b import REQUIRED_SPICE_CAL_AZEL, extract_input_dataset, read_all_input_data
+from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
 
@@ -353,3 +361,59 @@ def select_and_slice_event_inputs(
         sliced_companions.append(sliced)
 
     return [nom_hk, *sliced_companions]
+
+
+EventBuilder = Callable[[dict[str, xr.Dataset], CalEventSpec], xr.Dataset]
+
+
+def _build_standard_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
+    """Slice companions to the NOM-HK window and merge streams."""
+    inputs = select_and_slice_event_inputs(all_data, event_spec)
+    return merge_l1a_decoded_datasets(inputs)
+
+
+#: Optional family-specific builders. Empty by default; all current families use the
+#: standard path. Register an override when a future family needs custom prep.
+_FAMILY_EVENT_BUILDER_OVERRIDES: dict[CalFamily, EventBuilder] = {}
+
+
+def register_family_event_builder(family: CalFamily, builder: EventBuilder) -> None:
+    """Register or replace the event builder for a calibration family.
+
+    Parameters
+    ----------
+    family : CalFamily
+        Calibration family key (must already be a valid ``CalEventSpec.family``).
+    builder : callable
+        ``(all_data, event_spec) -> xr.Dataset`` implementation.
+    """
+    _FAMILY_EVENT_BUILDER_OVERRIDES[family] = builder
+
+
+def build_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
+    """Build one ObsID calibration event dataset for ``event_spec.family``.
+
+    All current families use the same select → slice → merge path. Families with
+    extra prep can be registered via :func:`register_family_event_builder`.
+
+    Common global attributes (``source_obsids``, ``algorithm_version``) are set
+    here so all cal families write a uniform product header.
+
+    Parameters
+    ----------
+    all_data : dict of {str : xr.Dataset}
+        Decoded L1A datasets keyed by filename.
+    event_spec : CalEventSpec
+        ObsID-specific calibration event specification.
+
+    Returns
+    -------
+    xr.Dataset
+        Merged calibration event dataset.
+    """
+    builder = _FAMILY_EVENT_BUILDER_OVERRIDES.get(event_spec.family, _build_standard_event_dataset)
+    logger.info("Creating %s calibration event dataset (ObsID %d)", event_spec.family, event_spec.obsid)
+    event = builder(all_data, event_spec)
+    event.attrs["source_obsids"] = [event_spec.obsid]
+    event.attrs["algorithm_version"] = libera_rad_version()
+    return event

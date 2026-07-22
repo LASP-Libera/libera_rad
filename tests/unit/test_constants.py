@@ -1,11 +1,13 @@
 import xarray as xr
 from libera_utils.constants import DataProductIdentifier
+from libera_utils.obsids import NomHkObsidSource, ObsIdKind, get_obsid_spec, iter_trim_eligible
 
 from libera_rad.calibration.constants import (
     CAL_EVENT_BY_OBSID,
-    SOLAR_FACE_BASE_OBSIDS,
     ChannelName,
+    family_from_cal_product,
     find_channel_variable,
+    get_cal_event_spec,
     get_channel_name_enum,
 )
 
@@ -57,41 +59,31 @@ class TestGetChannelNameEnum:
         assert result is None
 
 
-class TestCalEventByObsid:
-    """Tests for the ObsID → CalEventSpec registry."""
+class TestCalEventRegistry:
+    """Guards for family derivation from libera_utils ObsIDs."""
 
-    def test_gain_obsid(self):
-        spec = CAL_EVENT_BY_OBSID[512]
-        assert spec.cal_product == DataProductIdentifier.cal_gain
-        assert spec.family == "gain"
-        assert spec.trimmed_product == DataProductIdentifier.l1a_icie_nom_hk_gain_trimmed
-
-    def test_products_match_libera_utils_registry(self):
-        """CAL/TRIMMED ProductIDs are owned by libera_utils.obsids."""
-        from libera_utils.obsids import NomHkObsidSource, get_obsid_spec
-
+    def test_supported_events_match_utils_products(self):
         for obsid, spec in CAL_EVENT_BY_OBSID.items():
             utils_spec = get_obsid_spec(NomHkObsidSource.RAD, obsid)
             assert spec.cal_product is utils_spec.cal_product
             assert spec.trimmed_product is utils_spec.trimmed_product
+            assert get_cal_event_spec(obsid) == spec
 
-    def test_swc_obsid(self):
-        spec = CAL_EVENT_BY_OBSID[257]
-        assert spec.cal_product == DataProductIdentifier.cal_swc_405nm
-        assert spec.family == "swc"
-
-    def test_lwc_obsids(self):
-        assert CAL_EVENT_BY_OBSID[320].cal_product == DataProductIdentifier.cal_lwc_temp1
-        assert CAL_EVENT_BY_OBSID[321].cal_product == DataProductIdentifier.cal_lwc_temp2
-        assert CAL_EVENT_BY_OBSID[322].cal_product == DataProductIdentifier.cal_lwc_temp3
-
-    def test_solar_obsids(self):
-        assert CAL_EVENT_BY_OBSID[384].cal_product == DataProductIdentifier.cal_solar_ssw_pri
-        assert CAL_EVENT_BY_OBSID[389].cal_product == DataProductIdentifier.cal_solar_tot_sec
-        assert CAL_EVENT_BY_OBSID[395].cal_product == DataProductIdentifier.cal_solar_sw_ter
-
-    def test_solar_face_base_obsids(self):
-        assert SOLAR_FACE_BASE_OBSIDS == {1: 384, 2: 388, 3: 392}
-
-    def test_registry_has_22_events(self):
+    def test_registry_excludes_unsupported_rad_cal(self):
+        """Lunar (and similar) RAD_CAL ObsIDs stay in utils but are not cal-combine yet."""
+        unsupported = []
+        for obsid_spec in iter_trim_eligible(NomHkObsidSource.RAD):
+            if obsid_spec.kind is not ObsIdKind.RAD_CAL or obsid_spec.cal_product is None:
+                continue
+            if family_from_cal_product(obsid_spec.cal_product) is None:
+                unsupported.append(obsid_spec.obsid)
+        assert unsupported  # lunar entries exist in utils
+        assert set(unsupported).isdisjoint(CAL_EVENT_BY_OBSID)
         assert len(CAL_EVENT_BY_OBSID) == 22
+
+    def test_family_from_cal_product(self):
+        assert family_from_cal_product(DataProductIdentifier.cal_gain) == "gain"
+        assert family_from_cal_product(DataProductIdentifier.cal_swc_405nm) == "swc"
+        assert family_from_cal_product(DataProductIdentifier.cal_lwc_temp1) == "lwc"
+        assert family_from_cal_product(DataProductIdentifier.cal_solar_tot_pri) == "solar"
+        assert family_from_cal_product(DataProductIdentifier.cal_lunar_cal1) is None

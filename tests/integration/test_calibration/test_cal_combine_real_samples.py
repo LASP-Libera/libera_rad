@@ -2,10 +2,11 @@
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 from libera_utils import Manifest
 
-from libera_rad.calibration.combiners.cal_combine import algorithm
+from libera_rad.calibration.cal_algorithm import algorithm
 from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV
 from tests.integration.test_calibration.cal_test_helpers import (
     assert_azimuth_elevation_positions,
@@ -30,7 +31,6 @@ _REAL_EVENTS = [
             "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5RC1_20280212T005115_20280212T005929_R26163174745.nc",
             "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5RC1_20280212T005518_20280212T005919_R26163174745.nc",
         ],
-        {},
         id="gain-512",
     ),
     pytest.param(
@@ -42,7 +42,6 @@ _REAL_EVENTS = [
             "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5RC1_20280212T000059_20280212T020011_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280212T000147_20280212T020019_R26163174745.nc",
         ],
-        {},
         id="lwc-320",
     ),
     pytest.param(
@@ -55,7 +54,6 @@ _REAL_EVENTS = [
             "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5RC1_20280213T020149_20280213T040001_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280213T020154_20280213T035926_R26163174745.nc",
         ],
-        {},
         id="swc-257",
     ),
     pytest.param(
@@ -66,7 +64,6 @@ _REAL_EVENTS = [
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280213T020154_20280213T035926_R26163174745.nc",
         ],
-        {"solar_cal_face": 1, "event_pass_index": 1, "source_obsids": [385]},
         id="solar-385",
     ),
     pytest.param(
@@ -77,15 +74,22 @@ _REAL_EVENTS = [
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280213T020154_20280213T035926_R26163174745.nc",
         ],
-        {"solar_cal_face": 1, "event_pass_index": 2, "source_obsids": [386]},
         id="solar-386",
     ),
 ]
 
 
+def _assert_source_obsids(dataset, obsid: int) -> None:
+    source_obsids = dataset.attrs["source_obsids"]
+    if isinstance(source_obsids, list | tuple | np.ndarray):
+        assert list(source_obsids) == [obsid]
+    else:
+        assert int(source_obsids) == obsid
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("path_type", ["Local", "S3"], indirect=True)
-@pytest.mark.parametrize(("sample_subdir", "obsid", "filenames", "solar_attrs"), _REAL_EVENTS)
+@pytest.mark.parametrize(("sample_subdir", "obsid", "filenames"), _REAL_EVENTS)
 def test_cal_combine_real_sample_event(
     test_l1a_cal_data_path,
     cal_io_paths,
@@ -93,7 +97,6 @@ def test_cal_combine_real_sample_event(
     sample_subdir: Path,
     obsid: int,
     filenames: list[str],
-    solar_attrs: dict,
 ):
     """Run cal-combine on one real-event manifest and validate cropped output."""
     input_dir, output_dir = cal_io_paths
@@ -118,6 +121,7 @@ def test_cal_combine_real_sample_event(
     dataset = load_cal_netcdf(output_file)
     assert_cal_product_conformance(dataset, output_file, event_spec)
     assert_companions_within_nom_hk_window(dataset)
+    _assert_source_obsids(dataset, obsid)
 
     if obsid in _AZEL_OBSIDS:
         assert_azimuth_elevation_positions(dataset, expect_fill=False)
@@ -125,5 +129,42 @@ def test_cal_combine_real_sample_event(
         assert "Azimuth_Position" not in dataset
         assert "Elevation_Position" not in dataset
 
-    for attr_name, expected in solar_attrs.items():
-        assert dataset.attrs[attr_name] == expected
+
+@pytest.mark.integration
+@pytest.mark.parametrize("path_type", ["Local", "S3"], indirect=True)
+def test_cal_combine_use_geo_false_writes_fill_azimuth_elevation(
+    test_l1a_cal_data_path,
+    cal_io_paths,
+    monkeypatch,
+):
+    """use_geo=false writes Azimuth/Elevation fill values and does not need motor CKs."""
+    obsid = 320
+    filenames = [
+        "LIBERA_L1A_NOM-HK-LWC-TEMP1-TRIMMED_V5-8-5RC1_20280212T000127_20280212T000735_R26199220207.nc",
+        "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280212T000050_20280212T020052_R26163174745.nc",
+        "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5RC1_20280212T000059_20280212T020011_R26163174745.nc",
+        "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280212T000147_20280212T020019_R26163174745.nc",
+    ]
+    input_dir, output_dir = cal_io_paths
+    event_spec = CAL_EVENT_BY_OBSID[obsid]
+    sample_dir = test_l1a_cal_data_path / _SAMPLE_TWO
+
+    manifest_path = build_cal_event_manifest(
+        sample_dir,
+        filenames,
+        input_dir,
+        configuration={"use_geo": False},
+    )
+    monkeypatch.setenv("PROCESSING_PATH", str(output_dir))
+    monkeypatch.setenv(LIBERA_CAL_OBSID_ENV, str(obsid))
+
+    output_manifest_path = algorithm(manifest_path)
+    output_manifest = Manifest.from_file(output_manifest_path)
+    assert len(output_manifest.files) == 1
+
+    output_file = output_manifest.files[0].filename
+    dataset = load_cal_netcdf(output_file)
+    assert_cal_product_conformance(dataset, output_file, event_spec)
+    assert_companions_within_nom_hk_window(dataset)
+    _assert_source_obsids(dataset, obsid)
+    assert_azimuth_elevation_positions(dataset, expect_fill=True)

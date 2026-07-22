@@ -3,8 +3,6 @@ attributes:
   algorithm_version: null
   date_created: null
   input_files: null
-  solar_cal_face: null
-  event_pass_index: null
   source_obsids: null
 coordinates:
   NOM_HK_PACKET_ICIE_TIME:

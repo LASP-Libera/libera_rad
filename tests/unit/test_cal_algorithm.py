@@ -1,13 +1,12 @@
-"""Unit tests for ObsID-dispatched cal_combine helpers."""
+"""Unit tests for ObsID-dispatched cal_algorithm helpers."""
 
 import numpy as np
 import pytest
 import xarray as xr
 
-from libera_rad.calibration.combiners.cal_combine import resolve_cal_obsid_from_env
+from libera_rad.calibration.cal_algorithm import resolve_cal_obsid_from_env
 from libera_rad.calibration.combiners.l1a_cal_event_utils import confirm_obsid_matches_hk
-from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV
-from libera_rad.config import get_cal_product_definition
+from libera_rad.calibration.constants import LIBERA_CAL_OBSID_ENV
 
 
 class TestResolveCalObsidFromEnv:
@@ -53,17 +52,3 @@ class TestConfirmObsidMatchesHk:
         nom_hk = xr.Dataset({"ICIE__SW_OBSID_RAD": ("PACKET", np.array([320, 321], dtype=np.int32))})
         with pytest.raises(ValueError, match="additional calibration ObsIDs"):
             confirm_obsid_matches_hk(nom_hk, 320)
-
-
-class TestGetCalProductDefinition:
-    """Tests for family product-definition loading with ProductID override."""
-
-    def test_product_id_matches_event_spec(self):
-        for obsid, spec in (
-            (512, CAL_EVENT_BY_OBSID[512]),
-            (257, CAL_EVENT_BY_OBSID[257]),
-            (320, CAL_EVENT_BY_OBSID[320]),
-            (389, CAL_EVENT_BY_OBSID[389]),
-        ):
-            definition = get_cal_product_definition(spec)
-            assert definition.attributes["ProductID"] == spec.cal_product.value

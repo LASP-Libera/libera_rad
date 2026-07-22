@@ -1,13 +1,19 @@
-"""Constants for the libera_rad package used for retrieving calibration data"""
+"""Constants for libera_rad calibration and L1B radiance processing.
 
-# Standard
+ObsID → CAL/TRIMMED ProductIDs live in ``libera_utils.obsids``. This module
+owns rad-only merge recipes (family companions / time variables), combiner
+CCSDS field lists, and L1B science enums.
+"""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 
 import xarray as xr
 from libera_utils.constants import DataProductIdentifier
-from libera_utils.obsids import NomHkObsidSource, ObsIdKind, get_obsid_spec, iter_trim_eligible
+from libera_utils.obsids import NomHkObsidSource, ObsIdKind, ObsIdSpec, get_obsid_spec, iter_trim_eligible
 
 COMBINER_CCSDS_KEEP_FIELDS = ["PACKET", "PACKET_ICIE_TIME", "SRC_SEQ_CTR", "PKT_LEN", "PKT_APID"]
 
@@ -40,137 +46,131 @@ class CalEventSpec:
     time_variable: str
 
 
-_GAIN_COMPANIONS = (
-    DataProductIdentifier.l1a_icie_rad_full_decoded,
-    DataProductIdentifier.l1a_icie_cal_full_decoded,
-)
+@dataclass(frozen=True)
+class _FamilyConfig:
+    """Rad-algorithm merge recipe for one calibration family."""
 
-_SWC_COMPANIONS = (
-    DataProductIdentifier.l1a_icie_cal_sample_decoded,
-    DataProductIdentifier.l1a_icie_rad_sample_decoded,
-    DataProductIdentifier.l1a_pec_sw_stat_decoded,
-    DataProductIdentifier.l1a_pev_sw_stat_decoded,
-)
-
-_LWC_COMPANIONS = (
-    DataProductIdentifier.l1a_icie_rad_sample_decoded,
-    DataProductIdentifier.l1a_pec_sw_stat_decoded,
-    DataProductIdentifier.l1a_pev_sw_stat_decoded,
-)
-
-_SOLAR_COMPANIONS = (
-    DataProductIdentifier.l1a_icie_rad_sample_decoded,
-    DataProductIdentifier.l1a_pev_sw_stat_decoded,
-)
+    companion_products: tuple[DataProductIdentifier, ...]
+    time_variable: str
 
 
-def _rad_products(obsid: int) -> tuple[DataProductIdentifier, DataProductIdentifier]:
-    """Resolve CAL and TRIMMED ProductIDs from the shared libera_utils ObsID registry."""
-    spec = get_obsid_spec(NomHkObsidSource.RAD, obsid)
-    if spec.cal_product is None or spec.trimmed_product is None:
-        raise ValueError(f"RAD ObsID {obsid} is not a trim-eligible calibration event")
-    return spec.cal_product, spec.trimmed_product
-
-
-def _gain(obsid: int) -> CalEventSpec:
-    cal, trimmed = _rad_products(obsid)
-    return CalEventSpec(
-        obsid=obsid,
-        cal_product=cal,
-        trimmed_product=trimmed,
-        family="gain",
-        companion_products=_GAIN_COMPANIONS,
+#: Family → companions / product time variable. ProductIDs come from libera_utils.
+_FAMILY_CONFIGS: dict[CalFamily, _FamilyConfig] = {
+    "gain": _FamilyConfig(
+        companion_products=(
+            DataProductIdentifier.l1a_icie_rad_full_decoded,
+            DataProductIdentifier.l1a_icie_cal_full_decoded,
+        ),
         time_variable="RAD_FULL_PACKET_ICIE_TIME",
-    )
-
-
-def _swc(obsid: int) -> CalEventSpec:
-    cal, trimmed = _rad_products(obsid)
-    return CalEventSpec(
-        obsid=obsid,
-        cal_product=cal,
-        trimmed_product=trimmed,
-        family="swc",
-        companion_products=_SWC_COMPANIONS,
+    ),
+    "swc": _FamilyConfig(
+        companion_products=(
+            DataProductIdentifier.l1a_icie_cal_sample_decoded,
+            DataProductIdentifier.l1a_icie_rad_sample_decoded,
+            DataProductIdentifier.l1a_pec_sw_stat_decoded,
+            DataProductIdentifier.l1a_pev_sw_stat_decoded,
+        ),
         time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
-    )
-
-
-def _lwc(obsid: int) -> CalEventSpec:
-    cal, trimmed = _rad_products(obsid)
-    return CalEventSpec(
-        obsid=obsid,
-        cal_product=cal,
-        trimmed_product=trimmed,
-        family="lwc",
-        companion_products=_LWC_COMPANIONS,
+    ),
+    "lwc": _FamilyConfig(
+        companion_products=(
+            DataProductIdentifier.l1a_icie_rad_sample_decoded,
+            DataProductIdentifier.l1a_pec_sw_stat_decoded,
+            DataProductIdentifier.l1a_pev_sw_stat_decoded,
+        ),
         time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
-    )
-
-
-def _solar(obsid: int) -> CalEventSpec:
-    cal, trimmed = _rad_products(obsid)
-    return CalEventSpec(
-        obsid=obsid,
-        cal_product=cal,
-        trimmed_product=trimmed,
-        family="solar",
-        companion_products=_SOLAR_COMPANIONS,
-        time_variable="NOM_HK_PACKET_ICIE_TIME",
-    )
-
-
-#: Mapping of radiometer calibration ObsID → event specification.
-#: Product IDs come from ``libera_utils.obsids``; family/companions stay local.
-CAL_EVENT_BY_OBSID: dict[int, CalEventSpec] = {
-    # Gain
-    512: _gain(512),
-    # Shortwave LED
-    256: _swc(256),
-    257: _swc(257),
-    258: _swc(258),
-    259: _swc(259),
-    260: _swc(260),
-    261: _swc(261),
-    # Longwave blackbody
-    320: _lwc(320),
-    321: _lwc(321),
-    322: _lwc(322),
-    # Solar — Face 1 (primary)
-    384: _solar(384),
-    385: _solar(385),
-    386: _solar(386),
-    387: _solar(387),
-    # Solar — Face 2 (secondary)
-    388: _solar(388),
-    389: _solar(389),
-    390: _solar(390),
-    391: _solar(391),
-    # Solar — Face 3 (tertiary)
-    392: _solar(392),
-    393: _solar(393),
-    394: _solar(394),
-    395: _solar(395),
+    ),
+    "solar": _FamilyConfig(
+        companion_products=(
+            DataProductIdentifier.l1a_icie_rad_sample_decoded,
+            DataProductIdentifier.l1a_pev_sw_stat_decoded,
+        ),
+        time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
+    ),
+    # TODO [LIBSDC-811]: Add lunar cals
 }
 
-# Sanity: every CAL_EVENT_BY_OBSID key must exist as RAD_CAL in libera_utils.
-# Utils may list additional RAD_CAL ObsIDs (e.g. lunar) before rad combiners exist.
-_RAD_CAL_OBSIDS = {s.obsid for s in iter_trim_eligible(NomHkObsidSource.RAD) if s.kind is ObsIdKind.RAD_CAL}
-_EXTRA = set(CAL_EVENT_BY_OBSID) - _RAD_CAL_OBSIDS
-if _EXTRA:
-    raise RuntimeError(
-        f"CAL_EVENT_BY_OBSID contains ObsIDs missing from libera_utils RAD_CAL registry: {sorted(_EXTRA)}"
+
+def family_from_cal_product(cal_product: DataProductIdentifier) -> CalFamily | None:
+    """Map a CAL ProductID to a rad cal-combine family, or ``None`` if unsupported.
+
+    Supported prefixes match implemented families (``GAIN``, ``SWC-``, ``LWC-``,
+    ``SOLAR-``). Lunar and other RAD_CAL products return ``None`` until a family
+    config is added.
+    """
+    value = cal_product.value
+    if value == "GAIN":
+        return "gain"
+    if value.startswith("SWC-"):
+        return "swc"
+    if value.startswith("LWC-"):
+        return "lwc"
+    if value.startswith("SOLAR-"):
+        return "solar"
+    return None
+
+
+def _cal_event_from_obsid_spec(obsid_spec: ObsIdSpec) -> CalEventSpec | None:
+    """Build a ``CalEventSpec`` when the utils entry maps to a supported family."""
+    if obsid_spec.cal_product is None or obsid_spec.trimmed_product is None:
+        return None
+    family = family_from_cal_product(obsid_spec.cal_product)
+    if family is None:
+        return None
+    family_cfg = _FAMILY_CONFIGS[family]
+    return CalEventSpec(
+        obsid=obsid_spec.obsid,
+        cal_product=obsid_spec.cal_product,
+        trimmed_product=obsid_spec.trimmed_product,
+        family=family,
+        companion_products=family_cfg.companion_products,
+        time_variable=family_cfg.time_variable,
     )
 
-#: Face number (1, 2, 3) for solar-cal ObsIDs (used for product attributes).
-SOLAR_OBSID_TO_FACE_NUM: dict[int, int] = {
-    **dict.fromkeys(range(384, 388), 1),
-    **dict.fromkeys(range(388, 392), 2),
-    **dict.fromkeys(range(392, 396), 3),
-}
 
-#: First OBSID for each solar-cal face (used to derive ``event_pass_index``).
-SOLAR_FACE_BASE_OBSIDS: dict[int, int] = {1: 384, 2: 388, 3: 392}
+def get_cal_event_spec(obsid: int) -> CalEventSpec:
+    """Return the rad cal-combine spec for a RAD ObsID.
+
+    Parameters
+    ----------
+    obsid : int
+        Radiometer calibration ObsID (``ICIE__SW_OBSID_RAD``).
+
+    Returns
+    -------
+    CalEventSpec
+        Event specification for cal-combine.
+
+    Raises
+    ------
+    KeyError
+        If the ObsID is unknown in ``libera_utils.obsids``.
+    ValueError
+        If the ObsID is known but not yet supported by rad cal-combine.
+    """
+    obsid_spec = get_obsid_spec(NomHkObsidSource.RAD, obsid)
+    event = _cal_event_from_obsid_spec(obsid_spec)
+    if event is None:
+        raise ValueError(
+            f"RAD ObsID {obsid} is not supported by libera_rad cal-combine (cal_product={obsid_spec.cal_product})"
+        )
+    return event
+
+
+def _build_cal_event_by_obsid() -> dict[int, CalEventSpec]:
+    """Derive supported rad cal events from the shared ObsID registry."""
+    events: dict[int, CalEventSpec] = {}
+    for obsid_spec in iter_trim_eligible(NomHkObsidSource.RAD):
+        if obsid_spec.kind is not ObsIdKind.RAD_CAL:
+            continue
+        event = _cal_event_from_obsid_spec(obsid_spec)
+        if event is not None:
+            events[event.obsid] = event
+    return events
+
+
+#: Supported rad cal-combine ObsIDs, derived from ``libera_utils.obsids``.
+CAL_EVENT_BY_OBSID: dict[int, CalEventSpec] = _build_cal_event_by_obsid()
 
 
 class BoardName(Enum):

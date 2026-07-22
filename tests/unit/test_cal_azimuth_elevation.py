@@ -18,14 +18,6 @@ def _event_with_fpe(n: int = 4) -> xr.Dataset:
     )
 
 
-class TestFamilyNeedsAzimuthElevationPositions:
-    """Tests for family_needs_azimuth_elevation_positions."""
-
-    @pytest.mark.parametrize(("family", "expected"), [("swc", True), ("lwc", True), ("solar", True), ("gain", False)])
-    def test_families(self, family: str, expected: bool):
-        assert utils.family_needs_azimuth_elevation_positions(family) is expected
-
-
 class TestAttachAzimuthElevationPositions:
     """Tests for attach_azimuth_elevation_positions."""
 
