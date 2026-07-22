@@ -22,6 +22,7 @@ runs:
       run: echo "week=$(date +'%Y-%W')" >> $GITHUB_OUTPUT
 
     - name: Setup Python
+      id: setup-python
       uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python-version }}
@@ -39,11 +40,16 @@ runs:
       shell: bash
       run: |
         CSPICE_URL="https://naif.jpl.nasa.gov/pub/naif/toolkit//C/PC_Linux_GCC_64bit/packages/cspice.tar.Z"
-        LAST_MOD=$(curl -sI "$CSPICE_URL" | grep -i '^last-modified:' | tr -d '\r\n' | sed 's/[Ll]ast-[Mm]odified: //')
-        # Hash the value to produce a cache-key-safe string
-        HASHED=$(echo "$LAST_MOD" | sha256sum | cut -d' ' -f1)
-        # Fallback to a stable weekly key if the header is absent
-        CACHE_KEY="${HASHED:-week-$(date +'%Y-%W')}"
+        # || true: under pipefail a curl failure or a grep non-match would otherwise fail the job
+        LAST_MOD=$(curl -sIL --max-time 30 "$CSPICE_URL" | grep -i '^last-modified:' | tr -d '\r\n' | sed 's/[Ll]ast-[Mm]odified: //' || true)
+        if [ -n "$LAST_MOD" ]; then
+          # Hash the value to produce a cache-key-safe string
+          CACHE_KEY=$(echo "$LAST_MOD" | sha256sum | cut -d' ' -f1)
+        else
+          # Fall back to a stable weekly key so an unreachable NAIF server doesn't fail the job
+          echo "::warning::Could not read Last-Modified from $CSPICE_URL (NAIF may be down); using weekly CSPICE cache key"
+          CACHE_KEY="week-${{ steps.date.outputs.week }}"
+        fi
         echo "key=${CACHE_KEY}" >> $GITHUB_OUTPUT
 
     - name: Cache SPICE utilities
@@ -61,7 +67,10 @@ runs:
       shell: bash
       run: |
         CSPICE_DIR=$HOME/cspice
-        curl -L -o /tmp/cspice.tar.Z https://naif.jpl.nasa.gov/pub/naif/toolkit//C/PC_Linux_GCC_64bit/packages/cspice.tar.Z
+        curl -fL --connect-timeout 30 --max-time 300 --retry 3 --retry-all-errors \
+          -o /tmp/cspice.tar.Z \
+          https://naif.jpl.nasa.gov/pub/naif/toolkit//C/PC_Linux_GCC_64bit/packages/cspice.tar.Z \
+          || { echo "::error::Failed to download CSPICE toolkit (naif.jpl.nasa.gov may be down)"; exit 1; }
         mkdir -p $CSPICE_DIR
         tar -C $CSPICE_DIR -xzf /tmp/cspice.tar.Z cspice/exe
         rm /tmp/cspice.tar.Z
@@ -98,14 +107,17 @@ runs:
         virtualenvs-in-project: true
 
     - name: Restore virtualenv cache
-      # Key rotates weekly so the cache refreshes with the latest installed packages once per
-      # week. restore-keys ensures a warm restore even on a weekly miss (new key, old prefix).
+      # Key uses the exact patch version installed by setup-python: a venv hard-codes its
+      # interpreter path, so a venv cached under one patch release breaks when a runner image
+      # update replaces that interpreter. Key rotates weekly so the cache refreshes with the
+      # latest installed packages once per week. restore-keys ensures a warm restore even on
+      # a weekly miss (new key, old prefix).
       uses: actions/cache@v4
       with:
         path: .venv
-        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ steps.date.outputs.week }}
+        key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ steps.date.outputs.week }}
         restore-keys: |
-          venv-${{ runner.os }}-${{ inputs.python-version }}-
+          venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-
 
     - name: Install dependencies
       shell: bash
