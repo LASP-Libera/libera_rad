@@ -237,8 +237,7 @@ class TestReadAllInputData:
                 _, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
         assert dynamic_kernel_sources == [jpss_spk.filename, jpss_ck.filename]
-        assert "Skipping SPICE file" in caplog.text
-        assert "not in required set" in caplog.text
+        assert "jpss_only mode: skipping SPICE file" in caplog.text
 
 
 class TestExtractInputDataset:

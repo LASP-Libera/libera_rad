@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 import xarray as xr
+from libera_utils.constants import DataProductIdentifier
 
 from libera_rad.calibration.combiners import l1a_cal_event_utils as utils
-from libera_rad.l1b import REQUIRED_SPICE_CAL_AZEL
 
 
 def _event_with_fpe(n: int = 4) -> xr.Dataset:
@@ -21,19 +21,12 @@ def _event_with_fpe(n: int = 4) -> xr.Dataset:
 class TestAttachAzimuthElevationPositions:
     """Tests for attach_azimuth_elevation_positions."""
 
-    def test_use_geo_false_writes_fill(self):
-        event = _event_with_fpe(5)
-        result = utils.attach_azimuth_elevation_positions(event, [], use_geo=False)
-        assert np.all(result["Azimuth_Position"].values == np.float32(-999))
-        assert np.all(result["Elevation_Position"].values == np.float32(-999))
-        assert result["Azimuth_Position"].dims == ("RAD_SAMPLE_FPE_TIME",)
-
-    def test_use_geo_true_requires_kernels(self):
+    def test_requires_kernels(self):
         event = _event_with_fpe()
         with pytest.raises(ValueError, match="SPICE kernel sources are required"):
-            utils.attach_azimuth_elevation_positions(event, [], use_geo=True)
+            utils.attach_azimuth_elevation_positions(event, [])
 
-    def test_use_geo_true_calls_geolocation(self):
+    def test_calls_geolocation(self):
         event = _event_with_fpe(3)
         az = np.array([10.0, 20.0, 30.0], dtype=np.float32)
         el = np.array([1.0, 2.0, 3.0], dtype=np.float32)
@@ -48,7 +41,7 @@ class TestAttachAzimuthElevationPositions:
                 return_value=(az, el),
             ) as mock_calc,
         ):
-            result = utils.attach_azimuth_elevation_positions(event, ["az.bc", "el.bc"], use_geo=True)
+            result = utils.attach_azimuth_elevation_positions(event, ["az.bc", "el.bc"])
 
         mock_km.load_libera_dynamic_kernels.assert_called_once()
         mock_calc.assert_called_once()
@@ -58,45 +51,104 @@ class TestAttachAzimuthElevationPositions:
     def test_missing_fpe_time_raises(self):
         event = xr.Dataset({"x": ("PACKET", [1])})
         with pytest.raises(ValueError, match="RAD_SAMPLE_FPE_TIME"):
-            utils.attach_azimuth_elevation_positions(event, [], use_geo=False)
+            utils.attach_azimuth_elevation_positions(event, ["az.bc", "el.bc"])
 
 
-class TestReadCalibrationManifestData:
-    """Tests for read_calibration_manifest_data kernel intake."""
+class TestReadAllCalInputData:
+    """Tests for read_all_cal_input_data kernel intake."""
 
-    def test_use_geo_false_returns_empty_kernels(self):
+    def test_requires_azel_kernels(self):
+        az_name = "LIBERA_SPICE_AZROT-CK_V001_20200101T000000_20200101T010000_R1.bc"
+        el_name = "LIBERA_SPICE_ELSCAN-CK_V001_20200101T000000_20200101T010000_R1.bc"
+        nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
+
+        az_file = MagicMock(filename=az_name)
+        el_file = MagicMock(filename=el_name)
+        nc_file = MagicMock(filename=nc_name)
         manifest = MagicMock()
-        manifest.configuration = {"use_geo": False}
-        with patch(
-            "libera_rad.calibration.combiners.l1a_cal_event_utils.read_all_input_data",
-            return_value=({}, []),
-        ) as mock_read:
-            data, kernels = utils.read_calibration_manifest_data(manifest, require_azel_kernels=True)
-        assert data == {}
+        manifest.files = [nc_file, az_file, el_file]
+
+        mock_ds = xr.Dataset({"x": ("PACKET", [1])})
+        mock_handle = MagicMock()
+        mock_handle.__enter__ = MagicMock(return_value=mock_handle)
+        mock_handle.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.smart_open", return_value=mock_handle),
+            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.xr.open_dataset") as mock_open,
+            patch(
+                "libera_rad.calibration.combiners.l1a_cal_event_utils.LiberaDataProductFilename.from_file_path"
+            ) as mock_from_path,
+        ):
+            mock_open.return_value.load.return_value = mock_ds
+
+            def _product_id(path: str):
+                mock_fn = MagicMock()
+                if "AZROT" in path:
+                    mock_fn.data_product_id = DataProductIdentifier.spice_az_ck
+                elif "ELSCAN" in path:
+                    mock_fn.data_product_id = DataProductIdentifier.spice_el_ck
+                else:
+                    mock_fn.data_product_id = DataProductIdentifier.l1a_icie_nom_hk_decoded
+                return mock_fn
+
+            mock_from_path.side_effect = _product_id
+            data, kernels = utils.read_all_cal_input_data(manifest, require_azel_kernels=True)
+
+        assert nc_name in data
+        assert kernels == [az_name, el_name]
+
+    def test_missing_azel_raises(self):
+        nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
+        nc_file = MagicMock(filename=nc_name)
+        manifest = MagicMock()
+        manifest.files = [nc_file]
+
+        mock_ds = xr.Dataset({"x": ("PACKET", [1])})
+        mock_handle = MagicMock()
+        mock_handle.__enter__ = MagicMock(return_value=mock_handle)
+        mock_handle.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.smart_open", return_value=mock_handle),
+            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.xr.open_dataset") as mock_open,
+            patch(
+                "libera_rad.calibration.combiners.l1a_cal_event_utils.LiberaDataProductFilename.from_file_path"
+            ) as mock_from_path,
+        ):
+            mock_open.return_value.load.return_value = mock_ds
+            mock_fn = MagicMock()
+            mock_fn.data_product_id = DataProductIdentifier.l1a_icie_nom_hk_decoded
+            mock_from_path.return_value = mock_fn
+            with pytest.raises(ValueError, match="missing required SPICE data products"):
+                utils.read_all_cal_input_data(manifest, require_azel_kernels=True)
+
+    def test_gain_path_skips_spice(self, caplog):
+        az_name = "LIBERA_SPICE_AZROT-CK_V001_20200101T000000_20200101T010000_R1.bc"
+        nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
+        az_file = MagicMock(filename=az_name)
+        nc_file = MagicMock(filename=nc_name)
+        manifest = MagicMock()
+        manifest.files = [nc_file, az_file]
+
+        mock_ds = xr.Dataset({"x": ("PACKET", [1])})
+        mock_handle = MagicMock()
+        mock_handle.__enter__ = MagicMock(return_value=mock_handle)
+        mock_handle.__exit__ = MagicMock(return_value=False)
+
+        with (
+            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.smart_open", return_value=mock_handle),
+            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.xr.open_dataset") as mock_open,
+            patch(
+                "libera_rad.calibration.combiners.l1a_cal_event_utils.LiberaDataProductFilename.from_file_path"
+            ) as mock_from_path,
+        ):
+            mock_open.return_value.load.return_value = mock_ds
+            mock_fn = MagicMock()
+            mock_fn.data_product_id = DataProductIdentifier.l1a_icie_nom_hk_decoded
+            mock_from_path.return_value = mock_fn
+            data, kernels = utils.read_all_cal_input_data(manifest, require_azel_kernels=False)
+
+        assert nc_name in data
         assert kernels == []
-        mock_read.assert_called_once_with(manifest, required_spice=REQUIRED_SPICE_CAL_AZEL)
-
-    def test_use_geo_true_requests_azel_kernels(self):
-        manifest = MagicMock()
-        manifest.configuration = {}
-        with patch(
-            "libera_rad.calibration.combiners.l1a_cal_event_utils.read_all_input_data",
-            return_value=({"a.nc": xr.Dataset()}, ["az.bc", "el.bc"]),
-        ) as mock_read:
-            data, kernels = utils.read_calibration_manifest_data(manifest, require_azel_kernels=True)
-        assert "a.nc" in data
-        assert kernels == ["az.bc", "el.bc"]
-        mock_read.assert_called_once_with(manifest, required_spice=REQUIRED_SPICE_CAL_AZEL)
-
-    def test_gain_path_forces_use_geo_false(self):
-        manifest = MagicMock()
-        manifest.configuration = {"use_geo": True}
-        copied = MagicMock()
-        manifest.model_copy.return_value = copied
-        with patch(
-            "libera_rad.calibration.combiners.l1a_cal_event_utils.read_all_input_data",
-            return_value=({}, []),
-        ) as mock_read:
-            utils.read_calibration_manifest_data(manifest, require_azel_kernels=False)
-        manifest.model_copy.assert_called_once()
-        mock_read.assert_called_once_with(copied)
+        assert "Skipping SPICE kernel" in caplog.text

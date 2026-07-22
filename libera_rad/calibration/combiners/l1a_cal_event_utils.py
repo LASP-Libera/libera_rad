@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 from cloudpathlib import S3Path
-from libera_utils import Manifest
+from libera_utils import Manifest, smart_open
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.filenaming import LiberaDataProductFilename
 from libera_utils.libera_spice.kernel_manager import KernelManager
@@ -31,10 +31,16 @@ from libera_rad.calibration.constants import (
     CalEventSpec,
     CalFamily,
 )
-from libera_rad.l1b import REQUIRED_SPICE_CAL_AZEL, extract_input_dataset, read_all_input_data
+from libera_rad.l1b import extract_input_dataset
 from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
+
+#: Motor CK products required for SWC/LWC/SOLAR Azimuth/Elevation (furnish order).
+_REQUIRED_SPICE_CAL_AZEL: tuple[DataProductIdentifier, ...] = (
+    DataProductIdentifier.spice_az_ck,
+    DataProductIdentifier.spice_el_ck,
+)
 
 #: Secondary FPE time dimension to slice for products that have one.
 _COMPANION_SECONDARY_TIME_DIM: dict[DataProductIdentifier, str] = {
@@ -111,18 +117,18 @@ def slice_dataset_to_time_window(
     return ds.isel(sel)
 
 
-def read_calibration_manifest_data(
+def read_all_cal_input_data(
     input_manifest: Manifest,
     *,
     require_azel_kernels: bool = True,
 ) -> tuple[dict[str, xr.Dataset], list[str]]:
     """Load decoded L1A datasets and optional AZROT/ELSCAN kernels from a cal manifest.
 
-    When ``require_azel_kernels`` is true, honors ``configuration.use_geo`` like L1B:
-    when true (default), requires AZROT-CK and ELSCAN-CK and returns their paths.
-    When false, SPICE kernels are skipped and an empty kernel list is returned.
+    When ``require_azel_kernels`` is true (SWC/LWC/SOLAR), AZROT-CK and ELSCAN-CK
+    are required and returned in furnish order. Other SPICE products on the
+    manifest are skipped with a warning.
 
-    When ``require_azel_kernels`` is false (GAIN family), SPICE products are never
+    When ``require_azel_kernels`` is false (GAIN), SPICE products are never
     required; any ``.bc``/``.bsp`` files on the manifest are skipped.
 
     Parameters
@@ -138,35 +144,85 @@ def read_calibration_manifest_data(
         Decoded L1A datasets keyed by filename.
     list of str
         Dynamic kernel paths in furnish order (AZROT then ELSCAN), or empty
-        when kernels are not required or ``use_geo`` is false.
-    """
-    if not require_azel_kernels:
-        read_manifest = input_manifest.model_copy(
-            update={"configuration": {**input_manifest.configuration, "use_geo": False}}
-        )
-        return read_all_input_data(read_manifest)
+        when kernels are not required.
 
-    return read_all_input_data(input_manifest, required_spice=REQUIRED_SPICE_CAL_AZEL)
+    Raises
+    ------
+    ValueError
+        If required AZROT/ELSCAN kernels are missing or duplicated.
+    Exception
+        If any NetCDF file cannot be opened or is invalid.
+    """
+    all_data: dict[str, xr.Dataset] = {}
+    spice_files: dict[DataProductIdentifier, str] = {}
+    spice_allowlist = set(_REQUIRED_SPICE_CAL_AZEL)
+
+    for i, file_info in enumerate(input_manifest.files):
+        logger.info("Reading file %d/%d: %s", i + 1, len(input_manifest.files), file_info.filename)
+        try:
+            if file_info.filename.endswith((".bc", ".bsp")):
+                if not require_azel_kernels:
+                    logger.warning("Skipping SPICE kernel %s (not required for this cal family)", file_info.filename)
+                    continue
+
+                product_id = LiberaDataProductFilename.from_file_path(file_info.filename).data_product_id
+                if product_id not in spice_allowlist:
+                    logger.warning(
+                        "Skipping SPICE file %s (%s); not in required AZROT/ELSCAN set",
+                        file_info.filename,
+                        product_id,
+                    )
+                    continue
+
+                if product_id in spice_files:
+                    raise ValueError(
+                        f"Duplicate SPICE data product {product_id} in manifest: "
+                        f"{spice_files[product_id]} and {file_info.filename}"
+                    )
+
+                spice_files[product_id] = file_info.filename
+                logger.info("Recorded SPICE kernel %s (%s)", file_info.filename, product_id)
+            else:
+                with smart_open(file_info.filename) as file_handle:
+                    LiberaDataProductFilename.from_file_path(file_info.filename)
+                    dataset = xr.open_dataset(file_handle, decode_times=True).load()
+                    all_data[file_info.filename] = dataset
+                    logger.info("Successfully loaded dataset: %s", file_info.filename)
+        except Exception:
+            logger.error("Failed to process file %s", file_info.filename, exc_info=True)
+            raise
+
+    dynamic_kernel_sources: list[str] = []
+    if require_azel_kernels:
+        missing = [product_id for product_id in _REQUIRED_SPICE_CAL_AZEL if product_id not in spice_files]
+        if missing:
+            labels = ", ".join(str(product_id) for product_id in missing)
+            raise ValueError(f"Input manifest missing required SPICE data products: {labels}")
+        dynamic_kernel_sources = [spice_files[product_id] for product_id in _REQUIRED_SPICE_CAL_AZEL]
+
+    logger.info(
+        "Successfully loaded %d datasets and %d SPICE kernel paths",
+        len(all_data),
+        len(dynamic_kernel_sources),
+    )
+    if not all_data:
+        logger.warning("No data files were loaded from manifest")
+
+    return all_data, dynamic_kernel_sources
 
 
 def attach_azimuth_elevation_positions(
     cal_event: xr.Dataset,
     dynamic_kernel_sources: Sequence[str | Path | S3Path],
-    *,
-    use_geo: bool,
 ) -> xr.Dataset:
-    """Attach ``Azimuth_Position`` / ``Elevation_Position`` on radiometer FPE time.
+    """Attach SPICE-derived ``Azimuth_Position`` / ``Elevation_Position`` on FPE time.
 
     Parameters
     ----------
     cal_event : xr.Dataset
         Merged SWC/LWC/SOLAR calibration event dataset.
     dynamic_kernel_sources : sequence of str, Path, or S3Path
-        AZROT-CK and ELSCAN-CK paths from the input manifest. Required when
-        ``use_geo`` is true.
-    use_geo : bool
-        When true, compute motor encoder angles via SPICE. When false, write
-        product fill values (``-999``).
+        AZROT-CK and ELSCAN-CK paths from the input manifest.
 
     Returns
     -------
@@ -176,24 +232,18 @@ def attach_azimuth_elevation_positions(
     Raises
     ------
     ValueError
-        If ``RAD_SAMPLE_FPE_TIME`` is missing, or ``use_geo`` is true and kernel
-        sources are empty.
+        If ``RAD_SAMPLE_FPE_TIME`` is missing or kernel sources are empty.
     """
     if _RAD_SAMPLE_FPE_TIME not in cal_event:
         raise ValueError(f"Calibration event dataset is missing {_RAD_SAMPLE_FPE_TIME}")
 
     timestamps = np.asarray(cal_event[_RAD_SAMPLE_FPE_TIME].values)
-    n_samples = len(timestamps)
+    if not dynamic_kernel_sources:
+        raise ValueError("SPICE kernel sources are required for Azimuth_Position / Elevation_Position")
 
-    if not use_geo:
-        logger.info("use_geo is false: writing placeholder Azimuth_Position / Elevation_Position")
-        azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
-    else:
-        if not dynamic_kernel_sources:
-            raise ValueError("SPICE kernel sources are required for Azimuth_Position when use_geo is True")
-        with KernelManager() as km:
-            km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-            azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+    with KernelManager() as km:
+        km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
+        azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
 
     cal_event = cal_event.assign(
         {

@@ -47,7 +47,7 @@ def build_cal_event_manifest(
     input_dir : Path or S3Path
         Destination directory for copied inputs and the manifest.
     configuration : dict, optional
-        Manifest configuration (e.g. ``{"use_geo": False}``).
+        Manifest configuration dictionary.
     spice_kernel_dir : Path, optional
         Directory containing AZROT-CK / ELSCAN-CK ``.bc`` files to include.
 
@@ -78,23 +78,14 @@ def build_cal_event_manifest(
     return manifest.write(out_path=input_dir)
 
 
-def assert_azimuth_elevation_positions(
-    dataset: xr.Dataset,
-    *,
-    expect_fill: bool = False,
-) -> None:
-    """Assert Azimuth_Position / Elevation_Position exist on RAD_SAMPLE_FPE_TIME."""
+def assert_azimuth_elevation_positions(dataset: xr.Dataset) -> None:
+    """Assert Azimuth_Position / Elevation_Position exist with finite SPICE values."""
     for name in ("Azimuth_Position", "Elevation_Position"):
         assert name in dataset, f"Missing {name}"
         assert dataset[name].dims == ("RAD_SAMPLE_FPE_TIME",)
         values = np.asarray(dataset[name].values, dtype=np.float64)
-        if expect_fill:
-            # Product write may encode _FillValue=-999 as NaN on read-back.
-            is_fill = np.isnan(values) | (values == -999.0)
-            assert np.all(is_fill), f"{name} expected fill -999 (or NaN after decode)"
-        else:
-            finite = np.isfinite(values) & (values != -999.0)
-            assert np.any(finite), f"{name} expected finite SPICE-derived values"
+        finite = np.isfinite(values) & (values != -999.0)
+        assert np.any(finite), f"{name} expected finite SPICE-derived values"
 
 
 def assert_companions_within_nom_hk_window(dataset: xr.Dataset) -> None:

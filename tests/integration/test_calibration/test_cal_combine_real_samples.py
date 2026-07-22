@@ -124,47 +124,7 @@ def test_cal_combine_real_sample_event(
     _assert_source_obsids(dataset, obsid)
 
     if obsid in _AZEL_OBSIDS:
-        assert_azimuth_elevation_positions(dataset, expect_fill=False)
+        assert_azimuth_elevation_positions(dataset)
     else:
         assert "Azimuth_Position" not in dataset
         assert "Elevation_Position" not in dataset
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("path_type", ["Local", "S3"], indirect=True)
-def test_cal_combine_use_geo_false_writes_fill_azimuth_elevation(
-    test_l1a_cal_data_path,
-    cal_io_paths,
-    monkeypatch,
-):
-    """use_geo=false writes Azimuth/Elevation fill values and does not need motor CKs."""
-    obsid = 320
-    filenames = [
-        "LIBERA_L1A_NOM-HK-LWC-TEMP1-TRIMMED_V5-8-5RC1_20280212T000127_20280212T000735_R26199220207.nc",
-        "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280212T000050_20280212T020052_R26163174745.nc",
-        "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5RC1_20280212T000059_20280212T020011_R26163174745.nc",
-        "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280212T000147_20280212T020019_R26163174745.nc",
-    ]
-    input_dir, output_dir = cal_io_paths
-    event_spec = CAL_EVENT_BY_OBSID[obsid]
-    sample_dir = test_l1a_cal_data_path / _SAMPLE_TWO
-
-    manifest_path = build_cal_event_manifest(
-        sample_dir,
-        filenames,
-        input_dir,
-        configuration={"use_geo": False},
-    )
-    monkeypatch.setenv("PROCESSING_PATH", str(output_dir))
-    monkeypatch.setenv(LIBERA_CAL_OBSID_ENV, str(obsid))
-
-    output_manifest_path = algorithm(manifest_path)
-    output_manifest = Manifest.from_file(output_manifest_path)
-    assert len(output_manifest.files) == 1
-
-    output_file = output_manifest.files[0].filename
-    dataset = load_cal_netcdf(output_file)
-    assert_cal_product_conformance(dataset, output_file, event_spec)
-    assert_companions_within_nom_hk_window(dataset)
-    _assert_source_obsids(dataset, obsid)
-    assert_azimuth_elevation_positions(dataset, expect_fill=True)
