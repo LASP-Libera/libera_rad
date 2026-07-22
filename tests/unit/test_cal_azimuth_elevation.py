@@ -56,9 +56,7 @@ class TestAttachAzimuthElevationPositions:
                 return_value=(az, el),
             ) as mock_calc,
         ):
-            result = utils.attach_azimuth_elevation_positions(
-                event, ["az.bc", "el.bc"], use_geo=True
-            )
+            result = utils.attach_azimuth_elevation_positions(event, ["az.bc", "el.bc"], use_geo=True)
 
         mock_km.load_libera_dynamic_kernels.assert_called_once()
         mock_calc.assert_called_once()
