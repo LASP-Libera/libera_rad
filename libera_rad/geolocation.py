@@ -13,6 +13,7 @@ import pandas as pd
 from curryer import spicetime
 from curryer import spicierpy as sp
 from curryer.compute import geometry, spatial
+from curryer.spicierpy.ext import spice_error_message
 from libera_utils.libera_spice.kernel_manager import KernelManager
 from spiceypy.utils.exceptions import SpiceyError
 
@@ -32,13 +33,12 @@ _GEOMETRY_FIELDS = (
 def _spice_error_message(err: SpiceyError) -> str:
     """User-facing description of a SPICE failure.
 
-    Uses curryer's SPICE-error classifier when the installed curryer provides it, otherwise
-    falls back to the raw exception text. (The classifier ships in a later curryer release.)
+    Delegates to curryer's SPICE-error classifier, which maps the NAIF short name to a
+    plain-language cause. Short names it does not recognize degrade to a generic
+    ``"SPICE reported an error."`` summary rather than raising, and the short name and
+    failing routine are appended either way -- so every ``SpiceyError`` yields a usable
+    message and no additional exception handling is needed here.
     """
-    try:
-        from curryer.spicierpy.ext import spice_error_message
-    except ImportError:
-        return str(err)
     return spice_error_message(err)
 
 

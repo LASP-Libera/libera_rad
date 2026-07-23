@@ -20,6 +20,17 @@ from libera_rad.radiometer.radiance import (
 )
 from libera_rad.version import version as libera_rad_version
 
+# Product fields populated from curryer ``GeometryData`` rather than fill sentinels.
+_CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
+    "Subsatellite_Latitude",
+    "Subsatellite_Longitude",
+    "Subsatellite_Colatitude",
+    "Subsolar_Latitude",
+    "Subsolar_Longitude",
+    "Subsolar_Colatitude",
+    "Radius_of_Satellite_from_Center_of_Earth",
+)
+
 # Mapping from ChannelName enum values to L1B product variable names
 _CHANNEL_TO_RADIANCE_VAR: dict[str, str] = {
     ChannelName.SHORTWAVE.value: "Filtered_Radiance_SW",
@@ -185,6 +196,19 @@ class TestL1bScienceValues:
         vals = l1b_product_dataset[var_name].values
         assert np.any(vals != fill_value), f"{var_name} contains only fill-value sentinels"
 
+    @pytest.mark.parametrize("var_name", _CURRYER_GEOMETRY_VARS)
+    def test_curryer_geometry_fields_written_to_product(self, l1b_product_dataset, product_definition, var_name):
+        """Each curryer-derived geometry field must reach the written product as real values.
+
+        Guards the full path from ``calculate_geometry`` through packaging to NetCDF: a field
+        that silently reverted to its fill sentinel, or came back all-NaN because the kernels
+        did not cover the granule, fails here rather than shipping in the product.
+        """
+        fill_value = product_definition["variables"][var_name]["attributes"]["_FillValue"]
+        vals = l1b_product_dataset[var_name].values
+        computed = vals[(vals != fill_value) & np.isfinite(vals)]
+        assert len(computed) > 0, f"{var_name} reached the product with no computed values (all fill or NaN)"
+
     def test_operational_mode_matches_fixture_obsid(self, l1b_product_dataset, product_definition):
         """Operational_Mode should reflect the fixture L1A OBSID (currently constant 128 in test data)."""
         fill_value = product_definition["variables"]["Operational_Mode"]["attributes"]["_FillValue"]
@@ -336,6 +360,39 @@ class TestL1bPhysicalInvariants:
             vals = l1b_product_dataset[var_name].values
             non_fill = vals[vals != fill_value]
             assert np.all(non_fill >= 0), f"{var_name}: non-fill radiance values must be non-negative"
+
+    @pytest.mark.parametrize("var_name", _CURRYER_GEOMETRY_VARS)
+    def test_curryer_geometry_fields_within_valid_range(self, l1b_product_dataset, var_name):
+        """Computed geometry values must respect the valid_range the product definition declares."""
+        definition = yaml.safe_load(product_config_path.read_text())["variables"][var_name]["attributes"]
+        low, high = definition["valid_range"]
+        fill_value = definition["_FillValue"]
+
+        vals = l1b_product_dataset[var_name].values
+        computed = vals[(vals != fill_value) & np.isfinite(vals)]
+
+        assert len(computed) > 0, f"No computed {var_name} values available for range checks"
+        assert np.all((computed >= low) & (computed <= high)), (
+            f"{var_name} has computed values outside its declared valid_range [{low}, {high}]: "
+            f"min={computed.min()}, max={computed.max()}"
+        )
+
+    def test_subsatellite_point_tracks_instrument_ground_point(self, l1b_product_dataset):
+        """The subsatellite point must stay near the instrument ground point.
+
+        Both describe the same overpass, so a swap, a frame error, or a stale index would show
+        up as a gross separation. The bound is loose on purpose -- the boresight scans
+        cross-track away from nadir, so real separation of several degrees is expected.
+        """
+        lat_fill = -999.0
+        lat = l1b_product_dataset["Latitude"].values
+        subsat_lat = l1b_product_dataset["Subsatellite_Latitude"].values
+
+        non_fill = (lat != lat_fill) & np.isfinite(lat) & (subsat_lat != lat_fill) & np.isfinite(subsat_lat)
+        assert np.any(non_fill), "No overlapping computed Latitude/Subsatellite_Latitude samples"
+        assert np.max(np.abs(lat[non_fill] - subsat_lat[non_fill])) < 30.0, (
+            "Subsatellite_Latitude is implausibly far from the instrument Latitude"
+        )
 
     def test_earth_sun_distance_plausible(self, l1b_product_dataset):
         """Earth-Sun distance must be within the nominal orbital range of 0.95 to 1.05 AU."""

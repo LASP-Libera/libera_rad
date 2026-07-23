@@ -1,5 +1,13 @@
 # Version Changes
 
+## 0.6.1
+
+- Migrate geolocation onto `curryer.compute.geometry.GeometryData`: remove the in-house SPICE subsatellite implementation (`_spacecraft_ecef_positions`, `_subsatellite_lla_from_ecef`, `calculate_libera_base_subsatellite_geolocation`) in favor of a single vectorized `calculate_geometry` call, and return instrument geolocation as one lat/lon/alt DataFrame.
+- Populate `Subsatellite_Latitude`/`_Longitude`/`_Colatitude`, `Subsolar_Latitude`/`_Longitude`/`_Colatitude`, and `Radius_of_Satellite_from_Center_of_Earth`, all of which previously shipped as `-999`/`-9999` fill.
+- Move `use_geo: false` fill values out of L1B packaging into `geolocation.create_placeholder_geometry`, alongside the existing azimuth/lat-lon producers; the packager now always receives a geometry DataFrame and no longer branches on its absence.
+- Raise a parsed, user-facing `RuntimeError` when a curryer SPICE query fails or returns no coverage for the granule, instead of silently packaging NaN.
+- Require `lasp-curryer >= 0.5.0` for the `GeometryField` enum and the SPICE error classifier.
+
 ## 0.6.0
 
 - Add calibration L1A combiners into `libera_rad.calibration.combiners`, remove offline `run_*_cal_event` scripts in favor of integration tests under `tests/integration/test_calibration/`, and update tests to use canonical import paths.

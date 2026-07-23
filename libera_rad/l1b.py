@@ -425,8 +425,9 @@ def _package_l1b_product(
         Instrument geolocation (latitude, longitude, altitude) on the L1B time grid.
     geometry_data : pd.DataFrame
         Curryer ``GeometryData`` fields (subsatellite / subsolar points and satellite
-        radius) for the granule; always provided -- real values, or placeholders in
-        ``use_geo`` false mode.
+        radius) for the granule; always provided -- real values, or fill values in
+        ``use_geo`` false mode, where geolocation is intentionally bypassed and no data
+        is forthcoming.
     calculated_radiance_by_channel : dict[str, np.ndarray]
         Calculated radiance values for each channel.
 
