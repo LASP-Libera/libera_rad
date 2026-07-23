@@ -9,6 +9,10 @@
 - Query the spacecraft and instrument observers separately in `calculate_geometry`, populating the boresight surface geometry: `Viewing_Zenith_Surface`, `Solar_Zenith_Surface`, `Viewing_Azimuth_Surface_WRT_North`, `Solar_Azimuth_Surface_WRT_North`, `Relative_Azimuth_Surface`, `Cone_Angle`, and `Cone_Angle_Rate`. Boresight fields are NaN in `jpss_only` mode, where the instrument frame does not resolve; the spacecraft fields still come through.
 - Derive `Colatitude` from curryer's `surface_colatitude` rather than computing it locally.
 - Validate the spacecraft and instrument observer frames against the Libera FK (`SPACECRAFT_OBSERVERS`, `INSTRUMENT_OBSERVERS`), raising `ValueError` for a frame used in the wrong role rather than silently computing geometry for the wrong optic.
+- Populate the motion/attitude fields: `Satellite_Velocity`, `Satellite_Attitude_Q0..Q3`, `Clock_Angle`, `Clock_Angle_Rate`, `Along_Track_Angle`, `Cross_Track_Angle`, and `Line_Of_Sight`. Velocity and attitude ride the spacecraft observer, so they still resolve in `jpss_only`; the clock and along/cross-track angles ride the instrument observer and are NaN there.
+- Add `calculate_start_of_hour_state`, populating `Satellite_Position_Start_Of_Hour` and `Satellite_Velocity_Start_Of_Hour` on the fixed 24-hour `N_HOURS` grid for the granule's start day.
+- Gate `Clock_Angle_Rate` inside a 6 degree nadir cone, where the clock angle is an azimuth about nadir and its rate is a coordinate singularity rather than a real derivative. Ungated, 204 of 2995 reference samples exceeded the declared `valid_range` of `[-20, 20]`, peaking at 7588 deg/s.
+- Add `libera_rad.constants` for the geometry SPICE frames and science tunables, replacing defaults previously embedded at their call sites.
 - Require `lasp-curryer >= 0.5.0` for the `GeometryField` enum and the SPICE error classifier.
 
 ## 0.6.0

@@ -8,7 +8,7 @@ from libera_utils.io.manifest import Manifest
 from libera_utils.libera_spice.kernel_manager import KernelManager
 
 from libera_rad import l1b
-from libera_rad.geolocation import calculate_geolocation_for_timestamps
+from libera_rad.geolocation import calculate_geolocation_for_timestamps, calculate_geometry
 from libera_rad.radiometer.radiance import calibrate_and_downsample_radiometer_data
 
 _LATITUDE_FILL = np.float32(-999)
@@ -121,3 +121,35 @@ class TestL1bManifestUseGeoConfiguration:
             assert not np.any(np.isfinite(dataset["Latitude"].values))
             assert not np.any(np.isfinite(dataset["Longitude"].values))
             assert not np.any(np.isfinite(dataset["Altitude"].values))
+
+
+class TestGeometryErrorHandling:
+    """SPICE failures from the curryer geometry query surface as parsed, user-facing errors."""
+
+    @pytest.fixture(autouse=True)
+    def clear_spice_state(self):
+        try:
+            sp.kclear()
+        except Exception:
+            pass
+        yield
+        try:
+            sp.kclear()
+        except Exception:
+            pass
+
+    def test_out_of_coverage_request_raises_friendly_error(self, test_integration_data_path):
+        """A geometry request outside kernel coverage must raise a parsed RuntimeError, not a raw SpiceyError dump."""
+        kernel_sources = [str(test_integration_data_path / name) for name in _INTEGRATION_KERNEL_FILENAMES]
+        # The loaded kernels cover 2025-11-20; request timestamps years outside that window.
+        out_of_coverage = np.array(["2000-01-01T00:00:00", "2000-01-01T00:00:01"], dtype="datetime64[ns]")
+        with KernelManager() as km:
+            km.load_libera_dynamic_kernels(kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
+            with pytest.raises(RuntimeError) as excinfo:
+                calculate_geometry(km, out_of_coverage)
+
+        message = str(excinfo.value)
+        assert "JPSS4_SC" in message, message
+        assert "coverage" in message.lower(), message
+        # A parsed cause, not the raw multi-line NAIF traceback dump.
+        assert "Toolkit version" not in message, message

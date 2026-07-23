@@ -17,6 +17,13 @@ from curryer.spicierpy.ext import spice_error_message
 from libera_utils.libera_spice.kernel_manager import KernelManager
 from spiceypy.utils.exceptions import SpiceyError
 
+from libera_rad.constants import (
+    DEFAULT_INSTRUMENT_OBSERVER,
+    DEFAULT_SPACECRAFT_OBSERVER,
+    INSTRUMENT_OBSERVERS,
+    SPACECRAFT_OBSERVERS,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,8 +35,12 @@ _SPACECRAFT_FIELDS = (
     geometry.GeometryField.SUBSOLAR,
     geometry.GeometryField.SC_RADIUS,
     geometry.GeometryField.SC_ALTITUDE,
+    geometry.GeometryField.SC_POSITION_INERTIAL,
+    geometry.GeometryField.SC_VELOCITY_INERTIAL,
+    geometry.GeometryField.SATELLITE_ATTITUDE,
 )
 _INSTRUMENT_FIELDS = (
+    geometry.GeometryField.BORESIGHT_INERTIAL,
     geometry.GeometryField.VIEWING_ZENITH,
     geometry.GeometryField.SOLAR_ZENITH,
     geometry.GeometryField.VIEWING_AZIMUTH,
@@ -37,22 +48,12 @@ _INSTRUMENT_FIELDS = (
     geometry.GeometryField.RELATIVE_AZIMUTH,
     geometry.GeometryField.CONE_ANGLE,
     geometry.GeometryField.CONE_ANGLE_RATE,
+    geometry.GeometryField.CLOCK_ANGLE,
+    geometry.GeometryField.CLOCK_ANGLE_RATE,
+    geometry.GeometryField.ALONG_TRACK_ANGLE,
+    geometry.GeometryField.CROSS_TRACK_ANGLE,
 )
 _GEOMETRY_FIELDS = _SPACECRAFT_FIELDS + _INSTRUMENT_FIELDS
-
-# Spacecraft frames the Libera FK defines. Libera flies on JPSS-4; NOAA-20 is the alternate
-# bus configuration carried in the same kernel set.
-SPACECRAFT_OBSERVERS = ("JPSS4_SC", "NOAA20_SC")
-DEFAULT_SPACECRAFT_OBSERVER = "JPSS4_SC"
-
-# The four radiometer channel frames the Libera FK defines. All four are currently identity
-# rotations relative to ``LIBERA_EL_COORD`` -- the channels are co-boresighted, so geometry
-# computed for any one of them is valid for all four, and one query suffices. There is no
-# generic ``LIBERA_RAD`` frame to name instead. Should the FK ever carry real per-channel
-# boresight offsets, each channel would need its own query and the product would need
-# per-channel geometry fields.
-INSTRUMENT_OBSERVERS = ("LIBERA_SW_RAD", "LIBERA_LW_RAD", "LIBERA_TOT_RAD", "LIBERA_SSW_RAD")
-DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_SW_RAD"
 
 
 def _validate_observer(observer: str, allowed: tuple[str, ...], role: str) -> None:
@@ -203,9 +204,13 @@ def _query_geometry(
     u_gps_times: np.ndarray,
     fields: tuple,
     require_coverage: bool,
+    coverage_fields: tuple = (),
+    **data_kwargs,
 ) -> pd.DataFrame:
     """
     One curryer ``GeometryData`` query, surfacing SPICE failures as readable errors.
+
+    Extra keyword arguments (e.g. ``attitude_frame``) are forwarded to ``GeometryData``.
 
     Parameters
     ----------
@@ -216,9 +221,14 @@ def _query_geometry(
     fields : tuple of GeometryField
         Fields to compute for this observer.
     require_coverage : bool
-        If True, raise when *every* value is NaN -- the kernels do not cover the granule at
-        all (a misconfiguration). The instrument observer passes False, since its fields are
-        legitimately all-NaN in ``jpss_only`` mode.
+        If True, raise when the coverage fields are entirely NaN -- the kernels do not cover
+        the granule at all (a misconfiguration). The instrument observer passes False, since
+        its fields are legitimately all-NaN in ``jpss_only`` mode.
+    coverage_fields : tuple of GeometryField, optional
+        Fields whose all-NaN state signals no coverage; defaults to every requested field. The
+        spacecraft observer restricts this to an ephemeris-derived field, since the subsolar
+        point is computed from the Sun ephemeris alone and stays finite even when the
+        spacecraft kernels miss the granule.
 
     Returns
     -------
@@ -233,14 +243,16 @@ def _query_geometry(
         carry a parsed, user-facing description of the cause.
     """
     try:
-        result = geometry.GeometryData(observer).get_geometry(u_gps_times, fields=list(fields))
+        result = geometry.GeometryData(observer, **data_kwargs).get_geometry(u_gps_times, fields=list(fields))
     except SpiceyError as err:
         raise RuntimeError(f"curryer geometry query failed for {observer!r}: {_spice_error_message(err)}") from err
-    if require_coverage and bool(result.isna().to_numpy().all()):
-        raise RuntimeError(
-            f"curryer geometry returned no coverage for observer {observer!r} over the granule; "
-            "check that the SPICE kernels cover the requested times."
-        )
+    if require_coverage:
+        coverage_columns = [column for field in (coverage_fields or fields) for column in field.columns]
+        if bool(result[coverage_columns].isna().to_numpy().all()):
+            raise RuntimeError(
+                f"curryer geometry returned no coverage for observer {observer!r} over the granule; "
+                "check that the SPICE kernels cover the requested times."
+            )
     return result
 
 
@@ -256,10 +268,12 @@ def calculate_geometry(
     curryer's selective-compute registry queries each SPICE input once, vectorized, with
     coverage gaps surfaced as NaN. Two calls, joined on the shared uGPS index:
 
-    - the **spacecraft** observer yields the position-derived fields (subsatellite and
-      subsolar points, satellite radius, and geodetic altitude);
-    - the **instrument** observer yields the boresight surface geometry (viewing and
-      solar zenith / azimuth, relative azimuth, and cone angle with its rate).
+    - the **spacecraft** observer yields the fields needing only its ephemeris and body
+      attitude (subsatellite and subsolar points, satellite radius, altitude, inertial
+      (J2000) position and velocity, and the Earth-fixed attitude quaternion);
+    - the **instrument** observer yields the boresight geometry (viewing and solar zenith /
+      azimuth, relative azimuth, cone and clock angles and their rates, along/cross-track
+      look angles, and the inertial boresight vector).
 
     The split is by necessity, not preference. The spacecraft observer resolves a valid
     position in every mode, whereas the boresight fields require the instrument frame. In
@@ -302,11 +316,70 @@ def calculate_geometry(
     _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
     kernel_manager.ensure_known_kernels_are_furnished()
     u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
-    # Spacecraft fields resolve in every mode, so all-NaN means the kernels miss the granule.
-    spacecraft = _query_geometry(spacecraft_observer, u_gps_times, _SPACECRAFT_FIELDS, require_coverage=True)
-    # Instrument surface fields are legitimately all-NaN in jpss_only (no motor CK).
+    # Spacecraft fields resolve in every mode, so all-NaN means the kernels miss the granule. The
+    # attitude quaternion is Earth-fixed (product convention); the inertial fields keep J2000.
+    spacecraft = _query_geometry(
+        spacecraft_observer,
+        u_gps_times,
+        _SPACECRAFT_FIELDS,
+        require_coverage=True,
+        coverage_fields=(geometry.GeometryField.SUBSATELLITE,),
+        attitude_frame=spatial.EARTH_FRAME,
+    )
+    # Instrument fields are legitimately all-NaN in jpss_only (no motor CK).
     instrument = _query_geometry(instrument_observer, u_gps_times, _INSTRUMENT_FIELDS, require_coverage=False)
     return spacecraft.join(instrument)
+
+
+def calculate_start_of_hour_state(
+    kernel_manager: KernelManager,
+    timestamps: np.ndarray,
+    observer: str = DEFAULT_SPACECRAFT_OBSERVER,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Spacecraft inertial (J2000) position and velocity at each top-of-hour of the granule's UTC day.
+
+    The product carries the spacecraft state on a fixed 24-hour grid (``N_HOURS``), not on
+    the radiometer time grid. "Start of hour" is a mission timetag convention, so the
+    hour-boundary epochs are built here and curryer is queried at exactly those times --
+    curryer's ``GeometryData`` has no notion of an hour boundary.
+
+    The 24 epochs are the top of each hour (00:00 .. 23:00 UTC) of the day the granule
+    *starts* in; a granule spanning midnight still reports its start day. Hours outside
+    SPK coverage come back NaN, per the curryer fill contract.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the spacecraft SPK furnished.
+    timestamps : np.ndarray
+        Radiometer timestamps; only the first is used, to pick the UTC day.
+    observer : str
+        SPICE frame for the spacecraft, one of :data:`SPACECRAFT_OBSERVERS`. Default
+        ``"JPSS4_SC"``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        `(position, velocity)`, each shape `(24, 3)` in the J2000 inertial frame, km and km/s.
+
+    Raises
+    ------
+    ValueError
+        If ``observer`` is not a known Libera spacecraft frame.
+    """
+    _validate_observer(observer, SPACECRAFT_OBSERVERS, "spacecraft")
+    kernel_manager.ensure_known_kernels_are_furnished()
+    day_start = pd.Timestamp(np.asarray(timestamps, dtype="datetime64[ns]")[0]).normalize()
+    hour_epochs = pd.date_range(day_start, periods=24, freq="h")
+    u_gps_times = spicetime.adapt(pd.DatetimeIndex(hour_epochs), "iso")
+
+    fields = (geometry.GeometryField.SC_POSITION_INERTIAL, geometry.GeometryField.SC_VELOCITY_INERTIAL)
+    hourly = geometry.GeometryData(observer).get_geometry(u_gps_times, fields=list(fields))
+    position = hourly[list(geometry.GeometryField.SC_POSITION_INERTIAL.columns)].to_numpy()
+    velocity = hourly[list(geometry.GeometryField.SC_VELOCITY_INERTIAL.columns)].to_numpy()
+    logger.debug("Start-of-hour state: %d hourly epochs from %s", len(hour_epochs), day_start)
+    return position, velocity
 
 
 def subsatellite_lat_lon_alt(geometry_data: pd.DataFrame) -> pd.DataFrame:
@@ -362,6 +435,7 @@ def create_placeholder_geometry(n_samples: int) -> pd.DataFrame:
     distance_columns = {
         geometry.GeometryField.SC_RADIUS.columns[0],
         geometry.GeometryField.SC_ALTITUDE.columns[0],
+        *geometry.GeometryField.SC_POSITION_INERTIAL.columns,
     }
     data = {
         column: (distance_fill if column in distance_columns else angle_fill)

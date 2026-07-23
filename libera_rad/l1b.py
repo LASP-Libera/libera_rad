@@ -27,6 +27,7 @@ from numpy import ndarray
 from libera_rad import geolocation
 from libera_rad.calibration.constants import ChannelName
 from libera_rad.config import product_config_path
+from libera_rad.constants import CLOCK_RATE_MIN_CONE_ANGLE_DEG
 from libera_rad.radiometer import radiance
 from libera_rad.version import version as libera_rad_version
 
@@ -320,6 +321,8 @@ def process_l1a_to_l1b(
     # Process radiometer data: timestamps are datetime64[ns] from decoded L1A FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
     n_samples = len(timestamps)
+    start_of_hour_state: tuple[np.ndarray, np.ndarray] | None = None
+
     if not use_geo:
         lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(n_samples)
         azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
@@ -330,6 +333,7 @@ def process_l1a_to_l1b(
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
             geometry_data = geolocation.calculate_geometry(km, timestamps)
+            start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
         lat_lon_alt = geolocation.subsatellite_lat_lon_alt(geometry_data)
         azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
     else:
@@ -339,6 +343,7 @@ def process_l1a_to_l1b(
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
             lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
             geometry_data = geolocation.calculate_geometry(km, timestamps)
+            start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
             azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
 
     # Interpolate temperatures
@@ -358,6 +363,7 @@ def process_l1a_to_l1b(
         azimuth=azimuth,
         elevation=elevation,
         geometry_data=geometry_data,
+        start_of_hour_state=start_of_hour_state,
     )
 
     return l1b_product, attributes
@@ -407,6 +413,34 @@ def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarr
     return np.where(lat == fill_val, fill_val, colat)
 
 
+def _gate_clock_rate_near_nadir(
+    clock_angle_rate: np.ndarray, cone_angle: np.ndarray, fill: float = -999.0
+) -> np.ndarray:
+    """
+    Fill the clock-angle rate where the boresight is too near nadir for it to be defined.
+
+    curryer reports the lossless rate, spike and all; declaring it unusable inside a nadir
+    cone is a product decision and so lives here. Coverage gaps (NaN cone angle) are left
+    NaN rather than filled, matching the other geometry fields.
+
+    Parameters
+    ----------
+    clock_angle_rate : np.ndarray
+        Clock-angle rate on the L1B time grid, degrees per second.
+    cone_angle : np.ndarray
+        Boresight off-nadir angle on the same grid, degrees.
+    fill : float
+        Product fill value for `Clock_Angle_Rate`.
+
+    Returns
+    -------
+    np.ndarray
+        `clock_angle_rate` with near-nadir samples replaced by `fill`, dtype float32.
+    """
+    near_nadir = cone_angle < CLOCK_RATE_MIN_CONE_ANGLE_DEG  # NaN compares False -> stays NaN
+    return np.where(near_nadir, np.float32(fill), clock_angle_rate).astype(np.float32)
+
+
 def _package_l1b_product(
     timestamps: np.ndarray,
     lat_lon_alt: pd.DataFrame,
@@ -415,6 +449,7 @@ def _package_l1b_product(
     azimuth: np.ndarray,
     elevation: np.ndarray,
     geometry_data: pd.DataFrame,
+    start_of_hour_state: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> tuple[dict[str, ndarray], dict[str, Any]]:
     """
     Package L1B product according to product definition.
@@ -426,10 +461,13 @@ def _package_l1b_product(
     lat_lon_alt : pd.DataFrame
         Instrument geolocation (latitude, longitude, altitude) on the L1B time grid.
     geometry_data : pd.DataFrame
-        Curryer ``GeometryData`` fields (subsatellite / subsolar points and satellite
-        radius) for the granule; always provided -- real values, or fill values in
-        ``use_geo`` false mode, where geolocation is intentionally bypassed and no data
-        is forthcoming.
+        Curryer ``GeometryData`` fields (subsatellite / subsolar points, satellite radius,
+        position, velocity and attitude, and the boresight surface and orbital-frame angles)
+        for the granule; always provided -- real values, or fill values in ``use_geo`` false
+        mode, where geolocation is intentionally bypassed and no data is forthcoming.
+    start_of_hour_state : tuple[np.ndarray, np.ndarray], optional
+        `(position, velocity)` on the 24-hour ``N_HOURS`` grid, each `(24, 3)` in ECEF.
+        When omitted, the ``*_Start_Of_Hour`` fields are filled with the product fill value.
     calculated_radiance_by_channel : dict[str, np.ndarray]
         Calculated radiance values for each channel.
 
@@ -447,9 +485,6 @@ def _package_l1b_product(
     placeholder_zeros = calculate_data_quality_flags(data_length)
     placeholder_neg999 = np.full(shape=data_length, fill_value=-999, dtype=np.float32)
     placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999, dtype=np.float32)
-    placeholder_3d_neg999 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float64)
-    placeholder_3d_neg9999 = np.full(shape=[data_length, 3], fill_value=-9999, dtype=np.float64)
-    placeholder_3d_neg999_f32 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float32)
     placeholder_hourly_3d_neg999 = np.full(shape=[24, 3], fill_value=-999, dtype=np.float64)  # 24 hours per day
     placeholder_hourly_3d_neg9999 = np.full(shape=[24, 3], fill_value=-9999, dtype=np.float64)  # 24 hours per day
     radiometer_time = np.asarray(timestamps, dtype="datetime64[ns]")
@@ -465,6 +500,22 @@ def _package_l1b_product(
     subsolar_lon = geometry_data["subsolar_longitude"].to_numpy().astype(np.float32)
     subsolar_colat = geometry_data["subsolar_colatitude"].to_numpy().astype(np.float32)
     satellite_radius = geometry_data["spacecraft_radius"].to_numpy().astype(np.float64)
+    satellite_position = np.stack(
+        [
+            geometry_data["spacecraft_position_inertial_x"].to_numpy(),
+            geometry_data["spacecraft_position_inertial_y"].to_numpy(),
+            geometry_data["spacecraft_position_inertial_z"].to_numpy(),
+        ],
+        axis=1,
+    ).astype(np.float64)
+    line_of_sight = np.stack(
+        [
+            geometry_data["boresight_inertial_x"].to_numpy(),
+            geometry_data["boresight_inertial_y"].to_numpy(),
+            geometry_data["boresight_inertial_z"].to_numpy(),
+        ],
+        axis=1,
+    ).astype(np.float32)
     viewing_zenith = geometry_data["viewing_zenith"].to_numpy().astype(np.float32)
     solar_zenith = geometry_data["solar_zenith"].to_numpy().astype(np.float32)
     viewing_azimuth = geometry_data["viewing_azimuth"].to_numpy().astype(np.float32)
@@ -472,6 +523,27 @@ def _package_l1b_product(
     relative_azimuth = geometry_data["relative_azimuth"].to_numpy().astype(np.float32)
     cone_angle = geometry_data["cone_angle"].to_numpy().astype(np.float32)
     cone_angle_rate = geometry_data["cone_angle_rate"].to_numpy().astype(np.float32)
+    satellite_velocity = np.stack(
+        [
+            geometry_data["spacecraft_velocity_inertial_x"].to_numpy(),
+            geometry_data["spacecraft_velocity_inertial_y"].to_numpy(),
+            geometry_data["spacecraft_velocity_inertial_z"].to_numpy(),
+        ],
+        axis=1,
+    ).astype(np.float64)
+    attitude_q = [geometry_data[f"attitude_q{i}"].to_numpy().astype(np.float32) for i in range(4)]
+    clock_angle = geometry_data["clock_angle"].to_numpy().astype(np.float32)
+    clock_angle_rate = _gate_clock_rate_near_nadir(
+        geometry_data["clock_angle_rate"].to_numpy().astype(np.float32), cone_angle
+    )
+    along_track_angle = geometry_data["along_track_angle"].to_numpy().astype(np.float32)
+    cross_track_angle = geometry_data["cross_track_angle"].to_numpy().astype(np.float32)
+
+    if start_of_hour_state is not None:
+        hourly_position, hourly_velocity = (arr.astype(np.float64) for arr in start_of_hour_state)
+    else:
+        hourly_position = placeholder_hourly_3d_neg9999
+        hourly_velocity = placeholder_hourly_3d_neg999
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
@@ -490,29 +562,29 @@ def _package_l1b_product(
         "Subsatellite_Longitude": subsatellite_lon,
         "Subsolar_Longitude": subsolar_lon,
         # Geometry
-        "Along_Track_Angle": placeholder_neg999,
-        "Cross_Track_Angle": placeholder_neg999,
+        "Along_Track_Angle": along_track_angle,
+        "Cross_Track_Angle": cross_track_angle,
         "Solar_Zenith_Surface": solar_zenith,
         "Relative_Azimuth_Surface": relative_azimuth,
         "Viewing_Zenith_Surface": viewing_zenith,
         "Viewing_Azimuth_Surface_WRT_North": viewing_azimuth,
         "Solar_Azimuth_Surface_WRT_North": solar_azimuth,
-        "Satellite_Position": placeholder_3d_neg9999,
-        "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,
-        "Satellite_Velocity": placeholder_3d_neg999,
-        "Satellite_Velocity_Start_Of_Hour": placeholder_hourly_3d_neg999,
-        "Satellite_Attitude_Q0": placeholder_neg999,
-        "Satellite_Attitude_Q1": placeholder_neg999,
-        "Satellite_Attitude_Q2": placeholder_neg999,
-        "Satellite_Attitude_Q3": placeholder_neg999,
+        "Satellite_Position": satellite_position,
+        "Satellite_Position_Start_Of_Hour": hourly_position,
+        "Satellite_Velocity": satellite_velocity,
+        "Satellite_Velocity_Start_Of_Hour": hourly_velocity,
+        "Satellite_Attitude_Q0": attitude_q[0],
+        "Satellite_Attitude_Q1": attitude_q[1],
+        "Satellite_Attitude_Q2": attitude_q[2],
+        "Satellite_Attitude_Q3": attitude_q[3],
         "Azimuth": azimuth.astype(np.float32),
         "Elevation": elevation.astype(np.float32),
-        "Line_Of_Sight": placeholder_3d_neg999_f32,
+        "Line_Of_Sight": line_of_sight,
         "Radius_of_Satellite_from_Center_of_Earth": satellite_radius,
         "Cone_Angle": cone_angle,
         "Cone_Angle_Rate": cone_angle_rate,
-        "Clock_Angle": placeholder_neg999,
-        "Clock_Angle_Rate": placeholder_neg999,
+        "Clock_Angle": clock_angle,
+        "Clock_Angle_Rate": clock_angle_rate,
         # Instrument
         "Operational_Mode": operational_mode.astype(np.uint16),
         "Filtered_Radiance_SW": calculated_radiance_by_channel.get(
