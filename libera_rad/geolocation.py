@@ -294,7 +294,7 @@ def calculate_geometry(
     ValueError
         If either observer is not a known Libera frame for its role.
     RuntimeError
-        If a curryer SPICE query fails outright (e.g. an unparseable time or a missing
+        If a curryer SPICE query fails outright (e.g. an unparsable time or a missing
         kernel), or if the spacecraft observer returns no coverage at all. Both carry a
         parsed, user-facing description of the cause.
     """
