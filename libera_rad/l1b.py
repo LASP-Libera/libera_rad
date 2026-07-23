@@ -15,6 +15,7 @@ import xarray as xr
 from astropy.coordinates import get_sun
 from astropy.time import Time
 from cloudpathlib import AnyPath, S3Path
+from curryer.compute import geometry
 from libera_utils import Manifest, smart_open
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.filenaming import LiberaDataProductFilename
@@ -400,9 +401,10 @@ def extract_input_dataset(
 
 
 def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarray:
-    """Geodetic colatitude (degrees) from latitude, preserving product fill values."""
+    """Geodetic colatitude (degrees) from latitude via curryer, preserving product fills."""
     fill_val = np.float32(fill)
-    return np.where(lat == fill_val, fill_val, (90.0 - lat).astype(np.float32))
+    colat = geometry.colatitude(lat, degrees=True).astype(np.float32)
+    return np.where(lat == fill_val, fill_val, colat)
 
 
 def _package_l1b_product(
@@ -463,6 +465,13 @@ def _package_l1b_product(
     subsolar_lon = geometry_data["subsolar_longitude"].to_numpy().astype(np.float32)
     subsolar_colat = geometry_data["subsolar_colatitude"].to_numpy().astype(np.float32)
     satellite_radius = geometry_data["spacecraft_radius"].to_numpy().astype(np.float64)
+    viewing_zenith = geometry_data["viewing_zenith"].to_numpy().astype(np.float32)
+    solar_zenith = geometry_data["solar_zenith"].to_numpy().astype(np.float32)
+    viewing_azimuth = geometry_data["viewing_azimuth"].to_numpy().astype(np.float32)
+    solar_azimuth = geometry_data["solar_azimuth"].to_numpy().astype(np.float32)
+    relative_azimuth = geometry_data["relative_azimuth"].to_numpy().astype(np.float32)
+    cone_angle = geometry_data["cone_angle"].to_numpy().astype(np.float32)
+    cone_angle_rate = geometry_data["cone_angle_rate"].to_numpy().astype(np.float32)
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
@@ -483,10 +492,11 @@ def _package_l1b_product(
         # Geometry
         "Along_Track_Angle": placeholder_neg999,
         "Cross_Track_Angle": placeholder_neg999,
-        "Solar_Zenith_Surface": placeholder_neg999,
-        "Relative_Azimuth_Surface": placeholder_neg999,
-        "Viewing_Zenith_Surface": placeholder_neg999,
-        "Viewing_Azimuth_Surface_WRT_North": placeholder_neg999,
+        "Solar_Zenith_Surface": solar_zenith,
+        "Relative_Azimuth_Surface": relative_azimuth,
+        "Viewing_Zenith_Surface": viewing_zenith,
+        "Viewing_Azimuth_Surface_WRT_North": viewing_azimuth,
+        "Solar_Azimuth_Surface_WRT_North": solar_azimuth,
         "Satellite_Position": placeholder_3d_neg9999,
         "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,
         "Satellite_Velocity": placeholder_3d_neg999,
@@ -499,8 +509,8 @@ def _package_l1b_product(
         "Elevation": elevation.astype(np.float32),
         "Line_Of_Sight": placeholder_3d_neg999_f32,
         "Radius_of_Satellite_from_Center_of_Earth": satellite_radius,
-        "Cone_Angle": placeholder_neg999,
-        "Cone_Angle_Rate": placeholder_neg999,
+        "Cone_Angle": cone_angle,
+        "Cone_Angle_Rate": cone_angle_rate,
         "Clock_Angle": placeholder_neg999,
         "Clock_Angle_Rate": placeholder_neg999,
         # Instrument

@@ -29,6 +29,15 @@ _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     "Subsolar_Longitude",
     "Subsolar_Colatitude",
     "Radius_of_Satellite_from_Center_of_Earth",
+    # Boresight surface geometry -- requires the motor CK, so these are populated in the
+    # full-pointing fixture only (see TestL1bJpssOnlyIntegration for the jpss_only contract).
+    "Viewing_Zenith_Surface",
+    "Solar_Zenith_Surface",
+    "Viewing_Azimuth_Surface_WRT_North",
+    "Solar_Azimuth_Surface_WRT_North",
+    "Relative_Azimuth_Surface",
+    "Cone_Angle",
+    "Cone_Angle_Rate",
 )
 
 # Mapping from ChannelName enum values to L1B product variable names
@@ -488,3 +497,33 @@ class TestL1bJpssOnlyIntegration:
 
         assert np.all(jpss_only_l1b_product_dataset["Azimuth"].values == 0)
         assert np.all(jpss_only_l1b_product_dataset["Elevation"].values == 0)
+
+    def test_jpss_only_spacecraft_geometry_still_populated(self, jpss_only_l1b_product_dataset):
+        """Spacecraft-observer fields ride the JPSS SPK, so they resolve without the motor CK."""
+        for var_name in ("Subsolar_Latitude", "Subsolar_Longitude", "Radius_of_Satellite_from_Center_of_Earth"):
+            vals = jpss_only_l1b_product_dataset[var_name].values
+            computed = vals[(vals != -999.0) & (vals != -9999.0) & np.isfinite(vals)]
+            assert len(computed) > 0, f"{var_name} should still be computed in jpss_only mode"
+
+    @pytest.mark.parametrize(
+        "var_name",
+        [
+            "Viewing_Zenith_Surface",
+            "Solar_Zenith_Surface",
+            "Viewing_Azimuth_Surface_WRT_North",
+            "Solar_Azimuth_Surface_WRT_North",
+            "Relative_Azimuth_Surface",
+            "Cone_Angle",
+            "Cone_Angle_Rate",
+        ],
+    )
+    def test_jpss_only_boresight_geometry_is_fill(self, jpss_only_l1b_product_dataset, var_name):
+        """Boresight fields need the instrument frame, which does not resolve without the motor CK.
+
+        They must ship as fill rather than as plausible-looking numbers computed from a
+        fallback frame -- silently wrong geometry is worse than declared-absent geometry.
+        """
+        vals = jpss_only_l1b_product_dataset[var_name].values
+        assert np.all((vals == -999.0) | np.isnan(vals)), (
+            f"{var_name} should be fill/NaN in jpss_only mode, but has computed values"
+        )

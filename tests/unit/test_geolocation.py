@@ -13,7 +13,7 @@ from libera_rad import geolocation
 def test_calculate_geometry_uses_curryer():
     timestamps = np.array(["2025-01-01T00:00:00", "2025-01-01T00:00:01"], dtype="datetime64[ns]")
     km = Mock()
-    fields_df = pd.DataFrame(
+    spacecraft_df = pd.DataFrame(
         {
             "subsatellite_latitude": [10.0, 11.0],
             "subsatellite_longitude": [20.0, 21.0],
@@ -25,19 +25,36 @@ def test_calculate_geometry_uses_curryer():
             "spacecraft_altitude": [800.0, 801.0],
         }
     )
-    mock_geo = Mock()
-    mock_geo.get_geometry.return_value = fields_df
+    instrument_df = pd.DataFrame(
+        {
+            "viewing_zenith": [10.0, 11.0],
+            "solar_zenith": [40.0, 41.0],
+            "viewing_azimuth": [100.0, 101.0],
+            "solar_azimuth": [120.0, 121.0],
+            "relative_azimuth": [150.0, 151.0],
+            "cone_angle": [5.0, 6.0],
+            "cone_angle_rate": [0.5, -0.5],
+        }
+    )
+    spacecraft_geo = Mock()
+    spacecraft_geo.get_geometry.return_value = spacecraft_df
+    instrument_geo = Mock()
+    instrument_geo.get_geometry.return_value = instrument_df
     with (
-        patch("libera_rad.geolocation.geometry.GeometryData", return_value=mock_geo) as mock_cls,
+        patch(
+            "libera_rad.geolocation.geometry.GeometryData",
+            side_effect=[spacecraft_geo, instrument_geo],
+        ) as mock_cls,
         patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([1, 2])),
     ):
         result = geolocation.calculate_geometry(km, timestamps)
 
     km.ensure_known_kernels_are_furnished.assert_called_once()
-    mock_cls.assert_called_once_with("JPSS4_SC")
-    _, kwargs = mock_geo.get_geometry.call_args
-    assert kwargs["fields"] == list(geolocation._GEOMETRY_FIELDS)
+    assert [call.args[0] for call in mock_cls.call_args_list] == ["JPSS4_SC", "LIBERA_SW_RAD"]
+    assert spacecraft_geo.get_geometry.call_args.kwargs["fields"] == list(geolocation._SPACECRAFT_FIELDS)
+    assert instrument_geo.get_geometry.call_args.kwargs["fields"] == list(geolocation._INSTRUMENT_FIELDS)
     assert "spacecraft_altitude" in result.columns
+    assert "cone_angle" in result.columns
 
 
 def test_calculate_geometry_raises_friendly_message_on_spice_error():
@@ -71,17 +88,70 @@ def test_calculate_geometry_raises_when_no_coverage():
             geolocation.calculate_geometry(km, timestamps)
 
 
-def test_calculate_geometry_allows_all_nan_when_coverage_not_required():
+def test_calculate_geometry_allows_all_nan_instrument_fields():
+    # In jpss_only the instrument observer is legitimately all-NaN; only the spacecraft
+    # observer requires coverage, so this must not raise.
     timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
     km = Mock()
-    mock_geo = Mock()
-    mock_geo.get_geometry.return_value = _all_nan_geometry()
+    spacecraft_geo = Mock()
+    spacecraft_geo.get_geometry.return_value = pd.DataFrame(
+        {column: [1.0] for field in geolocation._SPACECRAFT_FIELDS for column in field.columns}
+    )
+    instrument_geo = Mock()
+    instrument_geo.get_geometry.return_value = pd.DataFrame(
+        {column: [np.nan] for field in geolocation._INSTRUMENT_FIELDS for column in field.columns}
+    )
     with (
-        patch("libera_rad.geolocation.geometry.GeometryData", return_value=mock_geo),
+        patch("libera_rad.geolocation.geometry.GeometryData", side_effect=[spacecraft_geo, instrument_geo]),
         patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([1])),
     ):
-        result = geolocation.calculate_geometry(km, timestamps, require_coverage=False)
-    assert result.isna().to_numpy().all()
+        result = geolocation.calculate_geometry(km, timestamps)
+    assert result["cone_angle"].isna().to_numpy().all()
+    assert not result["subsatellite_latitude"].isna().to_numpy().any()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected_message"),
+    [
+        ({"spacecraft_observer": "LIBERA_SW_RAD"}, "Unsupported spacecraft observer"),
+        ({"instrument_observer": "LIBERA_WFOV_CAM"}, "Unsupported instrument observer"),
+        ({"instrument_observer": "JPSS4_SC"}, "Unsupported instrument observer"),
+    ],
+)
+def test_calculate_geometry_rejects_unknown_observer(kwargs, expected_message):
+    """A valid SPICE frame used in the wrong role must fail loudly, not compute the wrong optic."""
+    timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
+    km = Mock()
+    with patch("libera_rad.geolocation.geometry.GeometryData") as mock_cls:
+        with pytest.raises(ValueError, match=expected_message):
+            geolocation.calculate_geometry(km, timestamps, **kwargs)
+    mock_cls.assert_not_called()
+    km.ensure_known_kernels_are_furnished.assert_not_called()
+
+
+@pytest.mark.parametrize("instrument_observer", geolocation.INSTRUMENT_OBSERVERS)
+def test_calculate_geometry_accepts_every_radiometer_channel(instrument_observer):
+    """All four channel frames are co-boresighted, so each is a valid instrument observer."""
+    timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
+    km = Mock()
+    spacecraft_geo = Mock()
+    spacecraft_geo.get_geometry.return_value = pd.DataFrame(
+        {column: [1.0] for field in geolocation._SPACECRAFT_FIELDS for column in field.columns}
+    )
+    instrument_geo = Mock()
+    instrument_geo.get_geometry.return_value = pd.DataFrame(
+        {column: [1.0] for field in geolocation._INSTRUMENT_FIELDS for column in field.columns}
+    )
+    with (
+        patch(
+            "libera_rad.geolocation.geometry.GeometryData",
+            side_effect=[spacecraft_geo, instrument_geo],
+        ) as mock_cls,
+        patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([1])),
+    ):
+        geolocation.calculate_geometry(km, timestamps, instrument_observer=instrument_observer)
+
+    assert [call.args[0] for call in mock_cls.call_args_list] == ["JPSS4_SC", instrument_observer]
 
 
 def test_create_placeholder_geometry():

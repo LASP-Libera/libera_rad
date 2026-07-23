@@ -359,6 +359,13 @@ class TestProcessL1aToL1b:
                     "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
                     "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
                     "spacecraft_altitude": np.zeros(100, dtype=np.float32),
+                    "viewing_zenith": np.linspace(10, 20, 100, dtype=np.float64),
+                    "solar_zenith": np.linspace(40, 50, 100, dtype=np.float64),
+                    "viewing_azimuth": np.linspace(100, 110, 100, dtype=np.float64),
+                    "solar_azimuth": np.linspace(120, 130, 100, dtype=np.float64),
+                    "relative_azimuth": np.linspace(150, 160, 100, dtype=np.float64),
+                    "cone_angle": np.linspace(5, 15, 100, dtype=np.float64),
+                    "cone_angle_rate": np.linspace(-1, 1, 100, dtype=np.float64),
                 }
             )
             mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
@@ -383,7 +390,14 @@ class TestProcessL1aToL1b:
             assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
             assert np.all(result["Azimuth"] == np.float32(0))
             assert np.all(result["Elevation"] == np.float32(0))
-            assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+            # Boresight surface geometry is populated from curryer. Assert the mocked values
+            # themselves: a not-equal-to-fill check would also pass on an all-NaN array.
+            assert np.allclose(result["Solar_Zenith_Surface"], np.linspace(40, 50, 100), atol=1e-4)
+            assert np.allclose(result["Viewing_Zenith_Surface"], np.linspace(10, 20, 100), atol=1e-4)
+            assert np.allclose(result["Viewing_Azimuth_Surface_WRT_North"], np.linspace(100, 110, 100), atol=1e-4)
+            assert np.allclose(result["Relative_Azimuth_Surface"], np.linspace(150, 160, 100), atol=1e-4)
+            assert np.allclose(result["Cone_Angle"], np.linspace(5, 15, 100), atol=1e-4)
+            assert np.allclose(result["Cone_Angle_Rate"], np.linspace(-1, 1, 100), atol=1e-4)
 
     def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
         """use_geo false should bypass KernelManager and SPICE geolocation."""
@@ -470,6 +484,14 @@ class TestProcessL1aToL1b:
                     "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
                     "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
                     "spacecraft_altitude": np.zeros(100, dtype=np.float32),
+                    # No motor CK in jpss_only, so the boresight-derived fields are NaN.
+                    "viewing_zenith": np.full(100, np.nan),
+                    "solar_zenith": np.full(100, np.nan),
+                    "viewing_azimuth": np.full(100, np.nan),
+                    "solar_azimuth": np.full(100, np.nan),
+                    "relative_azimuth": np.full(100, np.nan),
+                    "cone_angle": np.full(100, np.nan),
+                    "cone_angle_rate": np.full(100, np.nan),
                 }
             )
             mock_radiance.return_value = pd.Series(np.random.rand(100))
@@ -484,10 +506,19 @@ class TestProcessL1aToL1b:
         assert np.allclose(result["Subsatellite_Longitude"], result["Longitude"])
         assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
         assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
-        # Subsolar point and satellite radius are now populated from curryer.
+        # Subsolar point and satellite radius are populated from curryer.
         assert not np.any(result["Subsolar_Latitude"] == np.float32(-999))
         assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
-        assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+        # Every boresight-derived field is NaN in jpss_only (no motor CK), not just some.
+        for name in (
+            "Solar_Zenith_Surface",
+            "Viewing_Zenith_Surface",
+            "Viewing_Azimuth_Surface_WRT_North",
+            "Relative_Azimuth_Surface",
+            "Cone_Angle",
+            "Cone_Angle_Rate",
+        ):
+            assert np.all(np.isnan(result[name])), f"{name} should be NaN in jpss_only mode"
 
     @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])
     def test_process_l1a_to_l1b_requires_kernel_sources_when_use_geo_true(

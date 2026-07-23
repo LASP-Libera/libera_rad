@@ -20,14 +20,67 @@ from spiceypy.utils.exceptions import SpiceyError
 logger = logging.getLogger(__name__)
 
 
-# Spacecraft-observer geometry fields curryer computes for the L1B product, as GeometryField
-# enum members (interchangeable with their string selectors; ``.columns`` gives the output keys).
-_GEOMETRY_FIELDS = (
+# curryer geometry fields for the L1B product, as GeometryField enum members (interchangeable
+# with their string selectors; ``.columns`` gives the output keys). Split by observer: the
+# spacecraft fields resolve in every mode; the instrument/boresight fields need the motor CK.
+_SPACECRAFT_FIELDS = (
     geometry.GeometryField.SUBSATELLITE,
     geometry.GeometryField.SUBSOLAR,
     geometry.GeometryField.SC_RADIUS,
     geometry.GeometryField.SC_ALTITUDE,
 )
+_INSTRUMENT_FIELDS = (
+    geometry.GeometryField.VIEWING_ZENITH,
+    geometry.GeometryField.SOLAR_ZENITH,
+    geometry.GeometryField.VIEWING_AZIMUTH,
+    geometry.GeometryField.SOLAR_AZIMUTH,
+    geometry.GeometryField.RELATIVE_AZIMUTH,
+    geometry.GeometryField.CONE_ANGLE,
+    geometry.GeometryField.CONE_ANGLE_RATE,
+)
+_GEOMETRY_FIELDS = _SPACECRAFT_FIELDS + _INSTRUMENT_FIELDS
+
+# Spacecraft frames the Libera FK defines. Libera flies on JPSS-4; NOAA-20 is the alternate
+# bus configuration carried in the same kernel set.
+SPACECRAFT_OBSERVERS = ("JPSS4_SC", "NOAA20_SC")
+DEFAULT_SPACECRAFT_OBSERVER = "JPSS4_SC"
+
+# The four radiometer channel frames the Libera FK defines. All four are currently identity
+# rotations relative to ``LIBERA_EL_COORD`` -- the channels are co-boresighted, so geometry
+# computed for any one of them is valid for all four, and one query suffices. There is no
+# generic ``LIBERA_RAD`` frame to name instead. Should the FK ever carry real per-channel
+# boresight offsets, each channel would need its own query and the product would need
+# per-channel geometry fields.
+INSTRUMENT_OBSERVERS = ("LIBERA_SW_RAD", "LIBERA_LW_RAD", "LIBERA_TOT_RAD", "LIBERA_SSW_RAD")
+DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_SW_RAD"
+
+
+def _validate_observer(observer: str, allowed: tuple[str, ...], role: str) -> None:
+    """Reject an observer frame that is not a known Libera frame for this role.
+
+    A typo'd frame already fails inside SPICE, but a *valid* frame used in the wrong role
+    (the WFOV camera as the instrument, say) would silently produce correct-looking geometry
+    for the wrong optic. This turns that into an error at the call site.
+
+    Parameters
+    ----------
+    observer : str
+        Requested SPICE frame name.
+    allowed : tuple[str, ...]
+        Frame names valid for this role.
+    role : str
+        Human-readable role name, used in the error message.
+
+    Raises
+    ------
+    ValueError
+        If ``observer`` is not in ``allowed``.
+    """
+    if observer not in allowed:
+        raise ValueError(
+            f"Unsupported {role} observer {observer!r}; expected one of {', '.join(allowed)}. "
+            "Geometry for other frames is not supported by the L1B product definition."
+        )
 
 
 def _spice_error_message(err: SpiceyError) -> str:
@@ -49,8 +102,9 @@ def calculate_lat_lon_altitude(
     """
     Calculate instrument geolocation (latitude/longitude/altitude).
 
-    Instrument lat/lon/alt come from the ``LIBERA_SW_RAD`` boresight ellipsoid
-    intersection. The subsatellite point and the other geometry fields come
+    Instrument lat/lon/alt come from the :data:`DEFAULT_INSTRUMENT_OBSERVER` boresight
+    ellipsoid intersection; the radiometer channels are co-boresighted, so this is the
+    ground point for all four. The subsatellite point and the other geometry fields come
     from :func:`calculate_geometry`.
 
     Parameters
@@ -70,7 +124,10 @@ def calculate_lat_lon_altitude(
     u_gps_times = spicetime.adapt(time_range, "iso")
 
     ellips_lla_df, _, _ = spatial.compute_ellipsoid_intersection(
-        u_gps_times, sp.obj.Body("LIBERA_SW_RAD", frame=True), give_geodetic_output=True, give_lat_lon_in_degrees=True
+        u_gps_times,
+        sp.obj.Body(DEFAULT_INSTRUMENT_OBSERVER, frame=True),
+        give_geodetic_output=True,
+        give_lat_lon_in_degrees=True,
     )
 
     logger.debug("Instrument geolocation: generated %d points", len(ellips_lla_df))
@@ -141,39 +198,32 @@ def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarra
     return zeros, zeros
 
 
-def calculate_geometry(
-    kernel_manager: KernelManager,
-    timestamps: np.ndarray,
-    observer: str = "JPSS4_SC",
-    require_coverage: bool = True,
+def _query_geometry(
+    observer: str,
+    u_gps_times: np.ndarray,
+    fields: tuple,
+    require_coverage: bool,
 ) -> pd.DataFrame:
     """
-    Compute the position-derived geometry fields via curryer ``GeometryData``.
-
-    curryer's selective-compute registry queries each SPICE input once, vectorized,
-    with coverage gaps surfaced as NaN. One call yields the subsatellite and subsolar
-    points (latitude / longitude / colatitude) plus the satellite radius and altitude.
+    One curryer ``GeometryData`` query, surfacing SPICE failures as readable errors.
 
     Parameters
     ----------
-    kernel_manager : KernelManager
-        Kernel manager with the spacecraft SPK (and required FK) kernels furnished.
-    timestamps : np.ndarray
-        Radiometer timestamps on the L1B output time grid.
     observer : str
-        SPICE body name for the spacecraft. Default ``"JPSS4_SC"``.
+        SPICE body name for the observer.
+    u_gps_times : np.ndarray
+        Query times in uGPS.
+    fields : tuple of GeometryField
+        Fields to compute for this observer.
     require_coverage : bool
-        If True (default), raise when *every* value is NaN -- for the spacecraft observer
-        that means the kernels do not cover the granule at all (a misconfiguration), rather
-        than an expected per-sample gap. Instrument-observer callers that are legitimately
-        all-NaN in ``jpss_only`` mode pass False.
+        If True, raise when *every* value is NaN -- the kernels do not cover the granule at
+        all (a misconfiguration). The instrument observer passes False, since its fields are
+        legitimately all-NaN in ``jpss_only`` mode.
 
     Returns
     -------
     pd.DataFrame
-        Indexed by uGPS; columns are the curryer field columns (subsatellite and
-        subsolar latitude / longitude / colatitude, ``spacecraft_radius``,
-        ``spacecraft_altitude``).
+        The requested fields' columns, indexed by uGPS.
 
     Raises
     ------
@@ -182,18 +232,81 @@ def calculate_geometry(
         kernel), or -- when ``require_coverage`` -- if it returns no coverage at all. Both
         carry a parsed, user-facing description of the cause.
     """
-    kernel_manager.ensure_known_kernels_are_furnished()
-    u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
     try:
-        result = geometry.GeometryData(observer).get_geometry(u_gps_times, fields=list(_GEOMETRY_FIELDS))
+        result = geometry.GeometryData(observer).get_geometry(u_gps_times, fields=list(fields))
     except SpiceyError as err:
-        raise RuntimeError(f"curryer geometry query failed: {_spice_error_message(err)}") from err
+        raise RuntimeError(f"curryer geometry query failed for {observer!r}: {_spice_error_message(err)}") from err
     if require_coverage and bool(result.isna().to_numpy().all()):
         raise RuntimeError(
             f"curryer geometry returned no coverage for observer {observer!r} over the granule; "
             "check that the SPICE kernels cover the requested times."
         )
     return result
+
+
+def calculate_geometry(
+    kernel_manager: KernelManager,
+    timestamps: np.ndarray,
+    spacecraft_observer: str = DEFAULT_SPACECRAFT_OBSERVER,
+    instrument_observer: str = DEFAULT_INSTRUMENT_OBSERVER,
+) -> pd.DataFrame:
+    """
+    Compute the geometry fields via curryer ``GeometryData``.
+
+    curryer's selective-compute registry queries each SPICE input once, vectorized, with
+    coverage gaps surfaced as NaN. Two calls, joined on the shared uGPS index:
+
+    - the **spacecraft** observer yields the position-derived fields (subsatellite and
+      subsolar points, satellite radius, and geodetic altitude);
+    - the **instrument** observer yields the boresight surface geometry (viewing and
+      solar zenith / azimuth, relative azimuth, and cone angle with its rate).
+
+    The split is by necessity, not preference. The spacecraft observer resolves a valid
+    position in every mode, whereas the boresight fields require the instrument frame. In
+    ``jpss_only`` (no motor CK) the instrument frame does not resolve -- not even its
+    position -- so its fields are NaN, but the spacecraft fields still come through, which
+    is what the ``jpss_only`` geolocation (subsatellite point) depends on. With full
+    pointing the two observers give identical spacecraft-level values (the instrument
+    sits at the spacecraft's SPK position).
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the spacecraft SPK, instrument FK/IK, and (for the boresight
+        fields) the pointing CK furnished.
+    timestamps : np.ndarray
+        Radiometer timestamps on the L1B output time grid.
+    spacecraft_observer : str
+        SPICE frame for the spacecraft, one of :data:`SPACECRAFT_OBSERVERS`. Default
+        ``"JPSS4_SC"``.
+    instrument_observer : str
+        SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
+        ``"LIBERA_SW_RAD"``. The radiometer channels are co-boresighted, so this choice does
+        not currently change the result -- see :data:`INSTRUMENT_OBSERVERS`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by uGPS; the curryer field columns for both observers, joined.
+
+    Raises
+    ------
+    ValueError
+        If either observer is not a known Libera frame for its role.
+    RuntimeError
+        If a curryer SPICE query fails outright (e.g. an unparsable time or a missing
+        kernel), or if the spacecraft observer returns no coverage at all. Both carry a
+        parsed, user-facing description of the cause.
+    """
+    _validate_observer(spacecraft_observer, SPACECRAFT_OBSERVERS, "spacecraft")
+    _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
+    kernel_manager.ensure_known_kernels_are_furnished()
+    u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
+    # Spacecraft fields resolve in every mode, so all-NaN means the kernels miss the granule.
+    spacecraft = _query_geometry(spacecraft_observer, u_gps_times, _SPACECRAFT_FIELDS, require_coverage=True)
+    # Instrument surface fields are legitimately all-NaN in jpss_only (no motor CK).
+    instrument = _query_geometry(instrument_observer, u_gps_times, _INSTRUMENT_FIELDS, require_coverage=False)
+    return spacecraft.join(instrument)
 
 
 def subsatellite_lat_lon_alt(geometry_data: pd.DataFrame) -> pd.DataFrame:
