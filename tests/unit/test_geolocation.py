@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from spiceypy.utils.exceptions import SpiceyError
 
-from libera_rad import geolocation
+from libera_rad import constants, geolocation
 
 
 def test_calculate_geometry_uses_curryer():
@@ -111,6 +111,17 @@ def test_calculate_start_of_hour_state():
     assert (queried.normalize() == pd.Timestamp("2025-11-20")).all()
 
 
+def test_calculate_start_of_hour_state_rejects_unknown_observer():
+    """The start-of-hour state is a spacecraft query; an instrument frame must be rejected."""
+    timestamps = np.array(["2025-11-20T17:59:50"], dtype="datetime64[ns]")
+    km = Mock()
+    with patch("libera_rad.geolocation.geometry.GeometryData") as mock_cls:
+        with pytest.raises(ValueError, match="Unsupported spacecraft observer"):
+            geolocation.calculate_start_of_hour_state(km, timestamps, observer="LIBERA_SW_RAD")
+    mock_cls.assert_not_called()
+    km.ensure_known_kernels_are_furnished.assert_not_called()
+
+
 def test_calculate_geometry_raises_friendly_message_on_spice_error():
     timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
     km = Mock()
@@ -204,7 +215,7 @@ def test_calculate_geometry_rejects_unknown_observer(kwargs, expected_message):
     km.ensure_known_kernels_are_furnished.assert_not_called()
 
 
-@pytest.mark.parametrize("instrument_observer", geolocation.INSTRUMENT_OBSERVERS)
+@pytest.mark.parametrize("instrument_observer", constants.INSTRUMENT_OBSERVERS)
 def test_calculate_geometry_accepts_every_radiometer_channel(instrument_observer):
     """All four channel frames are co-boresighted, so each is a valid instrument observer."""
     timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")

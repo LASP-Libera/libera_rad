@@ -27,6 +27,7 @@ from numpy import ndarray
 from libera_rad import geolocation
 from libera_rad.calibration.constants import ChannelName
 from libera_rad.config import product_config_path
+from libera_rad.constants import CLOCK_RATE_MIN_CONE_ANGLE_DEG
 from libera_rad.radiometer import radiance
 from libera_rad.version import version as libera_rad_version
 
@@ -412,15 +413,6 @@ def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarr
     return np.where(lat == fill_val, fill_val, colat)
 
 
-# Placeholder off-nadir gate for Clock_Angle_Rate, pending science confirmation. The clock
-# angle is an azimuth about nadir, so its rate is singular there; as the cross-track scan
-# crosses nadir the azimuth swings ~180 degrees faster than the 100 Hz sampling resolves,
-# making the finite difference an aliasing artifact rather than a derivative. 6 degrees sits
-# just above the 5.3 degree boundary at which the product's Clock_Angle_Rate valid_range of
-# [-20, 20] deg/s is satisfied on the reference granule.
-_CLOCK_RATE_MIN_CONE_ANGLE_DEG = np.float32(6.0)
-
-
 def _gate_clock_rate_near_nadir(
     clock_angle_rate: np.ndarray, cone_angle: np.ndarray, fill: float = -999.0
 ) -> np.ndarray:
@@ -445,7 +437,7 @@ def _gate_clock_rate_near_nadir(
     np.ndarray
         `clock_angle_rate` with near-nadir samples replaced by `fill`, dtype float32.
     """
-    near_nadir = cone_angle < _CLOCK_RATE_MIN_CONE_ANGLE_DEG  # NaN compares False -> stays NaN
+    near_nadir = cone_angle < CLOCK_RATE_MIN_CONE_ANGLE_DEG  # NaN compares False -> stays NaN
     return np.where(near_nadir, np.float32(fill), clock_angle_rate).astype(np.float32)
 
 

@@ -17,6 +17,13 @@ from curryer.spicierpy.ext import spice_error_message
 from libera_utils.libera_spice.kernel_manager import KernelManager
 from spiceypy.utils.exceptions import SpiceyError
 
+from libera_rad.constants import (
+    DEFAULT_INSTRUMENT_OBSERVER,
+    DEFAULT_SPACECRAFT_OBSERVER,
+    INSTRUMENT_OBSERVERS,
+    SPACECRAFT_OBSERVERS,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,20 +54,6 @@ _INSTRUMENT_FIELDS = (
     geometry.GeometryField.CROSS_TRACK_ANGLE,
 )
 _GEOMETRY_FIELDS = _SPACECRAFT_FIELDS + _INSTRUMENT_FIELDS
-
-# Spacecraft frames the Libera FK defines. Libera flies on JPSS-4; NOAA-20 is the alternate
-# bus configuration carried in the same kernel set.
-SPACECRAFT_OBSERVERS = ("JPSS4_SC", "NOAA20_SC")
-DEFAULT_SPACECRAFT_OBSERVER = "JPSS4_SC"
-
-# The four radiometer channel frames the Libera FK defines. All four are currently identity
-# rotations relative to ``LIBERA_EL_COORD`` -- the channels are co-boresighted, so geometry
-# computed for any one of them is valid for all four, and one query suffices. There is no
-# generic ``LIBERA_RAD`` frame to name instead. Should the FK ever carry real per-channel
-# boresight offsets, each channel would need its own query and the product would need
-# per-channel geometry fields.
-INSTRUMENT_OBSERVERS = ("LIBERA_SW_RAD", "LIBERA_LW_RAD", "LIBERA_TOT_RAD", "LIBERA_SSW_RAD")
-DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_SW_RAD"
 
 
 def _validate_observer(observer: str, allowed: tuple[str, ...], role: str) -> None:
@@ -341,7 +334,7 @@ def calculate_geometry(
 def calculate_start_of_hour_state(
     kernel_manager: KernelManager,
     timestamps: np.ndarray,
-    observer: str = "JPSS4_SC",
+    observer: str = DEFAULT_SPACECRAFT_OBSERVER,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Spacecraft inertial (J2000) position and velocity at each top-of-hour of the granule's UTC day.
@@ -362,13 +355,20 @@ def calculate_start_of_hour_state(
     timestamps : np.ndarray
         Radiometer timestamps; only the first is used, to pick the UTC day.
     observer : str
-        SPICE body name for the spacecraft. Default ``"JPSS4_SC"``.
+        SPICE frame for the spacecraft, one of :data:`SPACECRAFT_OBSERVERS`. Default
+        ``"JPSS4_SC"``.
 
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
         `(position, velocity)`, each shape `(24, 3)` in the J2000 inertial frame, km and km/s.
+
+    Raises
+    ------
+    ValueError
+        If ``observer`` is not a known Libera spacecraft frame.
     """
+    _validate_observer(observer, SPACECRAFT_OBSERVERS, "spacecraft")
     kernel_manager.ensure_known_kernels_are_furnished()
     day_start = pd.Timestamp(np.asarray(timestamps, dtype="datetime64[ns]")[0]).normalize()
     hour_epochs = pd.date_range(day_start, periods=24, freq="h")

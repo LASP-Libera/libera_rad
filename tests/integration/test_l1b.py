@@ -20,8 +20,17 @@ from libera_rad.radiometer.radiance import (
 )
 from libera_rad.version import version as libera_rad_version
 
-# Product fields populated from curryer ``GeometryData`` rather than fill sentinels.
+# Every geometry field the L1B product carries from curryer ``GeometryData``. All 27 shipped as
+# -999 / -9999 fill before this work; each one is now computed. Kept as a single explicit list
+# rather than derived from the product definition, so the set of fields we claim to populate is
+# reviewable at a glance and adding a field to the algorithm without covering it here is a
+# visible omission.
+#
+# Grouped by what has to resolve for the field to exist, which is also what the tests below
+# assert: the spacecraft-observer fields ride the JPSS SPK and resolve in every mode, while the
+# boresight fields need the motor CK and are therefore fill in ``jpss_only``.
 _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
+    # Position-derived, spacecraft observer -- available in every geolocation mode.
     "Subsatellite_Latitude",
     "Subsatellite_Longitude",
     "Subsatellite_Colatitude",
@@ -38,11 +47,15 @@ _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     "Relative_Azimuth_Surface",
     "Cone_Angle",
     "Cone_Angle_Rate",
-    # Motion, attitude, and orbital-frame fields.
+    # Orbital-frame look angles and the boresight vector -- also instrument observer, so these
+    # are fill in jpss_only for the same reason as the surface geometry above.
     "Clock_Angle",
     "Clock_Angle_Rate",
     "Along_Track_Angle",
     "Cross_Track_Angle",
+    "Line_Of_Sight",
+    # Motion and attitude -- spacecraft observer, so unlike the boresight fields these still
+    # resolve in jpss_only. The start-of-hour pair comes from a second, hour-boundary query.
     "Satellite_Position",
     "Satellite_Velocity",
     "Satellite_Position_Start_Of_Hour",
@@ -51,7 +64,6 @@ _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     "Satellite_Attitude_Q1",
     "Satellite_Attitude_Q2",
     "Satellite_Attitude_Q3",
-    "Line_Of_Sight",
 )
 
 # Mapping from ChannelName enum values to L1B product variable names
@@ -61,35 +73,6 @@ _CHANNEL_TO_RADIANCE_VAR: dict[str, str] = {
     ChannelName.TOTAL.value: "Filtered_Radiance_Tot",
     ChannelName.SPLIT_SHORTWAVE.value: "Filtered_Radiance_SSW",
 }
-
-# Geometry product fields populated from curryer that are computed in full-pointing production
-# mode (subsatellite fields are covered separately by the colatitude/jpss_only checks below).
-_GEOMETRY_PRODUCT_FIELDS: tuple[str, ...] = (
-    "Subsolar_Latitude",
-    "Subsolar_Longitude",
-    "Subsolar_Colatitude",
-    "Radius_of_Satellite_from_Center_of_Earth",
-    "Viewing_Zenith_Surface",
-    "Solar_Zenith_Surface",
-    "Viewing_Azimuth_Surface_WRT_North",
-    "Solar_Azimuth_Surface_WRT_North",
-    "Relative_Azimuth_Surface",
-    "Cone_Angle",
-    "Cone_Angle_Rate",
-    "Clock_Angle",
-    "Clock_Angle_Rate",
-    "Along_Track_Angle",
-    "Cross_Track_Angle",
-    "Satellite_Position",
-    "Satellite_Velocity",
-    "Satellite_Position_Start_Of_Hour",
-    "Satellite_Velocity_Start_Of_Hour",
-    "Satellite_Attitude_Q0",
-    "Satellite_Attitude_Q1",
-    "Satellite_Attitude_Q2",
-    "Satellite_Attitude_Q3",
-    "Line_Of_Sight",
-)
 
 
 @pytest.fixture(scope="module")
