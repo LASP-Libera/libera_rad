@@ -40,6 +40,48 @@ _INSTRUMENT_FIELDS = (
 )
 _GEOMETRY_FIELDS = _SPACECRAFT_FIELDS + _INSTRUMENT_FIELDS
 
+# Spacecraft frames the Libera FK defines. Libera flies on JPSS-4; NOAA-20 is the alternate
+# bus configuration carried in the same kernel set.
+SPACECRAFT_OBSERVERS = ("JPSS4_SC", "NOAA20_SC")
+DEFAULT_SPACECRAFT_OBSERVER = "JPSS4_SC"
+
+# The four radiometer channel frames the Libera FK defines. All four are currently identity
+# rotations relative to ``LIBERA_EL_COORD`` -- the channels are co-boresighted, so geometry
+# computed for any one of them is valid for all four, and one query suffices. There is no
+# generic ``LIBERA_RAD`` frame to name instead. Should the FK ever carry real per-channel
+# boresight offsets, each channel would need its own query and the product would need
+# per-channel geometry fields.
+INSTRUMENT_OBSERVERS = ("LIBERA_SW_RAD", "LIBERA_LW_RAD", "LIBERA_TOT_RAD", "LIBERA_SSW_RAD")
+DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_SW_RAD"
+
+
+def _validate_observer(observer: str, allowed: tuple[str, ...], role: str) -> None:
+    """Reject an observer frame that is not a known Libera frame for this role.
+
+    A typo'd frame already fails inside SPICE, but a *valid* frame used in the wrong role
+    (the WFOV camera as the instrument, say) would silently produce correct-looking geometry
+    for the wrong optic. This turns that into an error at the call site.
+
+    Parameters
+    ----------
+    observer : str
+        Requested SPICE frame name.
+    allowed : tuple[str, ...]
+        Frame names valid for this role.
+    role : str
+        Human-readable role name, used in the error message.
+
+    Raises
+    ------
+    ValueError
+        If ``observer`` is not in ``allowed``.
+    """
+    if observer not in allowed:
+        raise ValueError(
+            f"Unsupported {role} observer {observer!r}; expected one of {', '.join(allowed)}. "
+            "Geometry for other frames is not supported by the L1B product definition."
+        )
+
 
 def _spice_error_message(err: SpiceyError) -> str:
     """User-facing description of a SPICE failure.
@@ -60,8 +102,9 @@ def calculate_lat_lon_altitude(
     """
     Calculate instrument geolocation (latitude/longitude/altitude).
 
-    Instrument lat/lon/alt come from the ``LIBERA_SW_RAD`` boresight ellipsoid
-    intersection. The subsatellite point and the other geometry fields come
+    Instrument lat/lon/alt come from the :data:`DEFAULT_INSTRUMENT_OBSERVER` boresight
+    ellipsoid intersection; the radiometer channels are co-boresighted, so this is the
+    ground point for all four. The subsatellite point and the other geometry fields come
     from :func:`calculate_geometry`.
 
     Parameters
@@ -81,7 +124,10 @@ def calculate_lat_lon_altitude(
     u_gps_times = spicetime.adapt(time_range, "iso")
 
     ellips_lla_df, _, _ = spatial.compute_ellipsoid_intersection(
-        u_gps_times, sp.obj.Body("LIBERA_SW_RAD", frame=True), give_geodetic_output=True, give_lat_lon_in_degrees=True
+        u_gps_times,
+        sp.obj.Body(DEFAULT_INSTRUMENT_OBSERVER, frame=True),
+        give_geodetic_output=True,
+        give_lat_lon_in_degrees=True,
     )
 
     logger.debug("Instrument geolocation: generated %d points", len(ellips_lla_df))
@@ -201,8 +247,8 @@ def _query_geometry(
 def calculate_geometry(
     kernel_manager: KernelManager,
     timestamps: np.ndarray,
-    spacecraft_observer: str = "JPSS4_SC",
-    instrument_observer: str = "LIBERA_SW_RAD",
+    spacecraft_observer: str = DEFAULT_SPACECRAFT_OBSERVER,
+    instrument_observer: str = DEFAULT_INSTRUMENT_OBSERVER,
 ) -> pd.DataFrame:
     """
     Compute the geometry fields via curryer ``GeometryData``.
@@ -231,9 +277,12 @@ def calculate_geometry(
     timestamps : np.ndarray
         Radiometer timestamps on the L1B output time grid.
     spacecraft_observer : str
-        SPICE body name for the spacecraft. Default ``"JPSS4_SC"``.
+        SPICE frame for the spacecraft, one of :data:`SPACECRAFT_OBSERVERS`. Default
+        ``"JPSS4_SC"``.
     instrument_observer : str
-        SPICE body name for the instrument. Default ``"LIBERA_SW_RAD"``.
+        SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
+        ``"LIBERA_SW_RAD"``. The radiometer channels are co-boresighted, so this choice does
+        not currently change the result -- see :data:`INSTRUMENT_OBSERVERS`.
 
     Returns
     -------
@@ -242,11 +291,15 @@ def calculate_geometry(
 
     Raises
     ------
+    ValueError
+        If either observer is not a known Libera frame for its role.
     RuntimeError
         If a curryer SPICE query fails outright (e.g. an unparseable time or a missing
         kernel), or if the spacecraft observer returns no coverage at all. Both carry a
         parsed, user-facing description of the cause.
     """
+    _validate_observer(spacecraft_observer, SPACECRAFT_OBSERVERS, "spacecraft")
+    _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
     kernel_manager.ensure_known_kernels_are_furnished()
     u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
     # Spacecraft fields resolve in every mode, so all-NaN means the kernels miss the granule.

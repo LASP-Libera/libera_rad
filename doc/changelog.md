@@ -6,6 +6,9 @@
 - Populate `Subsatellite_Latitude`/`_Longitude`/`_Colatitude`, `Subsolar_Latitude`/`_Longitude`/`_Colatitude`, and `Radius_of_Satellite_from_Center_of_Earth`, all of which previously shipped as `-999`/`-9999` fill.
 - Move `use_geo: false` fill values out of L1B packaging into `geolocation.create_placeholder_geometry`, alongside the existing azimuth/lat-lon producers; the packager now always receives a geometry DataFrame and no longer branches on its absence.
 - Raise a parsed, user-facing `RuntimeError` when a curryer SPICE query fails or returns no coverage for the granule, instead of silently packaging NaN.
+- Query the spacecraft and instrument observers separately in `calculate_geometry`, populating the boresight surface geometry: `Viewing_Zenith_Surface`, `Solar_Zenith_Surface`, `Viewing_Azimuth_Surface_WRT_North`, `Solar_Azimuth_Surface_WRT_North`, `Relative_Azimuth_Surface`, `Cone_Angle`, and `Cone_Angle_Rate`. Boresight fields are NaN in `jpss_only` mode, where the instrument frame does not resolve; the spacecraft fields still come through.
+- Derive `Colatitude` from curryer's `surface_colatitude` rather than computing it locally.
+- Validate the spacecraft and instrument observer frames against the Libera FK (`SPACECRAFT_OBSERVERS`, `INSTRUMENT_OBSERVERS`), raising `ValueError` for a frame used in the wrong role rather than silently computing geometry for the wrong optic.
 - Require `lasp-curryer >= 0.5.0` for the `GeometryField` enum and the SPICE error classifier.
 
 ## 0.6.0

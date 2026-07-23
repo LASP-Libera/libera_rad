@@ -110,6 +110,50 @@ def test_calculate_geometry_allows_all_nan_instrument_fields():
     assert not result["subsatellite_latitude"].isna().to_numpy().any()
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "expected_message"),
+    [
+        ({"spacecraft_observer": "LIBERA_SW_RAD"}, "Unsupported spacecraft observer"),
+        ({"instrument_observer": "LIBERA_WFOV_CAM"}, "Unsupported instrument observer"),
+        ({"instrument_observer": "JPSS4_SC"}, "Unsupported instrument observer"),
+    ],
+)
+def test_calculate_geometry_rejects_unknown_observer(kwargs, expected_message):
+    """A valid SPICE frame used in the wrong role must fail loudly, not compute the wrong optic."""
+    timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
+    km = Mock()
+    with patch("libera_rad.geolocation.geometry.GeometryData") as mock_cls:
+        with pytest.raises(ValueError, match=expected_message):
+            geolocation.calculate_geometry(km, timestamps, **kwargs)
+    mock_cls.assert_not_called()
+    km.ensure_known_kernels_are_furnished.assert_not_called()
+
+
+@pytest.mark.parametrize("instrument_observer", geolocation.INSTRUMENT_OBSERVERS)
+def test_calculate_geometry_accepts_every_radiometer_channel(instrument_observer):
+    """All four channel frames are co-boresighted, so each is a valid instrument observer."""
+    timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
+    km = Mock()
+    spacecraft_geo = Mock()
+    spacecraft_geo.get_geometry.return_value = pd.DataFrame(
+        {column: [1.0] for field in geolocation._SPACECRAFT_FIELDS for column in field.columns}
+    )
+    instrument_geo = Mock()
+    instrument_geo.get_geometry.return_value = pd.DataFrame(
+        {column: [1.0] for field in geolocation._INSTRUMENT_FIELDS for column in field.columns}
+    )
+    with (
+        patch(
+            "libera_rad.geolocation.geometry.GeometryData",
+            side_effect=[spacecraft_geo, instrument_geo],
+        ) as mock_cls,
+        patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([1])),
+    ):
+        geolocation.calculate_geometry(km, timestamps, instrument_observer=instrument_observer)
+
+    assert [call.args[0] for call in mock_cls.call_args_list] == ["JPSS4_SC", instrument_observer]
+
+
 def test_create_placeholder_geometry():
     result = geolocation.create_placeholder_geometry(5)
     assert len(result) == 5
