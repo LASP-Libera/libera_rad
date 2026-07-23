@@ -326,6 +326,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
+            patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
             patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -346,14 +347,20 @@ class TestProcessL1aToL1b:
                     "alt": np.zeros(100, dtype=np.float32),
                 }
             )
-            subsatellite_lla = pd.DataFrame(
+            mock_geoloc.return_value = instrument_lla
+            subsat_lat = np.linspace(29, 30, 100, dtype=np.float32)
+            mock_geometry.return_value = pd.DataFrame(
                 {
-                    "lat": np.linspace(29, 30, 100, dtype=np.float32),
-                    "lon": np.linspace(-101, -100, 100, dtype=np.float32),
-                    "alt": np.zeros(100, dtype=np.float32),
+                    "subsatellite_latitude": subsat_lat,
+                    "subsatellite_longitude": np.linspace(-101, -100, 100, dtype=np.float32),
+                    "subsatellite_colatitude": (90.0 - subsat_lat).astype(np.float32),
+                    "subsolar_latitude": np.linspace(-23, -22, 100, dtype=np.float32),
+                    "subsolar_longitude": np.linspace(40, 41, 100, dtype=np.float32),
+                    "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
+                    "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
+                    "spacecraft_altitude": np.zeros(100, dtype=np.float32),
                 }
             )
-            mock_geoloc.return_value = (instrument_lla, subsatellite_lla)
             mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
@@ -372,6 +379,8 @@ class TestProcessL1aToL1b:
             assert np.all(result["Subsatellite_Latitude"] != np.float32(-999))
             assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
             assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
+            assert not np.any(result["Subsolar_Longitude"] == np.float32(-999))
+            assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
             assert np.all(result["Azimuth"] == np.float32(0))
             assert np.all(result["Elevation"] == np.float32(0))
             assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
@@ -438,7 +447,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
-            patch("libera_rad.geolocation.calculate_libera_base_subsatellite_geolocation") as mock_jpss_geo,
+            patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
@@ -450,11 +459,17 @@ class TestProcessL1aToL1b:
             mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
-            mock_jpss_geo.return_value = pd.DataFrame(
+            subsat_lat = np.linspace(10, 11, 100, dtype=np.float32)
+            mock_geometry.return_value = pd.DataFrame(
                 {
-                    "lat": np.linspace(10, 11, 100, dtype=np.float32),
-                    "lon": np.linspace(-80, -79, 100, dtype=np.float32),
-                    "alt": np.zeros(100, dtype=np.float32),
+                    "subsatellite_latitude": subsat_lat,
+                    "subsatellite_longitude": np.linspace(-80, -79, 100, dtype=np.float32),
+                    "subsatellite_colatitude": (90.0 - subsat_lat).astype(np.float32),
+                    "subsolar_latitude": np.linspace(-23, -22, 100, dtype=np.float32),
+                    "subsolar_longitude": np.linspace(40, 41, 100, dtype=np.float32),
+                    "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
+                    "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
+                    "spacecraft_altitude": np.zeros(100, dtype=np.float32),
                 }
             )
             mock_radiance.return_value = pd.Series(np.random.rand(100))
@@ -462,13 +477,16 @@ class TestProcessL1aToL1b:
             result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
 
         mock_prod_geo.assert_not_called()
-        mock_jpss_geo.assert_called_once()
+        mock_geometry.assert_called_once()
         assert np.all(result["Azimuth"] == 0)
         assert np.all(result["Elevation"] == 0)
         assert np.allclose(result["Subsatellite_Latitude"], result["Latitude"])
         assert np.allclose(result["Subsatellite_Longitude"], result["Longitude"])
         assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
         assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
+        # Subsolar point and satellite radius are now populated from curryer.
+        assert not np.any(result["Subsolar_Latitude"] == np.float32(-999))
+        assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
         assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
 
     @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])
