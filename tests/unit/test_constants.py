@@ -86,7 +86,32 @@ class TestCalEventRegistry:
 
     def test_family_from_cal_product(self):
         assert family_from_cal_product(DataProductIdentifier.cal_gain) == "gain"
+        assert family_from_cal_product(DataProductIdentifier.cal_noise) == "gain"
         assert family_from_cal_product(DataProductIdentifier.cal_swc_405nm) == "swc"
-        assert family_from_cal_product(DataProductIdentifier.cal_lwc_temp1) == "lwc"
+        assert family_from_cal_product(DataProductIdentifier.cal_lwc_310k) == "lwc"
+        assert family_from_cal_product(DataProductIdentifier.cal_lwc_305k) == "lwc"
         assert family_from_cal_product(DataProductIdentifier.cal_solar_tot_pri) == "solar"
-        assert family_from_cal_product(DataProductIdentifier.cal_lunar_cal1) is None
+        assert family_from_cal_product(DataProductIdentifier.cal_lunar_south_pole) is None
+
+    def test_noise_is_distinct_event_on_the_gain_family(self):
+        """Noise cal (ObsID 515) is its own event/product but combines on the gain family."""
+        gain = get_cal_event_spec(512)
+        noise = get_cal_event_spec(515)
+
+        # Distinct calibration event with its own CAL and TRIMMED products.
+        assert noise.obsid != gain.obsid
+        assert noise.cal_product is DataProductIdentifier.cal_noise
+        assert noise.trimmed_product is DataProductIdentifier.l1a_icie_nom_hk_noise_trimmed
+
+        # ...combined with gain's full-rate merge recipe.
+        assert noise.family == gain.family == "gain"
+        assert noise.companion_products == gain.companion_products
+        assert noise.time_variable == gain.time_variable
+
+    def test_all_five_lwc_temperatures_supported(self):
+        """LWC ObsIDs 320-324 all resolve to the lwc family."""
+        lwc_obsids = {320: "LWC-310K", 321: "LWC-320K", 322: "LWC-330K", 323: "LWC-300K", 324: "LWC-305K"}
+        for obsid, product_value in lwc_obsids.items():
+            spec = get_cal_event_spec(obsid)
+            assert spec.family == "lwc"
+            assert spec.cal_product.value == product_value

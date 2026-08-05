@@ -49,7 +49,10 @@ def get_cal_product_definition(event_spec: CalEventSpec) -> LiberaDataProductDef
 
 # Backward-compatible aliases used by tests that look up a definition by product ID.
 # Each maps to the family template path; callers should prefer ``get_cal_product_definition``.
-cal_gain_product_definitions = {DataProductIdentifier.cal_gain: CAL_FAMILY_PRODUCT_DEFINITIONS["gain"]}
+cal_gain_product_definitions = {
+    DataProductIdentifier.cal_gain: CAL_FAMILY_PRODUCT_DEFINITIONS["gain"],
+    DataProductIdentifier.cal_noise: CAL_FAMILY_PRODUCT_DEFINITIONS["gain"],
+}
 cal_sw_product_definitions = {
     DataProductIdentifier.cal_swc_365nm: CAL_FAMILY_PRODUCT_DEFINITIONS["swc"],
     DataProductIdentifier.cal_swc_405nm: CAL_FAMILY_PRODUCT_DEFINITIONS["swc"],
@@ -59,9 +62,11 @@ cal_sw_product_definitions = {
     DataProductIdentifier.cal_swc_1550nm: CAL_FAMILY_PRODUCT_DEFINITIONS["swc"],
 }
 cal_lw_product_definitions = {
-    DataProductIdentifier.cal_lwc_temp1: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
-    DataProductIdentifier.cal_lwc_temp2: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
-    DataProductIdentifier.cal_lwc_temp3: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
+    DataProductIdentifier.cal_lwc_310k: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
+    DataProductIdentifier.cal_lwc_320k: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
+    DataProductIdentifier.cal_lwc_330k: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
+    DataProductIdentifier.cal_lwc_300k: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
+    DataProductIdentifier.cal_lwc_305k: CAL_FAMILY_PRODUCT_DEFINITIONS["lwc"],
 }
 cal_solar_product_definitions = {
     DataProductIdentifier.cal_solar_ssw_pri: CAL_FAMILY_PRODUCT_DEFINITIONS["solar"],

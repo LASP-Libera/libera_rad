@@ -94,12 +94,16 @@ _FAMILY_CONFIGS: dict[CalFamily, _FamilyConfig] = {
 def family_from_cal_product(cal_product: DataProductIdentifier) -> CalFamily | None:
     """Map a CAL ProductID to a rad cal-combine family, or ``None`` if unsupported.
 
-    Supported prefixes match implemented families (``GAIN``, ``SWC-``, ``LWC-``,
-    ``SOLAR-``). Lunar and other RAD_CAL products return ``None`` until a family
-    config is added.
+    Supported prefixes match implemented families (``GAIN``, ``NOISE``, ``SWC-``,
+    ``LWC-``, ``SOLAR-``). Lunar and other RAD_CAL products return ``None`` until a
+    family config is added.
+
+    ``NOISE`` (ObsID 515) maps to the ``gain`` family: it is a distinct calibration
+    event and CAL product, but it was split out of the original combined gain/noise
+    ObsID 512 and is combined with the same full-rate merge recipe.
     """
     value = cal_product.value
-    if value == "GAIN":
+    if value in ("GAIN", "NOISE"):
         return "gain"
     if value.startswith("SWC-"):
         return "swc"
