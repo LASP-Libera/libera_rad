@@ -88,24 +88,122 @@ def assert_azimuth_elevation_positions(dataset: xr.Dataset) -> None:
         assert np.any(finite), f"{name} expected finite SPICE-derived values"
 
 
+#: Slack allowed when bounding companion sample times by the NOM-HK window.
+#:
+#: Companions are trimmed a whole packet at a time, so the edge packets of the retained run
+#: contribute samples on both sides of the window boundary. A RAD-SAMPLE packet carries 50
+#: samples at ~150 Hz, so one packet's span is well under a second; this bound catches a
+#: companion that is genuinely off the event while tolerating that edge.
+_SAMPLE_WINDOW_SLACK = np.timedelta64(2, "s")
+
+
 def assert_companions_within_nom_hk_window(dataset: xr.Dataset) -> None:
-    """Assert companion packet/FPE times lie within the NOM-HK event window."""
+    """Assert companion *sample* times lie within the NOM-HK event window, plus one packet.
+
+    Sample time is what selects packets, so it is the axis the window actually bounds. Packet
+    times are deliberately *not* bounded: an FPE-skewed packet whose samples land inside the
+    window is kept, and its packet timestamp can sit well outside it (a RAD-SAMPLE packet
+    stamped 16 s past the window has been observed in ground-test data). Those are logged for
+    visibility rather than asserted on.
+
+    Sample-to-packet integrity is covered by :func:`assert_sample_packet_axes_agree`.
+    """
     if "NOM_HK_PACKET_ICIE_TIME" not in dataset:
         raise AssertionError("Merged calibration product is missing NOM_HK_PACKET_ICIE_TIME")
     t0 = np.datetime64(dataset["NOM_HK_PACKET_ICIE_TIME"].values.min())
     t1 = np.datetime64(dataset["NOM_HK_PACKET_ICIE_TIME"].values.max())
 
+    checked_any = False
     for name, values in dataset.variables.items():
-        if name == "NOM_HK_PACKET_ICIE_TIME":
-            continue
-        if not (name.endswith("_PACKET_ICIE_TIME") or name.endswith("_FPE_TIME") or name.endswith("FPE_TIME")):
+        if not str(name).endswith("_FPE_TIME"):
             continue
         if values.size == 0:
             raise AssertionError(f"{name} is empty after event-window slicing")
+        checked_any = True
         vmin = np.datetime64(values.values.min())
         vmax = np.datetime64(values.values.max())
-        assert vmin >= t0, f"{name} starts before NOM-HK window: {vmin} < {t0}"
-        assert vmax <= t1, f"{name} ends after NOM-HK window: {vmax} > {t1}"
+        assert vmin >= t0 - _SAMPLE_WINDOW_SLACK, f"{name} starts before NOM-HK window: {vmin} < {t0}"
+        assert vmax <= t1 + _SAMPLE_WINDOW_SLACK, f"{name} ends after NOM-HK window: {vmax} > {t1}"
+
+    assert checked_any, "Merged calibration product has no sample time variables to bound"
+
+
+def assert_sample_packet_axes_agree(dataset: xr.Dataset) -> None:
+    """Assert each sample axis agrees with its packet axis, via ``*_packet_index``.
+
+    Every sample group carries a ``<group>_packet_index`` recording which packet each sample
+    came from. Trimming renumbers it from 0 against the surviving packet axis, so in a written
+    calibration product it must be exactly ``repeat(arange(n_packets), samples_per_packet)``.
+
+    Guards the defect where slicing the packet and sample axes independently left them covering
+    different packet runs — visible as a ``packet_index`` of 10–2434 against a 2432-long packet
+    dimension.
+    """
+    sample_dims = [str(dim) for dim in dataset.dims if str(dim).endswith("_FPE_TIME")]
+    assert sample_dims, "Merged calibration product has no sample dimensions to check"
+
+    for sample_dim in sample_dims:
+        group = sample_dim[: -len("_FPE_TIME")]
+        packet_dim = f"{group}_PACKET"
+        assert packet_dim in dataset.dims, f"{sample_dim} has no matching {packet_dim} dimension"
+        n_packets = dataset.sizes[packet_dim]
+        n_samples = dataset.sizes[sample_dim]
+        assert n_samples % n_packets == 0, (
+            f"{sample_dim} has {n_samples} samples, not an exact multiple of {packet_dim}={n_packets}; "
+            f"the packet and sample axes describe different sets of packets"
+        )
+
+        index_var = f"{group}_packet_index"
+        assert index_var in dataset.variables, (
+            f"{sample_dim} has no {index_var}; the sample-to-packet validation link is missing"
+        )
+        packet_index = np.asarray(dataset[index_var].values)
+        assert packet_index.dtype == np.int64, f"{index_var} should be int64, got {packet_index.dtype}"
+        np.testing.assert_array_equal(
+            packet_index,
+            np.repeat(np.arange(n_packets, dtype=np.int64), n_samples // n_packets),
+            err_msg=f"{index_var} is not a 0-based index into {packet_dim} (size {n_packets})",
+        )
+
+
+def assert_filename_covers_data(dataset: xr.Dataset, product_path: Path | S3Path | str) -> None:
+    """Assert the product filename's time range spans every *sample* time variable in the file.
+
+    Every family names its file from ``NOM_HK_PACKET_ICIE_TIME``: NOM-HK defines the
+    calibration event and is the only time base shared across families. ``*_PACKET_ICIE_TIME``
+    is deliberately excluded from this check — whole-packet retention and FPE skew let a
+    companion's packet timestamps sit outside the stamped range even though its samples do not.
+    """
+    parts = LiberaDataProductFilename.from_file_path(product_path).filename_parts
+    start = np.datetime64(parts.utc_start.replace(tzinfo=None), "ns")
+    end = np.datetime64(parts.utc_end.replace(tzinfo=None), "ns")
+
+    for name, values in dataset.variables.items():
+        if not str(name).endswith("_FPE_TIME"):
+            continue
+        vmin = np.datetime64(values.values.min(), "ns")
+        vmax = np.datetime64(values.values.max(), "ns")
+        # Filenames are truncated to whole seconds, and a retained edge packet contributes
+        # samples just outside the window, so allow a small amount of slack per edge.
+        assert vmin >= start - _SAMPLE_WINDOW_SLACK, f"filename starts at {start}, after {name} begins at {vmin}"
+        assert vmax <= end + _SAMPLE_WINDOW_SLACK, f"filename ends at {end}, before {name} ends at {vmax}"
+
+
+def assert_input_files_provenance(dataset: xr.Dataset, expected_inputs: list[str]) -> None:
+    """Assert ``input_files`` names the granules the product was actually built from.
+
+    Before this was fixed, a calibration product inherited ``input_files`` from its NOM-HK
+    input, which in turn had inherited the raw L0 CCSDS packet filenames from its own decode —
+    so the product listed its grandparents and named neither the L1A companions nor the SPICE
+    kernels it consumed.
+    """
+    input_files = [str(name) for name in np.atleast_1d(dataset.attrs["input_files"])]
+
+    l0_leftovers = [name for name in input_files if name.startswith("ccsds_")]
+    assert not l0_leftovers, f"input_files still carries L0 packet files from the NOM-HK decode: {l0_leftovers}"
+
+    missing = [name for name in expected_inputs if name not in input_files]
+    assert not missing, f"input_files is missing {missing}; got {input_files}"
 
 
 def load_cal_netcdf(path: Path | S3Path | str) -> xr.Dataset:

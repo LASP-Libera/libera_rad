@@ -31,6 +31,21 @@ COMBINER_CCSDS_DROP_FIELDS = [
 #: Environment variable that selects the calibration ObsID for ``cal-combine``.
 LIBERA_CAL_OBSID_ENV = "LIBERA_CAL_OBSID"
 
+#: Time coordinate every cal product is named from.
+#:
+#: NOM-HK defines the calibration event: ``select_and_slice_event_inputs`` derives the window
+#: from NOM-HK packet time and every companion is trimmed to it, so NOM-HK is the only time
+#: base shared by all families. Naming from a companion instead describes one stream rather
+#: than the event — the gain product previously named from ``RAD_FULL_PACKET_ICIE_TIME`` and
+#: stamped a range four minutes shorter than the CAL data it contained. This is deliberately a
+#: single constant rather than a per-family setting so no family can reintroduce that.
+#:
+#: The window is not a strict envelope of the merged product. Companions are trimmed a whole
+#: packet at a time, so an edge packet extends past the window by up to its own sample span,
+#: and an FPE-skewed packet can extend further (a RAD-SAMPLE packet stamped 16 s past the
+#: window while its samples land inside it has been observed in ground-test data).
+CAL_PRODUCT_TIME_VARIABLE = "NOM_HK_PACKET_ICIE_TIME"
+
 CalFamily = Literal["gain", "swc", "lwc", "solar"]
 
 
@@ -43,6 +58,8 @@ class CalEventSpec:
     trimmed_product: DataProductIdentifier
     family: CalFamily
     companion_products: tuple[DataProductIdentifier, ...]
+    #: Time coordinate the product filename is stamped from; always
+    #: :data:`CAL_PRODUCT_TIME_VARIABLE`.
     time_variable: str
 
 
@@ -51,17 +68,16 @@ class _FamilyConfig:
     """Rad-algorithm merge recipe for one calibration family."""
 
     companion_products: tuple[DataProductIdentifier, ...]
-    time_variable: str
 
 
-#: Family → companions / product time variable. ProductIDs come from libera_utils.
+#: Family → companion products. ProductIDs come from libera_utils. All families are named
+#: from :data:`CAL_PRODUCT_TIME_VARIABLE`.
 _FAMILY_CONFIGS: dict[CalFamily, _FamilyConfig] = {
     "gain": _FamilyConfig(
         companion_products=(
             DataProductIdentifier.l1a_icie_rad_full_decoded,
             DataProductIdentifier.l1a_icie_cal_full_decoded,
         ),
-        time_variable="RAD_FULL_PACKET_ICIE_TIME",
     ),
     "swc": _FamilyConfig(
         companion_products=(
@@ -70,7 +86,6 @@ _FAMILY_CONFIGS: dict[CalFamily, _FamilyConfig] = {
             DataProductIdentifier.l1a_pec_sw_stat_decoded,
             DataProductIdentifier.l1a_pev_sw_stat_decoded,
         ),
-        time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
     ),
     "lwc": _FamilyConfig(
         companion_products=(
@@ -78,14 +93,12 @@ _FAMILY_CONFIGS: dict[CalFamily, _FamilyConfig] = {
             DataProductIdentifier.l1a_pec_sw_stat_decoded,
             DataProductIdentifier.l1a_pev_sw_stat_decoded,
         ),
-        time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
     ),
     "solar": _FamilyConfig(
         companion_products=(
             DataProductIdentifier.l1a_icie_rad_sample_decoded,
             DataProductIdentifier.l1a_pev_sw_stat_decoded,
         ),
-        time_variable="RAD_SAMPLE_PACKET_ICIE_TIME",
     ),
     # TODO [LIBSDC-811]: Add lunar cals
 }
@@ -128,7 +141,7 @@ def _cal_event_from_obsid_spec(obsid_spec: ObsIdSpec) -> CalEventSpec | None:
         trimmed_product=obsid_spec.trimmed_product,
         family=family,
         companion_products=family_cfg.companion_products,
-        time_variable=family_cfg.time_variable,
+        time_variable=CAL_PRODUCT_TIME_VARIABLE,
     )
 
 

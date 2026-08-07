@@ -22,6 +22,7 @@ from libera_utils.io.netcdf import write_libera_data_product
 from libera_utils.logutil import configure_task_logging
 
 from libera_rad.calibration.combiners.l1a_cal_event_utils import (
+    add_input_files,
     attach_azimuth_elevation_positions,
     build_event_dataset,
     confirm_obsid_matches_hk,
@@ -115,6 +116,8 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
     if needs_azel:
         logger.info("Step 4b: Attaching Azimuth_Position / Elevation_Position")
         cal_event = attach_azimuth_elevation_positions(cal_event, dynamic_kernel_sources)
+        # The kernels are real inputs to this product, so record them alongside the L1A granules
+        cal_event = add_input_files(cal_event, dynamic_kernel_sources)
 
     logger.info("Step 5: Writing data product %s", event_spec.cal_product.value)
     product_definition = get_cal_product_definition(event_spec)

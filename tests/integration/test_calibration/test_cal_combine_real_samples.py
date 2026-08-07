@@ -12,6 +12,9 @@ from tests.integration.test_calibration.cal_test_helpers import (
     assert_azimuth_elevation_positions,
     assert_cal_product_conformance,
     assert_companions_within_nom_hk_window,
+    assert_filename_covers_data,
+    assert_input_files_provenance,
+    assert_sample_packet_axes_agree,
     build_cal_event_manifest,
     load_cal_netcdf,
 )
@@ -121,7 +124,14 @@ def test_cal_combine_real_sample_event(
     dataset = load_cal_netcdf(output_file)
     assert_cal_product_conformance(dataset, output_file, event_spec)
     assert_companions_within_nom_hk_window(dataset)
+    assert_sample_packet_axes_agree(dataset)
+    assert_filename_covers_data(dataset, output_file)
     _assert_source_obsids(dataset, obsid)
+
+    expected_inputs = list(filenames)
+    if spice_kernel_dir is not None:
+        expected_inputs += [path.name for path in sorted(spice_kernel_dir.glob("*.bc"))]
+    assert_input_files_provenance(dataset, expected_inputs)
 
     if obsid in _AZEL_OBSIDS:
         assert_azimuth_elevation_positions(dataset)

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +22,7 @@ from cloudpathlib import S3Path
 from libera_utils import Manifest, smart_open
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.filenaming import LiberaDataProductFilename
+from libera_utils.l1a.packet_slicing import find_sample_dims, slice_l1a_dataset_to_time_window
 from libera_utils.libera_spice.kernel_manager import KernelManager
 
 from libera_rad import geolocation
@@ -42,79 +44,13 @@ _REQUIRED_SPICE_CAL_AZEL: tuple[DataProductIdentifier, ...] = (
     DataProductIdentifier.spice_el_ck,
 )
 
-#: Secondary FPE time dimension to slice for products that have one.
-_COMPANION_SECONDARY_TIME_DIM: dict[DataProductIdentifier, str] = {
-    DataProductIdentifier.l1a_icie_rad_sample_decoded: "RAD_SAMPLE_FPE_TIME",
-    DataProductIdentifier.l1a_icie_cal_sample_decoded: "CAL_SAMPLE_FPE_TIME",
-    DataProductIdentifier.l1a_icie_rad_full_decoded: "RAD_FULL_FPE_TIME",
-    DataProductIdentifier.l1a_icie_cal_full_decoded: "CAL_FULL_FPE_TIME",
-}
-
 #: Families that receive SPICE-derived Azimuth_Position / Elevation_Position.
 _AZEL_POSITION_FAMILIES = frozenset({"swc", "lwc", "solar"})
+#: Global attribute listing the granules this product was built from.
+_INPUT_FILES_ATTR = "input_files"
 _RAD_SAMPLE_FPE_TIME = "RAD_SAMPLE_FPE_TIME"
 _AZIMUTH_POSITION = "Azimuth_Position"
 _ELEVATION_POSITION = "Elevation_Position"
-
-
-def slice_dataset_to_time_window(
-    ds: xr.Dataset,
-    t0: np.datetime64,
-    t1: np.datetime64,
-    packet_time_var: str = "PACKET_ICIE_TIME",
-    secondary_time_dim: str | None = None,
-) -> xr.Dataset:
-    """Slice a decoded L1A Dataset to packets (and optionally samples) in ``[t0, t1]``.
-
-    Applies an inclusive mask on *packet_time_var* along ``PACKET``. When
-    *secondary_time_dim* is set, that dimension is sliced independently (e.g.
-    ``RAD_SAMPLE_FPE_TIME`` on RAD-SAMPLE products).
-
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Dataset with a ``PACKET`` dimension indexed by *packet_time_var*.
-    t0 : np.datetime64
-        Window start time (inclusive).
-    t1 : np.datetime64
-        Window end time (inclusive).
-    packet_time_var : str
-        Name of the packet-level time coordinate (default ``"PACKET_ICIE_TIME"``).
-    secondary_time_dim : str or None
-        Name of an independent secondary time dimension to also slice (e.g.
-        ``"RAD_SAMPLE_FPE_TIME"``).  When provided the Dataset is sliced along
-        both ``PACKET`` and this dimension independently.
-
-    Returns
-    -------
-    xr.Dataset
-        Time-sliced dataset.
-    """
-    pkt_times = ds[packet_time_var].values
-    pkt_mask = (pkt_times >= t0) & (pkt_times <= t1)
-    sel: dict[str, np.ndarray] = {"PACKET": pkt_mask}
-
-    if secondary_time_dim is not None and secondary_time_dim in ds.dims:
-        sec_times = ds[secondary_time_dim].values
-        sec_mask = (sec_times >= t0) & (sec_times <= t1)
-        sel[secondary_time_dim] = sec_mask
-        logger.debug(
-            "slice_dataset_to_time_window [%s — %s]: %d packets, %d %s samples.",
-            t0,
-            t1,
-            int(pkt_mask.sum()),
-            int(sec_mask.sum()),
-            secondary_time_dim,
-        )
-    else:
-        logger.debug(
-            "slice_dataset_to_time_window [%s — %s]: %d packets.",
-            t0,
-            t1,
-            int(pkt_mask.sum()),
-        )
-
-    return ds.isel(sel)
 
 
 def read_all_cal_input_data(
@@ -259,8 +195,8 @@ def family_needs_azimuth_elevation_positions(family: str) -> bool:
     return family in _AZEL_POSITION_FAMILIES
 
 
-def extract_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
-    """Return the NOM-HK dataset from trimmed or full-day decoded inputs.
+def extract_named_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> tuple[str, xr.Dataset]:
+    """Return the NOM-HK ``(filename, dataset)`` from trimmed or full-day decoded inputs.
 
     Prefers the event's TRIMMED product, then falls back to ``NOM-HK-DECODED``
     for fixtures that predate Step-1 trimming.
@@ -274,8 +210,8 @@ def extract_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEvent
 
     Returns
     -------
-    xr.Dataset
-        NOM-HK dataset for the event.
+    tuple of (str, xr.Dataset)
+        Source filename and NOM-HK dataset for the event.
 
     Raises
     ------
@@ -288,10 +224,28 @@ def extract_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEvent
             libera_filename = LiberaDataProductFilename.from_file_path(file_name)
             if libera_filename.data_product_id == product_id.value:
                 logger.info("Using NOM-HK input product %s from %s", product_id.value, file_name)
-                return dataset
+                return file_name, dataset
     raise ValueError(
         "No NOM-HK dataset found in input files. Expected one of: " + ", ".join(p.value for p in preferred)
     )
+
+
+def extract_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
+    """Return the NOM-HK dataset from trimmed or full-day decoded inputs.
+
+    Parameters
+    ----------
+    all_data : dict of {str : xr.Dataset}
+        Decoded L1A datasets keyed by filename.
+    event_spec : CalEventSpec
+        ObsID-specific calibration event specification.
+
+    Returns
+    -------
+    xr.Dataset
+        NOM-HK dataset for the event.
+    """
+    return extract_named_nom_hk_dataset(all_data, event_spec)[1]
 
 
 def confirm_obsid_matches_hk(nom_hk: xr.Dataset, expected_obsid: int) -> None:
@@ -354,13 +308,30 @@ def nom_hk_event_window(nom_hk: xr.Dataset) -> tuple[np.datetime64, np.datetime6
     return np.datetime64(times.min()), np.datetime64(times.max())
 
 
+def _extract_named_input_dataset(
+    all_data: dict[str, xr.Dataset], product_id: DataProductIdentifier
+) -> tuple[str, xr.Dataset]:
+    """Return the ``(filename, dataset)`` matching ``product_id`` from the loaded inputs."""
+    for file_name in all_data:
+        if LiberaDataProductFilename.from_file_path(file_name).data_product_id == product_id.value:
+            return file_name, all_data[file_name]
+    # Delegate so the raised error message stays identical to the shared extractor's
+    extract_input_dataset(all_data, product_id)
+    raise ValueError("No dataset found in input files: " + product_id.value)
+
+
 def select_and_slice_event_inputs(
     all_data: dict[str, xr.Dataset],
     event_spec: CalEventSpec,
     *,
     nom_hk: xr.Dataset | None = None,
-) -> list[xr.Dataset]:
+) -> tuple[list[xr.Dataset], list[str]]:
     """Select NOM-HK plus companions and slice companions to the event window.
+
+    Companions are sliced by
+    :func:`~libera_utils.l1a.packet_slicing.slice_l1a_dataset_to_time_window`, which selects
+    whole packets on *sample* time where sample axes exist and renumbers each
+    ``*_packet_index`` from 0 against the surviving packet axis.
 
     Parameters
     ----------
@@ -377,6 +348,8 @@ def select_and_slice_event_inputs(
     list of xr.Dataset
         ``[nom_hk, *sliced_companions]`` suitable for
         :func:`~libera_rad.calibration.combiners.l1a_combine.merge_l1a_decoded_datasets`.
+    list of str
+        Filenames of the L1A inputs used, NOM-HK first, for the product's ``input_files``.
 
     Raises
     ------
@@ -384,33 +357,36 @@ def select_and_slice_event_inputs(
         If NOM-HK or any required companion product is missing, or if the
         NOM-HK window cannot be derived.
     """
+    nom_hk_file_name, extracted_nom_hk = extract_named_nom_hk_dataset(all_data, event_spec)
     if nom_hk is None:
-        nom_hk = extract_nom_hk_dataset(all_data, event_spec)
+        nom_hk = extracted_nom_hk
 
     t0, t1 = nom_hk_event_window(nom_hk)
     logger.info("Slicing companions to event window: [%s — %s]", t0, t1)
 
     sliced_companions: list[xr.Dataset] = []
+    input_file_names: list[str] = [nom_hk_file_name]
     for product_id in event_spec.companion_products:
-        companion = extract_input_dataset(all_data, product_id)
-        secondary = _COMPANION_SECONDARY_TIME_DIM.get(product_id)
-        sliced = slice_dataset_to_time_window(companion, t0, t1, secondary_time_dim=secondary)
+        companion_file_name, companion = _extract_named_input_dataset(all_data, product_id)
+        sliced = slice_l1a_dataset_to_time_window(companion, t0, t1)
+        sample_dims = sorted(find_sample_dims(companion))
         logger.info(
             "%s: %d / %d packets selected%s",
             product_id.value,
             sliced.sizes.get("PACKET", 0),
             companion.sizes.get("PACKET", 0),
-            f", {sliced.sizes[secondary]} / {companion.sizes[secondary]} {secondary} samples"
-            if secondary and secondary in companion.dims
-            else "",
+            "".join(f", {sliced.sizes[dim]} / {companion.sizes[dim]} {dim} samples" for dim in sample_dims),
         )
-        if sliced.sizes.get("PACKET", 0) == 0:
+        empty_dims = [dim for dim in ("PACKET", *sample_dims) if sliced.sizes.get(dim, 0) == 0]
+        if empty_dims:
             raise ValueError(
-                f"Companion product {product_id.value} has no packets inside NOM-HK event window [{t0} — {t1}]"
+                f"Companion product {product_id.value} has no data on {', '.join(empty_dims)} inside "
+                f"NOM-HK event window [{t0} — {t1}]"
             )
         sliced_companions.append(sliced)
+        input_file_names.append(companion_file_name)
 
-    return [nom_hk, *sliced_companions]
+    return [nom_hk, *sliced_companions], input_file_names
 
 
 EventBuilder = Callable[[dict[str, xr.Dataset], CalEventSpec], xr.Dataset]
@@ -418,8 +394,10 @@ EventBuilder = Callable[[dict[str, xr.Dataset], CalEventSpec], xr.Dataset]
 
 def _build_standard_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
     """Slice companions to the NOM-HK window and merge streams."""
-    inputs = select_and_slice_event_inputs(all_data, event_spec)
-    return merge_l1a_decoded_datasets(inputs)
+    inputs, input_file_names = select_and_slice_event_inputs(all_data, event_spec)
+    merged = merge_l1a_decoded_datasets(inputs)
+    merged.attrs[_INPUT_FILES_ATTR] = [Path(str(name)).name for name in input_file_names]
+    return merged
 
 
 #: Optional family-specific builders. Empty by default; all current families use the
@@ -446,8 +424,10 @@ def build_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpe
     All current families use the same select → slice → merge path. Families with
     extra prep can be registered via :func:`register_family_event_builder`.
 
-    Common global attributes (``source_obsids``, ``algorithm_version``) are set
-    here so all cal families write a uniform product header.
+    Common global attributes (``source_obsids``, ``algorithm_version``, ``date_created``) are
+    set here so all cal families write a uniform product header. ``date_created`` in particular
+    must be refreshed: the merge inherits its attributes from the NOM-HK input, so without this
+    the product would carry the timestamp of the Step-1 trim rather than of this run.
 
     Parameters
     ----------
@@ -466,4 +446,32 @@ def build_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpe
     event = builder(all_data, event_spec)
     event.attrs["source_obsids"] = [event_spec.obsid]
     event.attrs["algorithm_version"] = libera_rad_version()
+    event.attrs["date_created"] = datetime.now(tz=UTC).isoformat()
     return event
+
+
+def add_input_files(cal_event: xr.Dataset, file_names: Sequence[str | Path | S3Path]) -> xr.Dataset:
+    """Append granule names to the product's ``input_files`` attribute, de-duplicated.
+
+    Used for inputs that are only known outside the event builder, such as the SPICE kernels
+    furnished for Azimuth/Elevation.
+
+    Parameters
+    ----------
+    cal_event : xr.Dataset
+        Calibration event dataset.
+    file_names : sequence of str, Path, or S3Path
+        Paths to record; only the basename is stored.
+
+    Returns
+    -------
+    xr.Dataset
+        ``cal_event`` with its ``input_files`` attribute extended.
+    """
+    existing = list(cal_event.attrs.get(_INPUT_FILES_ATTR, []))
+    for name in file_names:
+        base_name = Path(str(name)).name
+        if base_name not in existing:
+            existing.append(base_name)
+    cal_event.attrs[_INPUT_FILES_ATTR] = existing
+    return cal_event
