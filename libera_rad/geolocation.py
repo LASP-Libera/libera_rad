@@ -295,8 +295,8 @@ def calculate_geometry(
         ``"JPSS4_SC"``.
     instrument_observer : str
         SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
-        ``"LIBERA_SW_RAD"``. The radiometer channels are co-boresighted, so this choice does
-        not currently change the result -- see :data:`INSTRUMENT_OBSERVERS`.
+        ``"LIBERA_RAD"``, the single frame shared by the co-boresighted radiometer
+        channels -- see :data:`INSTRUMENT_OBSERVERS`.
 
     Returns
     -------
