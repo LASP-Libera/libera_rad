@@ -64,7 +64,7 @@ def test_calculate_geometry_uses_curryer():
         result = geolocation.calculate_geometry(km, timestamps)
 
     km.ensure_known_kernels_are_furnished.assert_called_once()
-    assert [call.args[0] for call in mock_cls.call_args_list] == ["JPSS4_SC", "LIBERA_SW_RAD"]
+    assert [call.args[0] for call in mock_cls.call_args_list] == ["JPSS4_SC", "LIBERA_RAD"]
     assert spacecraft_geo.get_geometry.call_args.kwargs["fields"] == list(geolocation._SPACECRAFT_FIELDS)
     assert instrument_geo.get_geometry.call_args.kwargs["fields"] == list(geolocation._INSTRUMENT_FIELDS)
     assert "spacecraft_altitude" in result.columns
@@ -117,7 +117,7 @@ def test_calculate_start_of_hour_state_rejects_unknown_observer():
     km = Mock()
     with patch("libera_rad.geolocation.geometry.GeometryData") as mock_cls:
         with pytest.raises(ValueError, match="Unsupported spacecraft observer"):
-            geolocation.calculate_start_of_hour_state(km, timestamps, observer="LIBERA_SW_RAD")
+            geolocation.calculate_start_of_hour_state(km, timestamps, observer="LIBERA_RAD")
     mock_cls.assert_not_called()
     km.ensure_known_kernels_are_furnished.assert_not_called()
 
@@ -199,7 +199,7 @@ def test_calculate_geometry_allows_all_nan_instrument_fields():
 @pytest.mark.parametrize(
     ("kwargs", "expected_message"),
     [
-        ({"spacecraft_observer": "LIBERA_SW_RAD"}, "Unsupported spacecraft observer"),
+        ({"spacecraft_observer": "LIBERA_RAD"}, "Unsupported spacecraft observer"),
         ({"instrument_observer": "LIBERA_WFOV_CAM"}, "Unsupported instrument observer"),
         ({"instrument_observer": "JPSS4_SC"}, "Unsupported instrument observer"),
     ],
@@ -216,8 +216,8 @@ def test_calculate_geometry_rejects_unknown_observer(kwargs, expected_message):
 
 
 @pytest.mark.parametrize("instrument_observer", constants.INSTRUMENT_OBSERVERS)
-def test_calculate_geometry_accepts_every_radiometer_channel(instrument_observer):
-    """All four channel frames are co-boresighted, so each is a valid instrument observer."""
+def test_calculate_geometry_accepts_every_instrument_observer(instrument_observer):
+    """Every frame listed in INSTRUMENT_OBSERVERS is a valid instrument observer."""
     timestamps = np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]")
     km = Mock()
     spacecraft_geo = Mock()
