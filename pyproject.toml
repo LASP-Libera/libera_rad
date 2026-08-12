@@ -39,7 +39,7 @@ classifiers = [
 ]
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
-    "libera-utils @ git+https://github.com/LASP-Libera/libera_utils/tree/LIBSDC-815-consolidate-radiometers-4-to-1",
+    "libera-utils @ git+https://github.com/LASP-Libera/libera_utils.git@LIBSDC-815-consolidate-radiometers-4-to-1",
     "lasp-curryer >= 0.5.0, <1.0",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
