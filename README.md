@@ -11,7 +11,12 @@ https://lasp.colorado.edu/galaxy/x/YQZgD
 To step through the algorithm process with supporting plots and data insights, run
 learning_notebooks/l1b_algorithm.ipynb.
 
-Running this notebook will require a properly setup environment.
+To explore the L1B observation geometry fields -- what each one means, what correct values look like,
+and the consistency checks worth running on a new granule -- run
+learning_notebooks/l1b_geometry_fields.ipynb.
+
+Running these notebooks will require a properly setup environment, including the `extras` dependency
+group (`poetry install --with extras`) for Jupyter and Cartopy.
 
 # Local Project Setup
 
