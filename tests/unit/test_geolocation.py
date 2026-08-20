@@ -309,3 +309,35 @@ def test_calculate_azimuth_elevation_for_timestamps():
 
     km.ensure_known_kernels_are_furnished.assert_called_once()
     mock_full.assert_called_once_with(et_times, -999.0)
+
+
+def test_calculate_azimuth_elevation_checks_motor_ck_coverage():
+    """LIBSDC-788: a motor-CK gap is reported up front, not hidden behind per-sample fill."""
+    timestamps = np.array(["2025-01-01T00:00:00", "2025-01-01T00:00:01"], dtype="datetime64[ns]")
+    km = Mock()
+    with (
+        patch.object(
+            geolocation, "_az_el_on_et_times", return_value=(np.zeros(2, np.float32), np.zeros(2, np.float32))
+        ),
+        # First adapt() call converts to uGPS for the coverage window, second to ET.
+        patch(
+            "libera_rad.geolocation.spicetime.adapt",
+            side_effect=[np.array([100, 300]), np.array([1.0, 2.0])],
+        ),
+    ):
+        geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+
+    km.ensure_kernel_coverage.assert_called_once_with(geolocation.MOTOR_CK_FRAMES, 100, 300, error=False)
+
+
+def test_calculate_azimuth_elevation_skips_coverage_check_when_no_samples():
+    km = Mock()
+    with (
+        patch.object(
+            geolocation, "_az_el_on_et_times", return_value=(np.zeros(0, np.float32), np.zeros(0, np.float32))
+        ),
+        patch("libera_rad.geolocation.spicetime.adapt", return_value=np.array([])),
+    ):
+        geolocation.calculate_azimuth_elevation_for_timestamps(km, np.array([], dtype="datetime64[ns]"))
+
+    km.ensure_kernel_coverage.assert_not_called()

@@ -26,6 +26,14 @@ from libera_rad.constants import (
 
 logger = logging.getLogger(__name__)
 
+# Motor-encoder CK frame chain. Azimuth is BASE -> AZ, elevation is AZ -> EL; the AZ and
+# EL frames are the ones a motor CK has to cover.
+# TODO[LIBSDC-611]: Re-evaluate the naming of the frames.
+LIBERA_BASE_FRAME = "LIBERA_BASE_COORD"
+LIBERA_AZ_FRAME = "LIBERA_AZ_COORD"
+LIBERA_EL_FRAME = "LIBERA_EL_COORD"
+MOTOR_CK_FRAMES = (LIBERA_AZ_FRAME, LIBERA_EL_FRAME)
+
 
 # curryer geometry fields for the L1B product, as GeometryField enum members (interchangeable
 # with their string selectors; ``.columns`` gives the output keys). Split by observer: the
@@ -483,13 +491,12 @@ def _az_el_from_et(et: float) -> tuple[float, float] | None:
     """
     # TODO[LIBSDC-739]: Use curryer frame_euler + spice_error_to_val when curryer#158 lands.
     try:
-        # TODO[LIBSDC-611]: Re-evaluate the naming of the frames.
         _TWO_PI = float(2.0 * np.pi)
-        m_az = sp.pxform("LIBERA_BASE_COORD", "LIBERA_AZ_COORD", et)
+        m_az = sp.pxform(LIBERA_BASE_FRAME, LIBERA_AZ_FRAME, et)
         az_rad = float(sp.m2eul(m_az, 1, 2, 3)[2])
         az_deg = np.degrees((az_rad + _TWO_PI) % _TWO_PI)
 
-        m_el = sp.pxform("LIBERA_AZ_COORD", "LIBERA_EL_COORD", et)
+        m_el = sp.pxform(LIBERA_AZ_FRAME, LIBERA_EL_FRAME, et)
         el_rad = float(sp.m2eul(m_el, 1, 2, 3)[0])
         el_deg = np.degrees(el_rad)
     except SpiceyError:
@@ -543,8 +550,18 @@ def calculate_azimuth_elevation_for_timestamps(
     """
     km.ensure_known_kernels_are_furnished()
 
-    # TODO[LIBSDC-788]: CK coverage check (via KernelManager?) before az/el pxform loop.
-
     dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
+    if dt64_times.size:
+        # Surface a motor-CK gap once, up front. Without this the per-sample handler in
+        # `_az_el_from_et` turns an entirely uncovered granule into a full array of
+        # `fill_value` with nothing in the logs to say why.
+        ugps_times = spicetime.adapt(dt64_times, "dt64", "ugps")
+        km.ensure_kernel_coverage(
+            MOTOR_CK_FRAMES,
+            int(np.min(ugps_times)),
+            int(np.max(ugps_times)),
+            error=False,
+        )
+
     et_times = spicetime.adapt(dt64_times, "dt64", "et")
     return _az_el_on_et_times(et_times, fill_value)
