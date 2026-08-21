@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pandas as pd
 import pytest
+from curryer.compute import geometry
 from spiceypy.utils.exceptions import SpiceyError
 
 from libera_rad import constants, geolocation
@@ -48,6 +49,11 @@ def test_calculate_geometry_uses_curryer():
             "clock_angle_rate": [1.0, -1.0],
             "along_track_angle": [-0.16, -0.16],
             "cross_track_angle": [-30.0, 30.0],
+            "moon_boresight_angle": [12.4, 7.1],
+            "moon_azimuth_offset": [-12.0, 7.0],
+            "moon_elevation_offset": [3.0, -1.0],
+            "moon_angular_radius": [0.26, 0.26],
+            "moon_distance": [3.8e5, 3.8e5],
         }
     )
     spacecraft_geo = Mock()
@@ -71,6 +77,10 @@ def test_calculate_geometry_uses_curryer():
     assert "cone_angle" in result.columns
     assert "attitude_q0" in result.columns
     assert "clock_angle" in result.columns
+    # Lunar fields ride the instrument observer -- they need its FOV frame, so they are
+    # NaN in jpss_only alongside the other boresight fields rather than in their own mode.
+    assert "moon_boresight_angle" in result.columns
+    assert "moon_azimuth_offset" in result.columns
 
 
 def test_calculate_start_of_hour_state():
@@ -247,6 +257,103 @@ def test_create_placeholder_geometry():
     assert list(result.columns) == expected_columns
     assert np.all(result["subsatellite_latitude"].to_numpy() == np.float32(-999))
     assert np.all(result["spacecraft_radius"].to_numpy() == np.float64(-9999))
+    assert np.all(result["moon_boresight_angle"].to_numpy() == np.float32(-999))
+    assert np.all(result["moon_distance"].to_numpy() == np.float64(-9999))
+
+
+def _moon_geometry(boresight_angles, angular_radius=0.25):
+    """Geometry frame carrying only the columns the Moon-in-view test reads."""
+    boresight_angles = np.asarray(boresight_angles, dtype=float)
+    radius = np.where(np.isnan(boresight_angles), np.nan, angular_radius)
+    (boresight_column,) = geometry.GeometryField.MOON_BORESIGHT_ANGLE.columns
+    (radius_column,) = geometry.GeometryField.MOON_ANGULAR_RADIUS.columns
+    return pd.DataFrame({boresight_column: boresight_angles, radius_column: radius})
+
+
+def _mock_fov(half_angle_deg):
+    fov = Mock()
+    fov.half_angle.return_value = half_angle_deg
+    return fov
+
+
+class TestMoonInFieldOfView:
+    """The Moon-in-view flag: FOV half angle + lunar disk + buffer, thresholded per sample."""
+
+    def test_threshold_is_fov_plus_disk_plus_buffer(self):
+        # half angle 1.0 + disk 0.25 + buffer 5.0 -> 6.25 deg, inclusive at the boundary.
+        km = Mock()
+        geometry_data = _moon_geometry([0.0, 6.0, 6.25, 6.3, 90.0])
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", return_value=_mock_fov(1.0)):
+            flags = geolocation.moon_in_field_of_view(km, geometry_data, buffer_deg=5.0)
+
+        np.testing.assert_array_equal(flags, np.array([1, 1, 1, 0, 0], dtype=np.int8))
+        assert flags.dtype == np.int8
+        km.ensure_known_kernels_are_furnished.assert_called_once()
+
+    def test_lunar_disk_widens_the_threshold(self):
+        # The Moon's own angular radius is part of the test, so a sample just outside the
+        # cone by less than a lunar radius still has part of the disk in view.
+        km = Mock()
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", return_value=_mock_fov(1.0)):
+            with_disk = geolocation.moon_in_field_of_view(km, _moon_geometry([1.2], 0.25), buffer_deg=0.0)
+            without_disk = geolocation.moon_in_field_of_view(km, _moon_geometry([1.2], 0.0), buffer_deg=0.0)
+
+        assert with_disk[0] == 1
+        assert without_disk[0] == 0
+
+    def test_buffer_widens_the_threshold(self):
+        km = Mock()
+        geometry_data = _moon_geometry([8.0])
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", return_value=_mock_fov(1.0)):
+            assert geolocation.moon_in_field_of_view(km, geometry_data, buffer_deg=5.0)[0] == 0
+            assert geolocation.moon_in_field_of_view(km, geometry_data, buffer_deg=10.0)[0] == 1
+
+    def test_default_buffer_is_the_package_constant(self):
+        km = Mock()
+        geometry_data = _moon_geometry([0.0])
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", return_value=_mock_fov(1.0)):
+            default = geolocation.moon_in_field_of_view(km, geometry_data)
+            explicit = geolocation.moon_in_field_of_view(km, geometry_data, buffer_deg=constants.MOON_FOV_BUFFER_DEG)
+        np.testing.assert_array_equal(default, explicit)
+
+    def test_missing_lunar_geometry_is_filled_not_false(self):
+        # No pointing coverage (jpss_only, or an attitude gap) must stay distinguishable
+        # from "Moon not in view", so the fill value is used rather than 0.
+        km = Mock()
+        geometry_data = _moon_geometry([0.0, np.nan, 90.0])
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", return_value=_mock_fov(1.0)):
+            flags = geolocation.moon_in_field_of_view(km, geometry_data)
+
+        np.testing.assert_array_equal(flags, np.array([1, constants.MOON_IN_FOV_FILL_VALUE, 0], dtype=np.int8))
+
+    def test_fov_half_angle_comes_from_the_instrument_kernel(self):
+        # The geometric FOV is read from the IK, not hardcoded, so a kernel delivery
+        # correcting it (TODO[LIBSDC-601]) needs no code change.
+        km = Mock()
+        geometry_data = _moon_geometry([3.0])
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", return_value=_mock_fov(1.0)) as mock_fov:
+            narrow = geolocation.moon_in_field_of_view(km, geometry_data, buffer_deg=0.0)
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", return_value=_mock_fov(10.0)):
+            wide = geolocation.moon_in_field_of_view(km, geometry_data, buffer_deg=0.0)
+
+        assert narrow[0] == 0
+        assert wide[0] == 1
+        mock_fov.assert_called_once_with(constants.DEFAULT_INSTRUMENT_OBSERVER)
+        assert mock_fov.return_value.half_angle.call_args.kwargs == {"degrees": True}
+
+    def test_rejects_unknown_instrument_observer(self):
+        km = Mock()
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov") as mock_fov:
+            with pytest.raises(ValueError, match="Unsupported instrument observer"):
+                geolocation.moon_in_field_of_view(km, _moon_geometry([0.0]), instrument_observer="JPSS4_SC")
+        mock_fov.assert_not_called()
+        km.ensure_known_kernels_are_furnished.assert_not_called()
+
+    def test_unreadable_fov_raises_friendly_error(self):
+        km = Mock()
+        with patch("libera_rad.geolocation.sp.ext.instrument_fov", side_effect=SpiceyError("SPICE(KERNELVARNOTFOUND)")):
+            with pytest.raises(RuntimeError, match="Could not read the field of view for 'LIBERA_RAD'"):
+                geolocation.moon_in_field_of_view(km, _moon_geometry([0.0]))
 
 
 def test_subsatellite_lat_lon_alt():

@@ -12,7 +12,7 @@ from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.manifest import Manifest
 
 from libera_rad import l1b
-from libera_rad.constants import CLOCK_RATE_MIN_CONE_ANGLE_DEG
+from libera_rad.constants import CLOCK_RATE_MIN_CONE_ANGLE_DEG, MOON_IN_FOV_FILL_VALUE
 
 
 class TestRequireSpiceInputs:
@@ -348,6 +348,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
             patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
+            patch("libera_rad.geolocation.moon_in_field_of_view") as mock_moon_fov,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             # Setup mocks
@@ -403,9 +404,16 @@ class TestProcessL1aToL1b:
                     "clock_angle_rate": np.linspace(-5, 5, 100, dtype=np.float64),
                     "along_track_angle": np.full(100, -0.16, dtype=np.float64),
                     "cross_track_angle": np.linspace(-60, 60, 100, dtype=np.float64),
+                    "moon_boresight_angle": np.linspace(2, 40, 100, dtype=np.float64),
+                    "moon_azimuth_offset": np.linspace(-30, 30, 100, dtype=np.float64),
+                    "moon_elevation_offset": np.linspace(5, -5, 100, dtype=np.float64),
+                    "moon_angular_radius": np.full(100, 0.26, dtype=np.float64),
+                    "moon_distance": np.full(100, 3.8e5, dtype=np.float64),
                 }
             )
             mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
+            moon_flags = (np.linspace(2, 40, 100) <= 6.26).astype(np.int8)
+            mock_moon_fov.return_value = moon_flags
             mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
@@ -457,6 +465,17 @@ class TestProcessL1aToL1b:
             assert result["Satellite_Velocity_Start_Of_Hour"].shape == (24, 3)
             assert np.allclose(result["Satellite_Position_Start_Of_Hour"], 7000.0)
             assert np.allclose(result["Satellite_Velocity_Start_Of_Hour"], 7.5)
+            # Lunar geometry: the offsets pass through curryer unchanged and the flag is
+            # the predicate's, evaluated inside the kernel context alongside the geometry.
+            mock_moon_fov.assert_called_once()
+            assert np.allclose(result["Moon_Boresight_Angle"], np.linspace(2, 40, 100), atol=1e-3)
+            assert np.allclose(result["Moon_Azimuth_Offset"], np.linspace(-30, 30, 100), atol=1e-3)
+            assert np.allclose(result["Moon_Elevation_Offset"], np.linspace(5, -5, 100), atol=1e-3)
+            np.testing.assert_array_equal(result["Moon_In_Field_Of_View"], moon_flags)
+            assert result["Moon_In_Field_Of_View"].dtype == np.int8
+            # Guard: the mocked sweep must cross the threshold so both states are exercised.
+            assert moon_flags.any()
+            assert not moon_flags.all()
 
     def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
         """use_geo false should bypass KernelManager and SPICE geolocation."""
@@ -506,6 +525,12 @@ class TestProcessL1aToL1b:
         assert np.all(result["Subsatellite_Colatitude"] == np.float32(-999))
         assert np.all(result["Azimuth"] == np.float32(-999))
         assert np.all(result["Elevation"] == np.float32(-999))
+        # Geolocation is bypassed, so the Moon's position is unknown: the offsets take the
+        # angle fill and the flag its own fill, never 0 (which would assert the Moon was out).
+        assert np.all(result["Moon_Boresight_Angle"] == np.float32(-999))
+        assert np.all(result["Moon_Azimuth_Offset"] == np.float32(-999))
+        assert np.all(result["Moon_Elevation_Offset"] == np.float32(-999))
+        assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
         assert isinstance(dynamic_attributes, dict)
 
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
@@ -523,6 +548,7 @@ class TestProcessL1aToL1b:
             patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
             patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
+            patch("libera_rad.geolocation.moon_in_field_of_view") as mock_moon_fov,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             mock_cal = Mock()
@@ -562,6 +588,11 @@ class TestProcessL1aToL1b:
                     "clock_angle_rate": np.full(100, np.nan),
                     "along_track_angle": np.full(100, np.nan),
                     "cross_track_angle": np.full(100, np.nan),
+                    "moon_boresight_angle": np.full(100, np.nan),
+                    "moon_azimuth_offset": np.full(100, np.nan),
+                    "moon_elevation_offset": np.full(100, np.nan),
+                    "moon_angular_radius": np.full(100, np.nan),
+                    "moon_distance": np.full(100, np.nan),
                     # Velocity and body attitude come from the spacecraft observer, so they
                     # resolve in jpss_only (SPK + JPSS CK) even without the motor CK.
                     "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
@@ -574,6 +605,7 @@ class TestProcessL1aToL1b:
                 }
             )
             mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
+            mock_moon_fov.return_value = np.full(100, MOON_IN_FOV_FILL_VALUE, dtype=np.int8)
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
@@ -602,8 +634,15 @@ class TestProcessL1aToL1b:
             "Clock_Angle_Rate",
             "Along_Track_Angle",
             "Cross_Track_Angle",
+            "Moon_Boresight_Angle",
+            "Moon_Azimuth_Offset",
+            "Moon_Elevation_Offset",
         ):
             assert np.all(np.isnan(result[name])), f"{name} should be NaN in jpss_only mode"
+        # With no boresight there is no Moon-in-view answer, so the flag fills rather
+        # than claiming the Moon was absent.
+        mock_moon_fov.assert_called_once()
+        assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
         # Spacecraft-observer fields still resolve without the motor CK.
         assert not np.any(result["Satellite_Position"] == np.float64(-9999))
         assert not np.any(result["Satellite_Velocity"] == np.float64(-999))

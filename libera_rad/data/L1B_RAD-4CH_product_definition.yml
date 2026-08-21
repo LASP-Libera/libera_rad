@@ -332,6 +332,57 @@ variables:
       valid_range: [-20, 20]
       _FillValue: -999
 
+  Moon_Boresight_Angle:
+    dtype: float32
+    dimensions: ["RADIOMETER_TIME"]
+    attributes:
+      long_name: >-
+        Angle between the radiometer boresight and the apparent center of the Moon.
+        The boresight is the ground-measured radiometer line of sight (LIBERA_RAD_COORD
+        +Z), not nadir and not the motor encoder zero. Threshold this to apply a
+        tolerance other than the one Moon_In_Field_Of_View uses.
+      units: degrees
+      valid_range: [0, 180]
+      _FillValue: -999
+  Moon_Azimuth_Offset:
+    dtype: float32
+    dimensions: ["RADIOMETER_TIME"]
+    attributes:
+      long_name: >-
+        Signed azimuth offset of the apparent Moon from the radiometer boresight,
+        measured about the cross-boresight elevation axis from the instrument kernel FOV
+        reference direction. Zero when the Moon is on the boresight; the sign gives the
+        side. An offset from the boresight, not an absolute pointing angle like Azimuth.
+      units: degrees
+      valid_range: [-180, 180]
+      _FillValue: -999
+  Moon_Elevation_Offset:
+    dtype: float32
+    dimensions: ["RADIOMETER_TIME"]
+    attributes:
+      long_name: >-
+        Signed elevation offset of the apparent Moon from the radiometer boresight,
+        measured about the cross-boresight azimuth axis. Zero when the Moon is on the
+        boresight; the sign gives the side. An offset from the boresight, not an absolute
+        pointing angle like Elevation.
+      units: degrees
+      valid_range: [-90, 90]
+      _FillValue: -999
+  Moon_In_Field_Of_View:
+    dtype: int8
+    dimensions: ["RADIOMETER_TIME"]
+    attributes:
+      long_name: >-
+        Flag indicating that lunar light can reach the detectors: 1 when any part of the
+        lunar disk lies within the instrument kernel field of view widened by a buffer,
+        0 when it does not. The buffer is a tunable margin covering near-field stray
+        light and pointing uncertainty, so this is a wider test than the geometric field
+        of view; use Moon_Boresight_Angle to apply a different tolerance. The fill value
+        marks samples with no lunar geometry (no pointing coverage), which is distinct
+        from the Moon not being in view.
+      valid_range: [0, 1]
+      _FillValue: -128
+
   ##############
   # Instrument #
   ##############
