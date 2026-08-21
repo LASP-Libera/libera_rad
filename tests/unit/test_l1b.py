@@ -12,6 +12,7 @@ from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.manifest import Manifest
 
 from libera_rad import l1b
+from libera_rad.constants import CLOCK_RATE_MIN_CONE_ANGLE_DEG
 
 
 class TestRequireSpiceInputs:
@@ -290,9 +291,11 @@ class TestCalculateDataQualityFlags:
 def test_gate_clock_rate_near_nadir():
     # The clock angle is an azimuth about nadir, so its rate is undefined there. Samples
     # inside the cone gate are filled; samples at or beyond it are kept; and a coverage gap
-    # (NaN cone) stays NaN rather than being turned into a fill value.
+    # (NaN cone) stays NaN rather than being turned into a fill value. Cone angles are taken
+    # from the gate constant so the boundary case stays on the boundary if the gate moves.
+    gate = float(CLOCK_RATE_MIN_CONE_ANGLE_DEG)
     rate = np.array([1.0, 2.0, 3.0, np.nan], dtype=np.float32)
-    cone = np.array([2.0, 6.0, 45.0, np.nan], dtype=np.float32)
+    cone = np.array([gate / 2, gate, gate + 30.0, np.nan], dtype=np.float32)
 
     gated = l1b._gate_clock_rate_near_nadir(rate, cone)
 
@@ -442,8 +445,8 @@ class TestProcessL1aToL1b:
             assert not np.any(result["Clock_Angle"] == np.float32(-999))
             assert np.allclose(result["Along_Track_Angle"], -0.16, atol=1e-4)
             assert np.allclose(result["Cross_Track_Angle"], np.linspace(-60, 60, 100), atol=1e-3)
-            # Clock rate is filled inside the 6 deg nadir cone (mocked cone spans 5..15 deg).
-            inside_cone = np.linspace(5, 15, 100) < 6.0
+            # Clock rate is filled inside the nadir cone gate (mocked cone spans 5..15 deg).
+            inside_cone = np.linspace(5, 15, 100) < float(CLOCK_RATE_MIN_CONE_ANGLE_DEG)
             # Guard: the mocked cone angles must straddle the gate so both sides are exercised.
             assert inside_cone.any()
             assert not inside_cone.all()
