@@ -32,6 +32,16 @@ NOMINAL_SAMPLE_PERIOD_S = 0.01
 SAMPLE_PERIOD_TOLERANCE_S = 0.005
 
 # Elevation encoder reading that puts the boresight at nadir. The heritage implementation
-# writes its cone-rate sign rules around a 90 degree nadir; the Libera elevation encoder
-# reads 0 there, so the rules are expressed against this reference rather than a literal 90.
+# writes its cone-rate sign rules around a 90 degree nadir, and its three cases -- both
+# readings below 90, readings straddling 90, both above 90 -- only all occur if elevation
+# spans across 90, so nadir sits mid-range in that encoder rather than at an endpoint. The
+# Libera encoder reads 0 at nadir and sweeps +/-72 degrees about it: the same arrangement,
+# monotonic through nadir, with a different origin. Differencing that monotonic coordinate is
+# the point of the heritage design, since the cone angle itself turns at nadir and its
+# derivative does not survive the turn.
+#
+# The mapping of the 90 degree reference onto this one is inferred from the structure of those
+# sign rules rather than from documentation, and is pending confirmation. It reproduces the
+# documented convention -- negative toward nadir, positive away -- on every interval of the
+# reference granule.
 GIMBAL_NADIR_ELEVATION_DEG = np.float32(0.0)
