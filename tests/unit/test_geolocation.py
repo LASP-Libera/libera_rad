@@ -43,9 +43,7 @@ def test_calculate_geometry_uses_curryer():
             "solar_azimuth": [120.0, 121.0],
             "relative_azimuth": [150.0, 151.0],
             "cone_angle": [5.0, 6.0],
-            "cone_angle_rate": [0.5, -0.5],
             "clock_angle": [90.0, 270.0],
-            "clock_angle_rate": [1.0, -1.0],
             "along_track_angle": [-0.16, -0.16],
             "cross_track_angle": [-30.0, 30.0],
         }
@@ -309,3 +307,125 @@ def test_calculate_azimuth_elevation_for_timestamps():
 
     km.ensure_known_kernels_are_furnished.assert_called_once()
     mock_full.assert_called_once_with(et_times, -999.0)
+
+
+def _grid(n, period_s=0.01):
+    """`n` timestamps at the nominal radiometer cadence."""
+    return (
+        np.datetime64("2025-01-01T00:00:00", "ns") + np.arange(n) * np.timedelta64(int(period_s * 1e9), "ns")
+    ).astype("datetime64[ns]")
+
+
+class TestCalculateScanRates:
+    """Scan rates differenced from the motor encoders, per the heritage definition."""
+
+    FILL = np.float32(-999.0)
+
+    def test_clock_rate_is_the_azimuth_encoder_rate(self):
+        # 0.5 deg per 10 ms sample -> 50 deg/s, and the elevation is irrelevant to it.
+        times = _grid(4)
+        azimuth = np.array([10.0, 10.5, 11.0, 11.5])
+        elevation = np.full(4, 30.0)
+
+        _, clock_rate = geolocation.calculate_scan_rates(azimuth, elevation, times)
+
+        assert clock_rate[0] == self.FILL
+        np.testing.assert_allclose(clock_rate[1:], 50.0, atol=1e-3)
+
+    def test_cone_rate_is_negative_toward_nadir_and_positive_away(self):
+        # Elevation nadir is 0, so a sweep from -3 toward 0 approaches nadir and a sweep from
+        # 0 to +3 recedes; the heritage sign rule reports the first negative and the second
+        # positive even though the raw encoder rate is positive throughout.
+        times = _grid(5)
+        elevation = np.array([-3.0, -2.0, -1.0, 1.0, 2.0])
+        azimuth = np.full(5, 45.0)
+
+        cone_rate, _ = geolocation.calculate_scan_rates(azimuth, elevation, times)
+
+        # -3 -> -2 -> -1 closes on nadir at 100 deg/s and reads negative; -1 -> +1 straddles
+        # nadir, where the direction is ambiguous and the magnitude of the 200 deg/s step is
+        # reported; +1 -> +2 opens away from nadir and reads positive.
+        np.testing.assert_allclose(cone_rate[1:], [-100.0, -100.0, 200.0, 100.0], atol=1e-3)
+
+    def test_cone_rate_across_nadir_reports_the_magnitude(self):
+        # The interval that straddles nadir has no unambiguous direction, so the heritage
+        # rule takes the magnitude rather than inventing a sign.
+        times = _grid(3)
+        elevation = np.array([-0.5, 0.5, 1.5])
+
+        cone_rate, _ = geolocation.calculate_scan_rates(np.full(3, 45.0), elevation, times)
+
+        assert cone_rate[1] > 0.0
+        np.testing.assert_allclose(cone_rate[1], 100.0, atol=1e-3)
+
+    def test_no_nadir_singularity(self):
+        # The point of differencing the encoder: a scan sweeping through nadir keeps the clock
+        # rate at the mechanism's own rate. Differencing Clock_Angle instead would spike here,
+        # because the clock angle is an azimuth about nadir and swings ~180 deg at the crossing.
+        times = _grid(200)
+        elevation = np.linspace(-60.0, 60.0, 200)
+        azimuth = np.full(200, 359.9995)
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(azimuth, elevation, times)
+
+        computed = clock_rate != self.FILL
+        assert computed.sum() == 199
+        assert np.all(np.abs(clock_rate[computed]) <= 20.0)  # the declared valid_range
+        assert np.all(np.abs(cone_rate[computed]) <= 100.0)
+
+    def test_azimuth_wrap_is_the_shorter_arc(self):
+        # Crossing the encoder's 360 -> 0 wrap is a small motion, not a -36000 deg/s reversal.
+        times = _grid(3)
+        azimuth = np.array([359.95, 0.05, 0.15])
+
+        _, clock_rate = geolocation.calculate_scan_rates(azimuth, np.full(3, 30.0), times)
+
+        np.testing.assert_allclose(clock_rate[1:], 10.0, atol=1e-3)
+
+    def test_off_cadence_spacing_is_filled(self):
+        # A gap further than the tolerance from nominal is not a usable rate interval, so both
+        # rates fill rather than dividing by a spacing the instrument did not have.
+        times = np.array(
+            ["2025-01-01T00:00:00.00", "2025-01-01T00:00:00.01", "2025-01-01T00:00:00.50"],
+            dtype="datetime64[ns]",
+        )
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(
+            np.array([10.0, 10.5, 11.0]), np.array([30.0, 31.0, 32.0]), times
+        )
+
+        assert cone_rate[1] != self.FILL
+        assert clock_rate[1] != self.FILL
+        assert cone_rate[2] == self.FILL
+        assert clock_rate[2] == self.FILL
+
+    @pytest.mark.parametrize("bad", [-999.0, np.nan])
+    def test_unavailable_encoder_angles_propagate_fill(self, bad):
+        times = _grid(4)
+        azimuth = np.array([10.0, 10.5, bad, 11.5])
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(azimuth, np.full(4, 30.0), times)
+
+        # Both intervals touching the missing sample are filled; the clean one survives.
+        assert clock_rate[1] != self.FILL
+        assert clock_rate[2] == self.FILL
+        assert clock_rate[3] == self.FILL
+        assert cone_rate[2] == self.FILL
+        assert cone_rate[3] == self.FILL
+
+    def test_single_sample_is_all_fill(self):
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(np.array([10.0]), np.array([30.0]), _grid(1))
+
+        assert cone_rate.tolist() == [-999.0]
+        assert clock_rate.tolist() == [-999.0]
+
+    def test_mismatched_lengths_raise(self):
+        with pytest.raises(ValueError, match="must share one length"):
+            geolocation.calculate_scan_rates(np.zeros(3), np.zeros(4), _grid(3))
+
+    def test_placeholder_scan_rates_are_filled_not_zero(self):
+        cone_rate, clock_rate = geolocation.create_placeholder_scan_rates(5)
+
+        assert np.all(cone_rate == self.FILL)
+        assert np.all(clock_rate == self.FILL)
+        assert cone_rate.dtype == np.float32
+        assert clock_rate.dtype == np.float32

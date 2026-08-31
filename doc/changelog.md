@@ -2,6 +2,10 @@
 
 ## 0.6.1
 
+- Derive `Cone_Angle_Rate` and `Clock_Angle_Rate` from the motor encoder angles rather than from the orbital-frame cone and clock angles, matching the heritage implementation. `Clock_Angle_Rate` is the azimuth encoder's own rate and is deliberately not the time derivative of `Clock_Angle`: the clock angle is an azimuth about nadir and so is singular there, and differencing it produced thousands of degrees per second at every nadir crossing regardless of how the instrument was moving.
+- Remove the `Clock_Angle_Rate` nadir gate and `CLOCK_RATE_MIN_CONE_ANGLE_DEG` with it (LIBSDC-739). The encoder rate has no pole to gate: on the reference granule the filled fraction drops from 15.5% to 0.2%, and the surviving values fall from 10.5 deg/s to 0.003 deg/s against a declared `valid_range` of `[-20, 20]`.
+- Fill both rates in `jpss_only` and `use_geo` false modes via `create_placeholder_scan_rates`, rather than reporting the zero rate that the placeholder encoder angles would otherwise imply.
+- Stop requesting curryer's `CONE_ANGLE_RATE` and `CLOCK_ANGLE_RATE`; those are true derivatives of the orbital-frame angles, which is a different quantity from the product fields of the same name.
 - Migrate geolocation onto `curryer.compute.geometry.GeometryData`: remove the in-house SPICE subsatellite implementation (`_spacecraft_ecef_positions`, `_subsatellite_lla_from_ecef`, `calculate_libera_base_subsatellite_geolocation`) in favor of a single vectorized `calculate_geometry` call, and return instrument geolocation as one lat/lon/alt DataFrame.
 - Populate `Subsatellite_Latitude`/`_Longitude`/`_Colatitude`, `Subsolar_Latitude`/`_Longitude`/`_Colatitude`, and `Radius_of_Satellite_from_Center_of_Earth`, all of which previously shipped as `-999`/`-9999` fill.
 - Move `use_geo: false` fill values out of L1B packaging into `geolocation.create_placeholder_geometry`, alongside the existing azimuth/lat-lon producers; the packager now always receives a geometry DataFrame and no longer branches on its absence.

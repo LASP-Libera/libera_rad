@@ -302,9 +302,12 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the cone angle. The cone rate is negative when scanning toward Nadir,
-        positive when scanning away from Nadir, and zero when the cone angle is constant.
-        The cone rate is not measured, but is approximated with two consecutive cone angle positions.
+        Angular velocity of the cone angle, differenced from two consecutive elevation encoder
+        readings rather than from the cone angle itself. Negative when scanning toward Nadir,
+        positive when scanning away from Nadir, and zero when the elevation encoder is at rest;
+        across the Nadir crossing itself the direction is ambiguous and the magnitude is reported.
+        Filled for the first sample of a granule, where the encoder angles are unavailable, and
+        where the sample spacing is not a usable rate interval.
       units: degrees s-1
       valid_range: [-100, 100]
       _FillValue: -999
@@ -323,11 +326,14 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the clock angle. The clock rate is negative when the azimuth angle
-        is decreasing, positive when the azimuth angle is increasing, and zero when the clock angle
-        is constant. However, when the azimuth changes direction, the magnitude of the clock rate
-        will approach 0 deg/sec and then increase before settling back to the nominal magnitude.
-        The clock rate is not measured, but is approximated with two consecutive clock angle positions.
+        Angular velocity of the azimuth encoder, differenced from two consecutive readings. This
+        is not the time derivative of Clock_Angle: the clock angle is an azimuth about Nadir and
+        so is singular there, while the encoder rate is the mechanism's own and has no such pole.
+        Negative when the azimuth angle is decreasing, positive when increasing, and zero when the
+        encoder is at rest; as the azimuth reverses direction the magnitude passes through 0 deg/sec
+        before settling back to the nominal magnitude. Filled for the first sample of a granule,
+        where the encoder angles are unavailable, and where the sample spacing is not a usable
+        rate interval.
       units: degrees s-1
       valid_range: [-20, 20]
       _FillValue: -999
