@@ -310,12 +310,13 @@ variables:
         angle is unavailable, which includes the first sample of a granule having no predecessor,
         or where the sample spacing is not a usable rate interval.
       units: degrees s-1
-      # Nominal scanning reaches ~63 deg/s, but a slew to an internal calibration position runs
-      # far faster: the heritage scan profile defines its fast retrace at 249.69 +/- 10 deg/s and
-      # names calibration slews as the same condition. A range covering only nominal scanning
-      # would reject legitimate slew samples, and the heritage flags apply no range edit.
-      # Provisional pending the heritage BDS rate range (SCI-35).
-      valid_range: [-300, 300]
+      # The scan profile commands a single elevation rate ceiling, EL_MAX = 62.5 deg/s, with the
+      # lunar scan slower still at 4.0 deg/s; there is no fast retrace or fast slew. On the
+      # reference granule the two-point rate averages 62.46 deg/s against that commanded 62.5,
+      # with 0.72 deg/s of servo jitter and a peak of 63.67, so this range carries ~36 deg/s of
+      # headroom. Kept deliberately narrow: the heritage flags apply no range edit, so a value
+      # outside this band means a scan profile we did not expect and should fail loudly.
+      valid_range: [-100, 100]
       _FillValue: -999
   Clock_Angle:
     dtype: float32
@@ -341,8 +342,10 @@ variables:
         only where an encoder angle is unavailable, which includes the first sample of a granule
         having no predecessor, or where the sample spacing is not a usable rate interval.
       units: degrees s-1
-      # Covers biaxial scanning. A transition between azimuth modes may slew faster than this;
-      # no rate is documented for one, so the range is unconfirmed over those intervals.
+      # The scan profile commands AZ_MAX = 4.0 deg/s as the azimuth ceiling, with the rotating
+      # azimuth plane at 0.5 deg/s and lunar azimuth slower still, so this heritage range carries
+      # five times the fastest commanded motion. Zero for the whole granule in a fixed-azimuth
+      # cross-track scan, and ~0.5 deg/s in a rotating azimuth plane scan.
       valid_range: [-20, 20]
       _FillValue: -999
 

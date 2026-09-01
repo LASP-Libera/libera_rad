@@ -597,6 +597,12 @@ def calculate_scan_rates(
     azimuth encoder has no such pole, so its rate stays inside the declared valid range
     without gating the samples near nadir.
 
+    The sign rule reads the elevation offset's magnitude as the angle from nadir, which holds
+    only within a half turn: for ``|elevation| > 180`` the true angle from nadir is
+    ``360 - |elevation|`` and *decreasing*, so the reported sign inverts. The scan profile parks
+    calibration positions as far as -222.58 degrees. Earth-view scanning stays inside +/-72 and
+    lunar scanning inside -73, so this only bites if calibration intervals reach the L1B product.
+
     No range editing is applied to either result. The heritage flags are explicit that the
     only failure mode is an angle being unavailable for the current or previous sample (QA-7),
     so nothing here rejects a value for being large -- a slew to a calibration position

@@ -373,7 +373,7 @@ class TestCalculateScanRates:
         # Both stay inside their declared valid_ranges, which is the whole point: the old
         # derivative needed a 12 degree nadir gate to manage that and still filled 15% of samples.
         assert np.all(np.abs(clock_rate[computed]) <= 20.0)
-        assert np.all(np.abs(cone_rate[computed]) <= 300.0)
+        assert np.all(np.abs(cone_rate[computed]) <= 100.0)
 
     def test_azimuth_wrap_is_the_shorter_arc(self):
         # Crossing the encoder's 360 -> 0 wrap is a small motion, not a -36000 deg/s reversal.
