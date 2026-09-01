@@ -302,14 +302,20 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the cone angle, differenced from two consecutive elevation encoder
-        readings rather than from the cone angle itself. Negative when scanning toward Nadir,
-        positive when scanning away from Nadir, and zero when the elevation encoder is at rest;
-        across the Nadir crossing itself the direction is ambiguous and the magnitude is reported.
-        Filled for the first sample of a granule, where the encoder angles are unavailable, and
-        where the sample spacing is not a usable rate interval.
+        Angular velocity of the cone angle, from a backward two-point difference of the elevation
+        encoder over the sample interval, rather than from the cone angle itself. Negative when
+        scanning toward Nadir, positive when scanning away from Nadir, and zero when the elevation
+        encoder is at rest; across the Nadir crossing the direction is ambiguous and the magnitude
+        is reported. No range editing is applied to the result: it is filled only where an encoder
+        angle is unavailable, which includes the first sample of a granule having no predecessor,
+        or where the sample spacing is not a usable rate interval.
       units: degrees s-1
-      valid_range: [-100, 100]
+      # Nominal scanning reaches ~63 deg/s, but a slew to an internal calibration position runs
+      # far faster: the heritage scan profile defines its fast retrace at 249.69 +/- 10 deg/s and
+      # names calibration slews as the same condition. A range covering only nominal scanning
+      # would reject legitimate slew samples, and the heritage flags apply no range edit.
+      # Provisional pending the heritage BDS rate range (SCI-35).
+      valid_range: [-300, 300]
       _FillValue: -999
   Clock_Angle:
     dtype: float32
@@ -326,15 +332,17 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the azimuth encoder, differenced from two consecutive readings. This
-        is not the time derivative of Clock_Angle: the clock angle is an azimuth about Nadir and
-        so is singular there, while the encoder rate is the mechanism's own and has no such pole.
-        Negative when the azimuth angle is decreasing, positive when increasing, and zero when the
-        encoder is at rest; as the azimuth reverses direction the magnitude passes through 0 deg/sec
-        before settling back to the nominal magnitude. Filled for the first sample of a granule,
-        where the encoder angles are unavailable, and where the sample spacing is not a usable
-        rate interval.
+        Angular velocity of the azimuth encoder, from a backward two-point difference over the
+        sample interval. This is not the time derivative of Clock_Angle: the clock angle is an
+        azimuth about Nadir and so is singular there, while the encoder rate is the mechanism's
+        own and has no such pole. Negative when the azimuth angle is decreasing, positive when
+        increasing, and zero when the encoder is at rest -- which is the whole granule for a
+        fixed-azimuth cross-track scan. No range editing is applied to the result: it is filled
+        only where an encoder angle is unavailable, which includes the first sample of a granule
+        having no predecessor, or where the sample spacing is not a usable rate interval.
       units: degrees s-1
+      # Covers biaxial scanning. A transition between azimuth modes may slew faster than this;
+      # no rate is documented for one, so the range is unconfirmed over those intervals.
       valid_range: [-20, 20]
       _FillValue: -999
 

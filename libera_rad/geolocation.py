@@ -584,8 +584,8 @@ def calculate_scan_rates(
     """
     Cone- and clock-angle rates, differenced from the motor encoder angles.
 
-    Follows the heritage implementation, which differences the *encoder* angles rather than
-    the orbital-frame angles the two product fields are named after::
+    Follows the heritage definition (QA-6, QA-7), which differences the *encoder* angles
+    rather than the orbital-frame angles the two product fields are named after::
 
         clock rate = d(azimuth) / dt
         cone  rate = d(elevation) / dt, signed negative toward nadir
@@ -596,6 +596,11 @@ def calculate_scan_rates(
     thousands of degrees per second regardless of how the instrument is actually moving. The
     azimuth encoder has no such pole, so its rate stays inside the declared valid range
     without gating the samples near nadir.
+
+    No range editing is applied to either result. The heritage flags are explicit that the
+    only failure mode is an angle being unavailable for the current or previous sample (QA-7),
+    so nothing here rejects a value for being large -- a slew to a calibration position
+    legitimately reads several hundred degrees per second.
 
     The cone-rate sign follows the heritage quadrant rules, expressed against
     :data:`GIMBAL_NADIR_ELEVATION_DEG` rather than the heritage 90 degree nadir: negative

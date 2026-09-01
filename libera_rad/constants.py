@@ -25,9 +25,16 @@ DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_SW_RAD"
 # --- Gimbal scan-rate conventions ------------------------------------------------------
 
 # Sample period the scan rates are differenced over, and the tolerance outside which a
-# sample spacing is not a usable rate interval. Following the heritage implementation, a
-# spacing further than the tolerance from nominal fills both rates rather than dividing by
-# a spacing the instrument did not have.
+# sample spacing is not a usable rate interval. The heritage definition (QA-6) is a backward
+# two-point difference of the encoder position divided by this interval; a spacing further
+# than the tolerance from nominal fills both rates rather than dividing by a spacing the
+# instrument did not have.
+#
+# We divide by the measured interval rather than by this constant. Heritage substitutes the
+# nominal value, but its tolerance is half the period itself, so a genuine 5 ms interval
+# divided by 10 ms would report half the true rate. On the reference granule the distinction
+# is moot -- the cadence holds 10.000 ms to within 0.032 ms -- so this is a deliberate
+# divergence in the only regime where the two disagree.
 NOMINAL_SAMPLE_PERIOD_S = 0.01
 SAMPLE_PERIOD_TOLERANCE_S = 0.005
 
