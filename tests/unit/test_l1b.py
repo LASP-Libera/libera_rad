@@ -294,8 +294,10 @@ class TestProcessL1aToL1b:
     @pytest.fixture
     def mock_input_data(self):
         """Create mock input data."""
-        # 5 ms raw samples downsample 2:1 to the 100 Hz L1B output grid the product
-        # defines, which the scan rates are differenced over.
+        # 5 ms raw samples. The real timestamp decimation is 2:1, which puts the output grid
+        # at the 10 ms the product defines and the scan rates are differenced over. The sample
+        # count is separate: downsample_libera_signal is mocked 10:1 below, so the cadence and
+        # the 100-sample length come from different paths and will not agree by construction.
         rad_times = pd.date_range("2025-01-01", periods=1000, freq="5ms").values
         rad_data = xr.Dataset(
             {
@@ -512,6 +514,11 @@ class TestProcessL1aToL1b:
         assert np.all(result["Moon_Azimuth_Offset"] == np.float32(-999))
         assert np.all(result["Moon_Elevation_Offset"] == np.float32(-999))
         assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
+        # No encoder record at all, so the rates fill rather than reporting the zero their
+        # placeholder angles would difference to.
+        for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+            assert np.all(result[name] == np.float32(-999)), f"{name} should be filled when use_geo is False"
+
         assert isinstance(dynamic_attributes, dict)
 
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
