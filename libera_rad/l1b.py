@@ -27,7 +27,6 @@ from numpy import ndarray
 from libera_rad import geolocation
 from libera_rad.calibration.constants import ChannelName
 from libera_rad.config import product_config_path
-from libera_rad.constants import CLOCK_RATE_MIN_CONE_ANGLE_DEG
 from libera_rad.radiometer import radiance
 from libera_rad.version import version as libera_rad_version
 
@@ -327,6 +326,7 @@ def process_l1a_to_l1b(
         lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(n_samples)
         azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
         geometry_data = geolocation.create_placeholder_geometry(n_samples)
+        scan_rates = geolocation.create_placeholder_scan_rates(n_samples)
     elif jpss_only_mode:
         if not dynamic_kernel_sources:
             raise ValueError("SPICE kernel sources are required for geolocation when jpss_only_mode is True")
@@ -336,6 +336,9 @@ def process_l1a_to_l1b(
             start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
         lat_lon_alt = geolocation.subsatellite_lat_lon_alt(geometry_data)
         azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
+        # jpss_only carries no motor CK, so the encoder angles are placeholders and their
+        # rates are unknown rather than zero.
+        scan_rates = geolocation.create_placeholder_scan_rates(n_samples)
     else:
         if not dynamic_kernel_sources:
             raise ValueError("SPICE kernel sources are required for geolocation when use_geo is True")
@@ -345,6 +348,7 @@ def process_l1a_to_l1b(
             geometry_data = geolocation.calculate_geometry(km, timestamps)
             start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
             azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+        scan_rates = geolocation.calculate_scan_rates(azimuth, elevation, timestamps)
 
     # Interpolate temperatures
     interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
@@ -363,6 +367,7 @@ def process_l1a_to_l1b(
         azimuth=azimuth,
         elevation=elevation,
         geometry_data=geometry_data,
+        scan_rates=scan_rates,
         start_of_hour_state=start_of_hour_state,
     )
 
@@ -413,34 +418,6 @@ def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarr
     return np.where(lat == fill_val, fill_val, colat)
 
 
-def _gate_clock_rate_near_nadir(
-    clock_angle_rate: np.ndarray, cone_angle: np.ndarray, fill: float = -999.0
-) -> np.ndarray:
-    """
-    Fill the clock-angle rate where the boresight is too near nadir for it to be defined.
-
-    curryer reports the lossless rate, spike and all; declaring it unusable inside a nadir
-    cone is a product decision and so lives here. Coverage gaps (NaN cone angle) are left
-    NaN rather than filled, matching the other geometry fields.
-
-    Parameters
-    ----------
-    clock_angle_rate : np.ndarray
-        Clock-angle rate on the L1B time grid, degrees per second.
-    cone_angle : np.ndarray
-        Boresight off-nadir angle on the same grid, degrees.
-    fill : float
-        Product fill value for `Clock_Angle_Rate`.
-
-    Returns
-    -------
-    np.ndarray
-        `clock_angle_rate` with near-nadir samples replaced by `fill`, dtype float32.
-    """
-    near_nadir = cone_angle < CLOCK_RATE_MIN_CONE_ANGLE_DEG  # NaN compares False -> stays NaN
-    return np.where(near_nadir, np.float32(fill), clock_angle_rate).astype(np.float32)
-
-
 def _package_l1b_product(
     timestamps: np.ndarray,
     lat_lon_alt: pd.DataFrame,
@@ -449,6 +426,7 @@ def _package_l1b_product(
     azimuth: np.ndarray,
     elevation: np.ndarray,
     geometry_data: pd.DataFrame,
+    scan_rates: tuple[np.ndarray, np.ndarray],
     start_of_hour_state: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> tuple[dict[str, ndarray], dict[str, Any]]:
     """
@@ -465,6 +443,10 @@ def _package_l1b_product(
         position, velocity and attitude, and the boresight surface and orbital-frame angles)
         for the granule; always provided -- real values, or fill values in ``use_geo`` false
         mode, where geolocation is intentionally bypassed and no data is forthcoming.
+    scan_rates : tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)`` on the L1B time grid, from
+        :func:`libera_rad.geolocation.calculate_scan_rates`; filled in the modes with no
+        motor encoder record.
     start_of_hour_state : tuple[np.ndarray, np.ndarray], optional
         `(position, velocity)` on the 24-hour ``N_HOURS`` grid, each `(24, 3)` in ECEF.
         When omitted, the ``*_Start_Of_Hour`` fields are filled with the product fill value.
@@ -522,7 +504,6 @@ def _package_l1b_product(
     solar_azimuth = geometry_data["solar_azimuth"].to_numpy().astype(np.float32)
     relative_azimuth = geometry_data["relative_azimuth"].to_numpy().astype(np.float32)
     cone_angle = geometry_data["cone_angle"].to_numpy().astype(np.float32)
-    cone_angle_rate = geometry_data["cone_angle_rate"].to_numpy().astype(np.float32)
     satellite_velocity = np.stack(
         [
             geometry_data["spacecraft_velocity_inertial_x"].to_numpy(),
@@ -533,9 +514,7 @@ def _package_l1b_product(
     ).astype(np.float64)
     attitude_q = [geometry_data[f"attitude_q{i}"].to_numpy().astype(np.float32) for i in range(4)]
     clock_angle = geometry_data["clock_angle"].to_numpy().astype(np.float32)
-    clock_angle_rate = _gate_clock_rate_near_nadir(
-        geometry_data["clock_angle_rate"].to_numpy().astype(np.float32), cone_angle
-    )
+    cone_angle_rate, clock_angle_rate = scan_rates
     along_track_angle = geometry_data["along_track_angle"].to_numpy().astype(np.float32)
     cross_track_angle = geometry_data["cross_track_angle"].to_numpy().astype(np.float32)
 

@@ -12,7 +12,6 @@ from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.manifest import Manifest
 
 from libera_rad import l1b
-from libera_rad.constants import CLOCK_RATE_MIN_CONE_ANGLE_DEG
 
 
 class TestRequireSpiceInputs:
@@ -288,31 +287,17 @@ class TestCalculateDataQualityFlags:
         assert len(result) == 0
 
 
-def test_gate_clock_rate_near_nadir():
-    # The clock angle is an azimuth about nadir, so its rate is undefined there. Samples
-    # inside the cone gate are filled; samples at or beyond it are kept; and a coverage gap
-    # (NaN cone) stays NaN rather than being turned into a fill value. Cone angles are taken
-    # from the gate constant so the boundary case stays on the boundary if the gate moves.
-    gate = float(CLOCK_RATE_MIN_CONE_ANGLE_DEG)
-    rate = np.array([1.0, 2.0, 3.0, np.nan], dtype=np.float32)
-    cone = np.array([gate / 2, gate, gate + 30.0, np.nan], dtype=np.float32)
-
-    gated = l1b._gate_clock_rate_near_nadir(rate, cone)
-
-    assert gated[0] == np.float32(-999.0)  # inside the nadir cone -> filled
-    assert gated[1] == np.float32(2.0)  # exactly at the gate -> kept
-    assert gated[2] == np.float32(3.0)
-    assert np.isnan(gated[3])  # coverage gap stays NaN
-    assert gated.dtype == np.float32
-
-
 class TestProcessL1aToL1b:
     """Integration tests for process_l1a_to_l1b function."""
 
     @pytest.fixture
     def mock_input_data(self):
         """Create mock input data."""
-        rad_times = pd.date_range("2025-01-01", periods=1000, freq="ms").values
+        # 5 ms raw samples. The real timestamp decimation is 2:1, which puts the output grid
+        # at the 10 ms the product defines and the scan rates are differenced over. The sample
+        # count is separate: downsample_libera_signal is mocked 10:1 below, so the cadence and
+        # the 100-sample length come from different paths and will not agree by construction.
+        rad_times = pd.date_range("2025-01-01", periods=1000, freq="5ms").values
         rad_data = xr.Dataset(
             {
                 "RAD_SAMPLE_FPE_TIME": (["time"], rad_times),
@@ -391,7 +376,6 @@ class TestProcessL1aToL1b:
                     "solar_azimuth": np.linspace(120, 130, 100, dtype=np.float64),
                     "relative_azimuth": np.linspace(150, 160, 100, dtype=np.float64),
                     "cone_angle": np.linspace(5, 15, 100, dtype=np.float64),
-                    "cone_angle_rate": np.linspace(-1, 1, 100, dtype=np.float64),
                     "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
                     "spacecraft_velocity_inertial_y": np.full(100, 3.5, dtype=np.float64),
                     "spacecraft_velocity_inertial_z": np.full(100, 6.0, dtype=np.float64),
@@ -400,7 +384,6 @@ class TestProcessL1aToL1b:
                     "attitude_q2": np.zeros(100, dtype=np.float64),
                     "attitude_q3": np.zeros(100, dtype=np.float64),
                     "clock_angle": np.linspace(90, 270, 100, dtype=np.float64),
-                    "clock_angle_rate": np.linspace(-5, 5, 100, dtype=np.float64),
                     "along_track_angle": np.full(100, -0.16, dtype=np.float64),
                     "cross_track_angle": np.linspace(-60, 60, 100, dtype=np.float64),
                 }
@@ -435,7 +418,6 @@ class TestProcessL1aToL1b:
             assert np.allclose(result["Viewing_Azimuth_Surface_WRT_North"], np.linspace(100, 110, 100), atol=1e-4)
             assert np.allclose(result["Relative_Azimuth_Surface"], np.linspace(150, 160, 100), atol=1e-4)
             assert np.allclose(result["Cone_Angle"], np.linspace(5, 15, 100), atol=1e-4)
-            assert np.allclose(result["Cone_Angle_Rate"], np.linspace(-1, 1, 100), atol=1e-4)
             assert result["Satellite_Position"].shape == (len(result["Latitude"]), 3)
             assert result["Line_Of_Sight"].shape == (len(result["Latitude"]), 3)
             assert not np.any(result["Satellite_Position"] == np.float64(-9999))
@@ -445,13 +427,12 @@ class TestProcessL1aToL1b:
             assert not np.any(result["Clock_Angle"] == np.float32(-999))
             assert np.allclose(result["Along_Track_Angle"], -0.16, atol=1e-4)
             assert np.allclose(result["Cross_Track_Angle"], np.linspace(-60, 60, 100), atol=1e-3)
-            # Clock rate is filled inside the nadir cone gate (mocked cone spans 5..15 deg).
-            inside_cone = np.linspace(5, 15, 100) < float(CLOCK_RATE_MIN_CONE_ANGLE_DEG)
-            # Guard: the mocked cone angles must straddle the gate so both sides are exercised.
-            assert inside_cone.any()
-            assert not inside_cone.all()
-            assert np.all(result["Clock_Angle_Rate"][inside_cone] == np.float32(-999))
-            assert not np.any(result["Clock_Angle_Rate"][~inside_cone] == np.float32(-999))
+            # Both rates are differenced from the encoder angles, which the mock parks at
+            # zero: every interval reads a rate of zero, and only the first sample -- which
+            # has no predecessor -- is filled. No nadir gate is involved.
+            for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+                assert result[name][0] == np.float32(-999), f"{name} first sample should be filled"
+                assert np.all(result[name][1:] == np.float32(0)), f"{name} should be zero for a parked gimbal"
             # Start-of-hour state on the fixed 24-hour grid.
             assert result["Satellite_Position_Start_Of_Hour"].shape == (24, 3)
             assert result["Satellite_Velocity_Start_Of_Hour"].shape == (24, 3)
@@ -506,6 +487,11 @@ class TestProcessL1aToL1b:
         assert np.all(result["Subsatellite_Colatitude"] == np.float32(-999))
         assert np.all(result["Azimuth"] == np.float32(-999))
         assert np.all(result["Elevation"] == np.float32(-999))
+        # No encoder record at all, so the rates fill rather than reporting the zero their
+        # placeholder angles would difference to.
+        for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+            assert np.all(result[name] == np.float32(-999)), f"{name} should be filled when use_geo is False"
+
         assert isinstance(dynamic_attributes, dict)
 
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
@@ -557,9 +543,7 @@ class TestProcessL1aToL1b:
                     "solar_azimuth": np.full(100, np.nan),
                     "relative_azimuth": np.full(100, np.nan),
                     "cone_angle": np.full(100, np.nan),
-                    "cone_angle_rate": np.full(100, np.nan),
                     "clock_angle": np.full(100, np.nan),
-                    "clock_angle_rate": np.full(100, np.nan),
                     "along_track_angle": np.full(100, np.nan),
                     "cross_track_angle": np.full(100, np.nan),
                     # Velocity and body attitude come from the spacecraft observer, so they
@@ -597,13 +581,15 @@ class TestProcessL1aToL1b:
             "Solar_Azimuth_Surface_WRT_North",
             "Relative_Azimuth_Surface",
             "Cone_Angle",
-            "Cone_Angle_Rate",
             "Clock_Angle",
-            "Clock_Angle_Rate",
             "Along_Track_Angle",
             "Cross_Track_Angle",
         ):
             assert np.all(np.isnan(result[name])), f"{name} should be NaN in jpss_only mode"
+        # The scan rates are differenced from the motor encoders, which jpss_only does not
+        # have; they take the product fill rather than NaN or a misleading zero.
+        for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+            assert np.all(result[name] == np.float32(-999)), f"{name} should be filled in jpss_only mode"
         # Spacecraft-observer fields still resolve without the motor CK.
         assert not np.any(result["Satellite_Position"] == np.float64(-9999))
         assert not np.any(result["Satellite_Velocity"] == np.float64(-999))

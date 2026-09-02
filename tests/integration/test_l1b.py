@@ -46,6 +46,8 @@ _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     "Solar_Azimuth_Surface_WRT_North",
     "Relative_Azimuth_Surface",
     "Cone_Angle",
+    # The two rate fields are differenced from the motor encoders rather than derived by
+    # curryer, but they share this group's invariant: they need the motor CK.
     "Cone_Angle_Rate",
     # Orbital-frame look angles and the boresight vector -- also instrument observer, so these
     # are fill in jpss_only for the same reason as the surface geometry above.

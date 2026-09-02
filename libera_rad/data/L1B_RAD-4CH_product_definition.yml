@@ -302,10 +302,23 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the cone angle. The cone rate is negative when scanning toward Nadir,
-        positive when scanning away from Nadir, and zero when the cone angle is constant.
-        The cone rate is not measured, but is approximated with two consecutive cone angle positions.
+        Angular velocity of the cone angle, from a backward two-point difference of the elevation
+        encoder over the sample interval, rather than from the cone angle itself. Negative when
+        scanning toward Nadir, positive when scanning away from Nadir, and zero when the elevation
+        encoder is at rest. Where the angle from Nadir turns within a sample -- at the Nadir
+        crossing itself, and at the anti-Nadir crossing a calibration slew traverses -- the
+        direction is ambiguous and the magnitude is reported instead. No range editing is applied
+        to the result: it is filled only where an encoder angle is unavailable, which includes the
+        first sample of a granule having no predecessor, or where the sample spacing is not a
+        usable rate interval.
       units: degrees s-1
+      # The scan profile commands a single elevation rate ceiling, EL_MAX = 62.5 deg/s, with the
+      # lunar scan slower still at 4.0 deg/s; there is no fast retrace or fast slew. On the
+      # reference granule the two-point rate averages 62.46 deg/s against that commanded 62.5,
+      # with 0.72 deg/s of servo jitter and a peak of 63.67, so this range carries ~36 deg/s of
+      # headroom. Kept narrow deliberately: nothing clips these values on write, so the band is
+      # an assertion rather than a filter, and test_curryer_geometry_fields_within_valid_range
+      # in the L1B integration suite is what fails when a granule leaves it.
       valid_range: [-100, 100]
       _FillValue: -999
   Clock_Angle:
@@ -323,12 +336,19 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the clock angle. The clock rate is negative when the azimuth angle
-        is decreasing, positive when the azimuth angle is increasing, and zero when the clock angle
-        is constant. However, when the azimuth changes direction, the magnitude of the clock rate
-        will approach 0 deg/sec and then increase before settling back to the nominal magnitude.
-        The clock rate is not measured, but is approximated with two consecutive clock angle positions.
+        Angular velocity of the azimuth encoder, from a backward two-point difference over the
+        sample interval. This is not the time derivative of Clock_Angle: the clock angle is an
+        azimuth about Nadir and so is singular there, while the encoder rate is the mechanism's
+        own and has no such pole. Negative when the azimuth angle is decreasing, positive when
+        increasing, and zero when the encoder is at rest -- which is the whole granule for a
+        fixed-azimuth cross-track scan. No range editing is applied to the result: it is filled
+        only where an encoder angle is unavailable, which includes the first sample of a granule
+        having no predecessor, or where the sample spacing is not a usable rate interval.
       units: degrees s-1
+      # The scan profile commands AZ_MAX = 4.0 deg/s as the azimuth ceiling, with the rotating
+      # azimuth plane at 0.5 deg/s and lunar azimuth slower still, so this heritage range carries
+      # five times the fastest commanded motion. Zero for the whole granule in a fixed-azimuth
+      # cross-track scan, and ~0.5 deg/s in a rotating azimuth plane scan.
       valid_range: [-20, 20]
       _FillValue: -999
 

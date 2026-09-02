@@ -22,22 +22,39 @@ DEFAULT_SPACECRAFT_OBSERVER = "JPSS4_SC"
 INSTRUMENT_OBSERVERS: tuple[str, ...] = ("LIBERA_SW_RAD", "LIBERA_LW_RAD", "LIBERA_TOT_RAD", "LIBERA_SSW_RAD")
 DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_SW_RAD"
 
-# --- Science tunables -----------------------------------------------------------------
+# --- Gimbal scan-rate conventions ------------------------------------------------------
 
-# Off-nadir gate for Clock_Angle_Rate. The clock angle is an azimuth about nadir, so its rate
-# is singular there; as the cross-track scan crosses nadir the azimuth swings ~180 degrees
-# faster than the 100 Hz sampling resolves, making the finite difference an aliasing artifact
-# rather than a derivative. Ungated, samples reach ~8000 deg/s against a declared valid_range
-# of [-20, 20].
+# L1B output cadence. The single source of truth: ``radiometer.radiance`` decimates the raw
+# samples onto this grid and the scan rates are differenced over it. Were the two to disagree by
+# more than the tolerance below, every interval would be unusable and both rate fields would fill
+# for a whole granule with nothing raised.
+L1B_OUTPUT_HZ = 100
+
+# Sample period the scan rates are differenced over, and the tolerance outside which a spacing
+# is not a usable rate interval. The heritage definition (QA-6) is a backward two-point
+# difference of the encoder position divided by this period; a spacing further than the
+# tolerance from nominal fills both rates rather than dividing by a spacing the instrument did
+# not have.
 #
-# The largest surviving rate sits at the gate boundary and falls off as 1/gate**2: for a scan of
-# angular speed w whose closest approach to nadir is b, the rate at cone angle g is w*b/g**2.
-# Measured on the in-repo granule at the 100 Hz product cadence across 65 minutes of kernel
-# coverage, that envelope is 43.4 * (6/g)**2 deg/s, so satisfying the declared range needs
-# g >= 8.8 degrees. 12 degrees holds the surviving rate near 10.8 deg/s -- about a factor of two
-# of margin against a faster scan or a wider nadir miss -- and fills 15% of samples where a
-# 6 degree gate filled 7.5%.
+# We divide by the measured interval rather than by this nominal period. Heritage substitutes
+# the nominal value, but its tolerance is half the period itself, so a genuine 5 ms interval
+# divided by 10 ms would report half the true rate. On the reference granule the distinction is
+# moot -- the cadence holds 10.000 ms to within 0.032 ms -- so this is a deliberate divergence
+# in the only regime where the two disagree.
+NOMINAL_SAMPLE_PERIOD_S = 1.0 / L1B_OUTPUT_HZ
+SAMPLE_PERIOD_TOLERANCE_S = 0.005
+
+# Elevation encoder reading that puts the boresight at nadir. The heritage implementation
+# writes its cone-rate sign rules around a 90 degree nadir, and its three cases -- both
+# readings below 90, readings straddling 90, both above 90 -- only all occur if elevation
+# spans across 90, so nadir sits mid-range in that encoder rather than at an endpoint. The
+# Libera encoder reads 0 at nadir and sweeps +/-72 degrees about it: the same arrangement,
+# monotonic through nadir, with a different origin. Differencing that monotonic coordinate is
+# the point of the heritage design, since the cone angle itself turns at nadir and its
+# derivative does not survive the turn.
 #
-# TODO[LIBSDC-739]: placeholder pending science confirmation of the useful off-nadir limit. The
-# measurement above covers one cross-track granule; other scan modes change both w and b.
-CLOCK_RATE_MIN_CONE_ANGLE_DEG = np.float32(12.0)
+# The mapping of the 90 degree reference onto this one is inferred from the structure of those
+# sign rules rather than from documentation, and is pending confirmation. It reproduces the
+# documented convention -- negative toward nadir, positive away -- on every interval of the
+# reference granule.
+GIMBAL_NADIR_ELEVATION_DEG = np.float32(0.0)
