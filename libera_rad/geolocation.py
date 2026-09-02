@@ -597,21 +597,27 @@ def calculate_scan_rates(
     azimuth encoder has no such pole, so its rate stays inside the declared valid range
     without gating the samples near nadir.
 
-    The sign rule reads the elevation offset's magnitude as the angle from nadir, which holds
-    only within a half turn: for ``|elevation| > 180`` the true angle from nadir is
-    ``360 - |elevation|`` and *decreasing*, so the reported sign inverts. The scan profile parks
-    calibration positions as far as -222.58 degrees. Earth-view scanning stays inside +/-72 and
-    lunar scanning inside -73, so this only bites if calibration intervals reach the L1B product.
+    Elevation arrives folded into ``(-180, 180]`` -- it is an Euler angle from ``m2eul``, which
+    resolves that branch -- so a commanded -222.58 degree calibration position reads as +137.42,
+    its true angle from nadir. Azimuth is re-wrapped to ``[0, 360)`` by its producer. Each range
+    carries a discontinuity, and both differences are therefore taken along the shorter arc,
+    which reads the step across one as the fraction of a degree the mechanism actually turned
+    rather than as a whole revolution.
 
-    No range editing is applied to either result. The heritage flags are explicit that the
-    only failure mode is an angle being unavailable for the current or previous sample (QA-7),
-    so nothing here rejects a value for being large -- a slew to a calibration position
-    legitimately reads several hundred degrees per second.
+    No range editing is applied to either result. The heritage flags are explicit that the only
+    failure mode is an angle being unavailable for the current or previous sample (QA-7), so
+    nothing here rejects a value for being large. Conformance to the declared ``valid_range`` is
+    asserted against the written product by the L1B integration suite, not enforced here.
 
     The cone-rate sign follows the heritage quadrant rules, expressed against
-    :data:`GIMBAL_NADIR_ELEVATION_DEG` rather than the heritage 90 degree nadir: negative
-    while the boresight scans toward nadir, positive while it scans away, and the magnitude
-    of the encoder rate across the nadir crossing itself, where the direction is ambiguous.
+    :data:`GIMBAL_NADIR_ELEVATION_DEG` rather than the heritage 90 degree nadir: negative while
+    the boresight scans toward nadir, positive while it scans away, and the magnitude of the
+    encoder rate across an interval whose elevation offset changes sign. That covers both
+    turning points of the angle from nadir -- the nadir crossing itself, and the anti-nadir
+    crossing at the encoder's ``+/-180``, which a slew to a calibration position traverses. The
+    angle from nadir reverses inside such an interval, so the magnitude is the honest report and
+    a direction would be invented. The heritage encoder spans only a half turn about nadir and
+    so never reaches the second case.
 
     Azimuth is differenced along the shorter arc, so a pass through the encoder's 360 degree
     wrap reads as the small rate it physically is rather than as -36000 deg/s. A true rate
@@ -620,9 +626,10 @@ def calculate_scan_rates(
     Parameters
     ----------
     azimuth : np.ndarray
-        Motor azimuth on the L1B time grid, degrees, ``fill_value`` where unavailable.
+        Motor azimuth on the L1B time grid, degrees in ``[0, 360)``, ``fill_value`` where
+        unavailable.
     elevation : np.ndarray
-        Motor elevation on the same grid, degrees, nadir at
+        Motor elevation on the same grid, degrees in ``(-180, 180]``, nadir at
         :data:`GIMBAL_NADIR_ELEVATION_DEG`, ``fill_value`` where unavailable.
     timestamps : np.ndarray
         L1B output time grid as ``datetime64[ns]``.
@@ -661,15 +668,21 @@ def calculate_scan_rates(
     known = (azimuth != fill_value) & (elevation != fill_value) & np.isfinite(azimuth) & np.isfinite(elevation)
     usable = (np.abs(delta_t - NOMINAL_SAMPLE_PERIOD_S) <= SAMPLE_PERIOD_TOLERANCE_S) & known[:-1] & known[1:]
 
-    previous_offset = elevation[:-1] - float(GIMBAL_NADIR_ELEVATION_DEG)
-    current_offset = elevation[1:] - float(GIMBAL_NADIR_ELEVATION_DEG)
+    # Offsets are wrapped, not just shifted: the sign test has to flip at the two turning points
+    # of the angle from nadir, and only a wrapped offset puts them there for a nadir reading
+    # other than 0. A no-op while :data:`GIMBAL_NADIR_ELEVATION_DEG` is 0, which is itself an
+    # inference pending confirmation.
+    previous_offset = (elevation[:-1] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
+    current_offset = (elevation[1:] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
     with np.errstate(invalid="ignore", divide="ignore"):
-        elevation_rate = np.diff(elevation) / delta_t
+        elevation_rate = ((np.diff(elevation) + 180.0) % 360.0 - 180.0) / delta_t
         azimuth_rate = ((np.diff(azimuth) + 180.0) % 360.0 - 180.0) / delta_t
+    # Non-strict, so an endpoint sitting exactly at the nadir reading keeps the sign of the
+    # interval it belongs to instead of falling through to the ambiguous-crossing branch.
     toward_nadir = np.where(
-        (previous_offset < 0.0) & (current_offset < 0.0),
+        (previous_offset <= 0.0) & (current_offset <= 0.0),
         -elevation_rate,
-        np.where((previous_offset > 0.0) & (current_offset > 0.0), elevation_rate, np.abs(elevation_rate)),
+        np.where((previous_offset >= 0.0) & (current_offset >= 0.0), elevation_rate, np.abs(elevation_rate)),
     )
 
     cone_rate[1:] = np.where(usable, toward_nadir, fill).astype(np.float32)

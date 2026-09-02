@@ -28,6 +28,7 @@ from libera_rad.calibration.constants import (
     HousekeepingTemperatureCoefficient as TemperatureCoefficient,
 )
 from libera_rad.config import l1b_ground_calibration_path
+from libera_rad.constants import L1B_OUTPUT_HZ
 from libera_rad.radiometer.gain_calibration import (
     apply_gain_calibration,
     decimation_factor,
@@ -36,7 +37,7 @@ from libera_rad.radiometer.gain_calibration import (
 )
 
 _RAD_SAMPLE_HZ = 200
-_L1B_OUTPUT_HZ = 100
+_L1B_OUTPUT_HZ = L1B_OUTPUT_HZ
 
 logger = logging.getLogger(__name__)
 

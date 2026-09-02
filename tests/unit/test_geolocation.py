@@ -347,16 +347,60 @@ class TestCalculateScanRates:
         # reported; +1 -> +2 opens away from nadir and reads positive.
         np.testing.assert_allclose(cone_rate[1:], [-100.0, -100.0, 200.0, 100.0], atol=1e-3)
 
-    def test_cone_rate_across_nadir_reports_the_magnitude(self):
-        # The interval that straddles nadir has no unambiguous direction, so the heritage
-        # rule takes the magnitude rather than inventing a sign.
-        times = _grid(3)
-        elevation = np.array([-0.5, 0.5, 1.5])
+    def test_endpoint_exactly_at_nadir_keeps_its_interval_sign(self):
+        # A reading of exactly the nadir value is not an ambiguous crossing: approaching it is
+        # still motion toward nadir and has to stay negative. Strict comparisons sent both
+        # arriving intervals to the abs branch and reported them as receding.
+        times = _grid(5)
+        elevation = np.array([1.0, 0.0, -1.0, 0.0, 1.0])
 
-        cone_rate, _ = geolocation.calculate_scan_rates(np.full(3, 45.0), elevation, times)
+        cone_rate, _ = geolocation.calculate_scan_rates(np.full(5, 45.0), elevation, times)
 
-        assert cone_rate[1] > 0.0
-        np.testing.assert_allclose(cone_rate[1], 100.0, atol=1e-3)
+        # toward, away, toward, away
+        np.testing.assert_allclose(cone_rate[1:], [-100.0, 100.0, -100.0, 100.0], atol=1e-3)
+
+    def test_descending_nadir_straddle_still_reports_the_magnitude(self):
+        # Every other straddle here ascends, where abs() and the both-positive branch return the
+        # same value and so cannot be told apart. Descending separates them: the raw rate is
+        # -200 deg/s and only the magnitude rule reports +200.
+        cone_rate, _ = geolocation.calculate_scan_rates(np.full(2, 45.0), np.array([1.0, -1.0]), _grid(2))
+
+        np.testing.assert_allclose(cone_rate[1], 200.0, atol=1e-3)
+
+    def test_elevation_across_the_180_branch_cut(self):
+        # The encoder angles arrive folded into (-180, 180] by m2eul, so a slew across +/-180
+        # steps by ~360 degrees in one sample. Differenced raw that reads ~36000 deg/s into a
+        # field declared [-100, 100]; along the shorter arc it reads the motion that happened.
+        times = _grid(5)
+        elevation = np.array([-179.0, -179.625, 179.75, 179.125, 178.5])
+
+        cone_rate, _ = geolocation.calculate_scan_rates(np.full(5, 45.0), elevation, times)
+
+        np.testing.assert_allclose(cone_rate[1:], [62.5, 62.5, -62.5, -62.5], atol=1e-3)
+
+    def test_rate_uses_the_measured_interval_not_the_nominal_one(self):
+        # The one deliberate divergence from heritage, which substitutes a fixed 0.01 s. At a
+        # 15 ms spacing, still inside the tolerance, a 1 degree step is 66.67 deg/s and not 100.
+        times = _grid(3, period_s=0.015)
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(
+            np.array([10.0, 11.0, 12.0]), np.array([30.0, 31.0, 32.0]), times
+        )
+
+        np.testing.assert_allclose(cone_rate[1:], 1.0 / 0.015, atol=1e-3)
+        np.testing.assert_allclose(clock_rate[1:], 1.0 / 0.015, atol=1e-3)
+
+    @pytest.mark.parametrize(("period_s", "usable"), [(0.005, True), (0.015, True), (0.0049, False), (0.0151, False)])
+    def test_sample_spacing_tolerance_is_inclusive_at_both_ends(self, period_s, usable):
+        # The band is |dt - nominal| <= tolerance, so 5 ms and 15 ms are in and just outside is out.
+        times = _grid(3, period_s=period_s)
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(
+            np.array([10.0, 10.5, 11.0]), np.array([30.0, 31.0, 32.0]), times
+        )
+
+        assert bool(cone_rate[1] != self.FILL) is usable
+        assert bool(clock_rate[1] != self.FILL) is usable
 
     def test_no_nadir_singularity(self):
         # The point of differencing the encoder: a scan sweeping through nadir keeps the clock
@@ -364,12 +408,16 @@ class TestCalculateScanRates:
         # because the clock angle is an azimuth about nadir and swings ~180 deg at the crossing.
         times = _grid(200)
         elevation = np.linspace(-60.0, 60.0, 200)
-        azimuth = np.full(200, 359.9995)
+        # Azimuth advancing at the rotating-azimuth-plane rate and starting just below the
+        # encoder wrap, so the clock assertion below is a real value rather than the zero a
+        # parked gimbal would hand back from any implementation.
+        azimuth = (359.9995 + 0.5 * np.arange(200) * 0.01) % 360.0
 
         cone_rate, clock_rate = geolocation.calculate_scan_rates(azimuth, elevation, times)
 
         computed = clock_rate != self.FILL
         assert computed.sum() == 199
+        np.testing.assert_allclose(clock_rate[computed], 0.5, atol=1e-2)
         # Both stay inside their declared valid_ranges, which is the whole point: the old
         # derivative needed a 12 degree nadir gate to manage that and still filled 15% of samples.
         assert np.all(np.abs(clock_rate[computed]) <= 20.0)
@@ -401,11 +449,18 @@ class TestCalculateScanRates:
         assert clock_rate[2] == self.FILL
 
     @pytest.mark.parametrize("bad", [-999.0, np.nan])
-    def test_unavailable_encoder_angles_propagate_fill(self, bad):
+    @pytest.mark.parametrize("encoder", ["azimuth", "elevation"])
+    def test_unavailable_encoder_angles_propagate_fill(self, encoder, bad):
+        # Either encoder missing invalidates both rates: the pair is what defines the sample.
         times = _grid(4)
-        azimuth = np.array([10.0, 10.5, bad, 11.5])
+        azimuth = np.array([10.0, 10.5, 11.0, 11.5])
+        elevation = np.array([30.0, 31.0, 32.0, 33.0])
+        if encoder == "azimuth":
+            azimuth[2] = bad
+        else:
+            elevation[2] = bad
 
-        cone_rate, clock_rate = geolocation.calculate_scan_rates(azimuth, np.full(4, 30.0), times)
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(azimuth, elevation, times)
 
         # Both intervals touching the missing sample are filled; the clean one survives.
         assert clock_rate[1] != self.FILL
@@ -423,6 +478,10 @@ class TestCalculateScanRates:
     def test_mismatched_lengths_raise(self):
         with pytest.raises(ValueError, match="must share one length"):
             geolocation.calculate_scan_rates(np.zeros(3), np.zeros(4), _grid(3))
+
+    def test_mismatched_timestamp_length_raises(self):
+        with pytest.raises(ValueError, match="must share one length"):
+            geolocation.calculate_scan_rates(np.zeros(3), np.zeros(3), _grid(4))
 
     def test_placeholder_scan_rates_are_filled_not_zero(self):
         cone_rate, clock_rate = geolocation.create_placeholder_scan_rates(5)

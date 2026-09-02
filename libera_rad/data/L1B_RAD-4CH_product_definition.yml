@@ -305,17 +305,20 @@ variables:
         Angular velocity of the cone angle, from a backward two-point difference of the elevation
         encoder over the sample interval, rather than from the cone angle itself. Negative when
         scanning toward Nadir, positive when scanning away from Nadir, and zero when the elevation
-        encoder is at rest; across the Nadir crossing the direction is ambiguous and the magnitude
-        is reported. No range editing is applied to the result: it is filled only where an encoder
-        angle is unavailable, which includes the first sample of a granule having no predecessor,
-        or where the sample spacing is not a usable rate interval.
+        encoder is at rest. Where the angle from Nadir turns within a sample -- at the Nadir
+        crossing itself, and at the anti-Nadir crossing a calibration slew traverses -- the
+        direction is ambiguous and the magnitude is reported instead. No range editing is applied
+        to the result: it is filled only where an encoder angle is unavailable, which includes the
+        first sample of a granule having no predecessor, or where the sample spacing is not a
+        usable rate interval.
       units: degrees s-1
       # The scan profile commands a single elevation rate ceiling, EL_MAX = 62.5 deg/s, with the
       # lunar scan slower still at 4.0 deg/s; there is no fast retrace or fast slew. On the
       # reference granule the two-point rate averages 62.46 deg/s against that commanded 62.5,
       # with 0.72 deg/s of servo jitter and a peak of 63.67, so this range carries ~36 deg/s of
-      # headroom. Kept deliberately narrow: the heritage flags apply no range edit, so a value
-      # outside this band means a scan profile we did not expect and should fail loudly.
+      # headroom. Kept narrow deliberately: nothing clips these values on write, so the band is
+      # an assertion rather than a filter, and test_curryer_geometry_fields_within_valid_range
+      # in the L1B integration suite is what fails when a granule leaves it.
       valid_range: [-100, 100]
       _FillValue: -999
   Clock_Angle:
