@@ -80,7 +80,7 @@ class TestSelectAndSliceEventInputs:
         rad_full = make_sample_companion("RAD_FULL", times, samples_per_packet=2)
         cal_full = make_sample_companion("CAL_FULL", times, samples_per_packet=2)
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc": nom_hk,
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc": nom_hk,
             "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000300_R26100000001.nc": rad_full,
             "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5_20250101T000000_20250101T000300_R26100000001.nc": cal_full,
             "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5_20250101T000000_20250101T000300_R26100000001.nc": xr.Dataset(),
@@ -98,7 +98,7 @@ class TestSelectAndSliceEventInputs:
         # Only the products actually used are reported, NOM-HK first; the unused PEC-SW-STAT
         # file on the manifest is not an input to a gain product.
         assert [name.split("_")[2] for name in input_file_names] == [
-            "NOM-HK-GAIN-TRIMMED",
+            "NOM-HK-GAIN-FAMILY-TRIMMED",
             "RAD-FULL-DECODED",
             "CAL-FULL-DECODED",
         ]
@@ -116,7 +116,7 @@ class TestSelectAndSliceEventInputs:
             coords={"PACKET_ICIE_TIME": ("PACKET", times[4:7])},
         )
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-TRIMMED_V5-8-5_20250101T000004_20250101T000006_R26100000001.nc": nom_hk,
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000004_20250101T000006_R26100000001.nc": nom_hk,
             "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000009_R26100000001.nc": (
                 make_sample_companion("RAD_FULL", times, samples_per_packet=3)
             ),
@@ -147,7 +147,7 @@ class TestSelectAndSliceEventInputs:
             coords={"PACKET_ICIE_TIME": ("PACKET", times[4:6])},
         )
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-TRIMMED_V5-8-5_20250101T000004_20250101T000005_R26100000001.nc": nom_hk,
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000004_20250101T000005_R26100000001.nc": nom_hk,
             "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000005_R26100000001.nc": (
                 make_sample_companion("RAD_FULL", times, samples_per_packet=2, sample_times=skewed_samples)
             ),
@@ -170,7 +170,7 @@ class TestSelectAndSliceEventInputs:
             coords={"PACKET_ICIE_TIME": ("PACKET", np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]"))},
         )
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-TRIMMED_V5-8-5_20250101T000000_20250101T000000_R26100000001.nc": nom_hk,
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000000_R26100000001.nc": nom_hk,
         }
         with pytest.raises(ValueError, match=DataProductIdentifier.l1a_icie_rad_full_decoded.value):
             utils.select_and_slice_event_inputs(all_data, event_spec)
@@ -193,7 +193,7 @@ class TestSelectAndSliceEventInputs:
         rad = make_sample_companion("RAD_SAMPLE", times, samples_per_packet=2)
         all_data = {
             (
-                "LIBERA_L1A_NOM-HK-SOLAR-SSW-PRI-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc"
+                "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc"
             ): full_nom_hk,
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5_20250101T000000_20250101T000200_R26100000001.nc": pev,
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5_20250101T000000_20250101T000200_R26100000001.nc": rad,
@@ -204,4 +204,4 @@ class TestSelectAndSliceEventInputs:
         assert inputs[1].sizes["RAD_SAMPLE_FPE_TIME"] == 4
         assert inputs[2].sizes["PACKET"] == 2
         # Provenance still names the NOM-HK granule the filtered Dataset came from
-        assert "NOM-HK-SOLAR-SSW-PRI-TRIMMED" in input_file_names[0]
+        assert "NOM-HK-SOLAR-FAMILY-TRIMMED" in input_file_names[0]

@@ -1,15 +1,23 @@
 import xarray as xr
 from libera_utils.constants import DataProductIdentifier
-from libera_utils.obsids import NomHkObsidSource, ObsIdKind, get_obsid_spec, iter_trim_eligible
+from libera_utils.obsids import (
+    NomHkObsidSource,
+    ObsIdKind,
+    get_family_inputs,
+    get_family_specs,
+    get_obsid_spec,
+    iter_trim_eligible,
+)
 
 from libera_rad.calibration.constants import (
     CAL_EVENT_BY_OBSID,
+    SUPPORTED_CAL_FAMILIES,
     ChannelName,
-    family_from_cal_product,
     find_channel_variable,
     get_cal_event_spec,
     get_channel_name_enum,
 )
+from libera_rad.config import CAL_FAMILY_PRODUCT_DEFINITIONS
 
 
 class TestFindChannelVariable:
@@ -76,42 +84,58 @@ class TestCalEventRegistry:
         for obsid_spec in iter_trim_eligible(NomHkObsidSource.RAD):
             if obsid_spec.kind is not ObsIdKind.RAD_CAL or obsid_spec.cal_product is None:
                 continue
-            if family_from_cal_product(obsid_spec.cal_product) is None:
-                unsupported.add(obsid_spec.obsid)
-            else:
+            if obsid_spec.trimmed_product in SUPPORTED_CAL_FAMILIES:
                 supported.add(obsid_spec.obsid)
+            else:
+                unsupported.add(obsid_spec.obsid)
         assert unsupported  # lunar entries exist in utils
         assert unsupported.isdisjoint(CAL_EVENT_BY_OBSID)
         assert set(CAL_EVENT_BY_OBSID) == supported
 
-    def test_family_from_cal_product(self):
-        assert family_from_cal_product(DataProductIdentifier.cal_gain) == "gain"
-        assert family_from_cal_product(DataProductIdentifier.cal_noise) == "gain"
-        assert family_from_cal_product(DataProductIdentifier.cal_swc_405nm) == "swc"
-        assert family_from_cal_product(DataProductIdentifier.cal_lwc_310k) == "lwc"
-        assert family_from_cal_product(DataProductIdentifier.cal_lwc_305k) == "lwc"
-        assert family_from_cal_product(DataProductIdentifier.cal_solar_tot_pri) == "solar"
-        assert family_from_cal_product(DataProductIdentifier.cal_lunar_south_pole) is None
+    def test_supported_families_cover_their_whole_utils_family(self):
+        """Every ObsID utils puts in a supported family is dispatchable, with its own CAL product."""
+        for family in SUPPORTED_CAL_FAMILIES:
+            members = get_family_specs(family)
+            assert members
+            cal_products = {member.cal_product for member in members}
+            assert len(cal_products) == len(members)  # one CAL product per ObsID
+            for member in members:
+                event = CAL_EVENT_BY_OBSID[member.obsid]
+                assert event.trimmed_product is family
+                assert event.cal_product is member.cal_product
+
+    def test_merge_recipe_is_a_subset_of_the_deployed_family_inputs(self):
+        """Anything merged must also be staged on the manifest by the family's cdk node.
+
+        ``get_family_inputs`` is the deployed input set and is a superset: AXIS-SAMPLE reaches
+        cal-combine as AZROT/ELSCAN CK kernels rather than as a merged companion.
+        """
+        for event in CAL_EVENT_BY_OBSID.values():
+            staged = set(get_family_inputs(event.trimmed_product))
+            assert set(event.companion_products) <= staged, event.trimmed_product
+
+    def test_every_supported_family_has_a_product_definition(self):
+        assert set(CAL_FAMILY_PRODUCT_DEFINITIONS) == set(SUPPORTED_CAL_FAMILIES)
 
     def test_noise_is_distinct_event_on_the_gain_family(self):
         """Noise cal (ObsID 515) is its own event/product but combines on the gain family."""
         gain = get_cal_event_spec(512)
         noise = get_cal_event_spec(515)
 
-        # Distinct calibration event with its own CAL and TRIMMED products.
+        # Distinct calibration event with its own CAL product, sharing the family TRIMMED product.
         assert noise.obsid != gain.obsid
         assert noise.cal_product is DataProductIdentifier.cal_noise
-        assert noise.trimmed_product is DataProductIdentifier.l1a_icie_nom_hk_noise_trimmed
+        assert noise.trimmed_product is gain.trimmed_product
+        assert noise.trimmed_product is DataProductIdentifier.l1a_icie_nom_hk_gain_family_trimmed
 
         # ...combined with gain's full-rate merge recipe.
-        assert noise.family == gain.family == "gain"
         assert noise.companion_products == gain.companion_products
         assert noise.time_variable == gain.time_variable
 
     def test_all_five_lwc_temperatures_supported(self):
         """LWC ObsIDs 320-324 all resolve to the lwc family."""
-        lwc_obsids = {320: "LWC-310K", 321: "LWC-320K", 322: "LWC-330K", 323: "LWC-300K", 324: "LWC-305K"}
+        lwc_obsids = {320: "LWC-310K", 321: "LWC-320K", 322: "LWC-335K", 323: "LWC-300K", 324: "LWC-305K"}
         for obsid, product_value in lwc_obsids.items():
             spec = get_cal_event_spec(obsid)
-            assert spec.family == "lwc"
+            assert spec.trimmed_product is DataProductIdentifier.l1a_icie_nom_hk_lwc_family_trimmed
             assert spec.cal_product.value == product_value

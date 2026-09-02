@@ -85,7 +85,7 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
         LIBERA_CAL_OBSID_ENV,
         obsid,
         event_spec.cal_product.value,
-        event_spec.family,
+        event_spec.trimmed_product.value,
     )
 
     logger.info("Step 1: Reading the input manifest file")
@@ -101,14 +101,14 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
         raise ValueError("PROCESSING_PATH environment variable is not set")
 
     logger.info("Step 2: Reading all input data from manifest files")
-    needs_azel = family_needs_azimuth_elevation_positions(event_spec.family)
+    needs_azel = family_needs_azimuth_elevation_positions(event_spec.trimmed_product)
     all_data, dynamic_kernel_sources = read_all_cal_input_data(input_manifest, require_azel_kernels=needs_azel)
 
     logger.info("Step 3: Confirming NOM-HK ObsID matches environment")
     nom_hk = extract_nom_hk_dataset(all_data, event_spec)
     confirm_obsid_matches_hk(nom_hk, obsid)
 
-    logger.info("Step 4: Building %s calibration event dataset", event_spec.family)
+    logger.info("Step 4: Building %s calibration event dataset", event_spec.trimmed_product.value)
     cal_event = build_event_dataset(all_data, event_spec)
     # NOM-HK inputs carry their own ProductID; overwrite before product write.
     cal_event.attrs["ProductID"] = event_spec.cal_product.value

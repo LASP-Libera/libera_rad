@@ -31,7 +31,6 @@ from libera_rad.calibration.constants import (
     CAL_EVENT_BY_OBSID,
     LIBERA_CAL_OBSID_ENV,
     CalEventSpec,
-    CalFamily,
 )
 from libera_rad.l1b import extract_input_dataset
 from libera_rad.version import version as libera_rad_version
@@ -44,8 +43,15 @@ _REQUIRED_SPICE_CAL_AZEL: tuple[DataProductIdentifier, ...] = (
     DataProductIdentifier.spice_el_ck,
 )
 
-#: Families that receive SPICE-derived Azimuth_Position / Elevation_Position.
-_AZEL_POSITION_FAMILIES = frozenset({"swc", "lwc", "solar"})
+#: Families that receive SPICE-derived Azimuth_Position / Elevation_Position, keyed by the
+#: family TRIMMED ProductID. GAIN is a full-rate merge with no motor attitude.
+_AZEL_POSITION_FAMILIES: frozenset[DataProductIdentifier] = frozenset(
+    {
+        DataProductIdentifier.l1a_icie_nom_hk_swc_family_trimmed,
+        DataProductIdentifier.l1a_icie_nom_hk_lwc_family_trimmed,
+        DataProductIdentifier.l1a_icie_nom_hk_solar_family_trimmed,
+    }
+)
 #: Global attribute listing the granules this product was built from.
 _INPUT_FILES_ATTR = "input_files"
 _RAD_SAMPLE_FPE_TIME = "RAD_SAMPLE_FPE_TIME"
@@ -190,8 +196,14 @@ def attach_azimuth_elevation_positions(
     return cal_event
 
 
-def family_needs_azimuth_elevation_positions(family: str) -> bool:
-    """Return True when the calibration family writes Azimuth/Elevation positions."""
+def family_needs_azimuth_elevation_positions(family: DataProductIdentifier) -> bool:
+    """Return True when the calibration family writes Azimuth/Elevation positions.
+
+    Parameters
+    ----------
+    family : DataProductIdentifier
+        Family TRIMMED ProductID (``CalEventSpec.trimmed_product``).
+    """
     return family in _AZEL_POSITION_FAMILIES
 
 
@@ -402,16 +414,16 @@ def _build_standard_event_dataset(all_data: dict[str, xr.Dataset], event_spec: C
 
 #: Optional family-specific builders. Empty by default; all current families use the
 #: standard path. Register an override when a future family needs custom prep.
-_FAMILY_EVENT_BUILDER_OVERRIDES: dict[CalFamily, EventBuilder] = {}
+_FAMILY_EVENT_BUILDER_OVERRIDES: dict[DataProductIdentifier, EventBuilder] = {}
 
 
-def register_family_event_builder(family: CalFamily, builder: EventBuilder) -> None:
+def register_family_event_builder(family: DataProductIdentifier, builder: EventBuilder) -> None:
     """Register or replace the event builder for a calibration family.
 
     Parameters
     ----------
-    family : CalFamily
-        Calibration family key (must already be a valid ``CalEventSpec.family``).
+    family : DataProductIdentifier
+        Family TRIMMED ProductID (``CalEventSpec.trimmed_product``).
     builder : callable
         ``(all_data, event_spec) -> xr.Dataset`` implementation.
     """
@@ -419,7 +431,7 @@ def register_family_event_builder(family: CalFamily, builder: EventBuilder) -> N
 
 
 def build_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
-    """Build one ObsID calibration event dataset for ``event_spec.family``.
+    """Build one ObsID calibration event dataset for ``event_spec.trimmed_product``.
 
     All current families use the same select → slice → merge path. Families with
     extra prep can be registered via :func:`register_family_event_builder`.
@@ -441,8 +453,8 @@ def build_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpe
     xr.Dataset
         Merged calibration event dataset.
     """
-    builder = _FAMILY_EVENT_BUILDER_OVERRIDES.get(event_spec.family, _build_standard_event_dataset)
-    logger.info("Creating %s calibration event dataset (ObsID %d)", event_spec.family, event_spec.obsid)
+    builder = _FAMILY_EVENT_BUILDER_OVERRIDES.get(event_spec.trimmed_product, _build_standard_event_dataset)
+    logger.info("Creating %s calibration event dataset (ObsID %d)", event_spec.trimmed_product.value, event_spec.obsid)
     event = builder(all_data, event_spec)
     event.attrs["source_obsids"] = [event_spec.obsid]
     event.attrs["algorithm_version"] = libera_rad_version()
