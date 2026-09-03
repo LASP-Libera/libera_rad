@@ -13,14 +13,13 @@ import numpy as np
 SPACECRAFT_OBSERVERS: tuple[str, ...] = ("JPSS4_SC", "NOAA20_SC")
 DEFAULT_SPACECRAFT_OBSERVER = "JPSS4_SC"
 
-# The four radiometer channel frames the Libera FK defines. All four are currently identity
-# rotations relative to ``LIBERA_EL_COORD`` -- the channels are co-boresighted, so geometry
-# computed for any one of them is valid for all four, and one query suffices. There is no
-# generic ``LIBERA_RAD`` frame to name instead. Should the FK ever carry real per-channel
-# boresight offsets, each channel would need its own query and the product would need
-# per-channel geometry fields.
-INSTRUMENT_OBSERVERS: tuple[str, ...] = ("LIBERA_SW_RAD", "LIBERA_LW_RAD", "LIBERA_TOT_RAD", "LIBERA_SSW_RAD")
-DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_SW_RAD"
+# The single radiometer frame the Libera FK defines. The four radiometer channels (SW, SSW,
+# LW, TOT) are co-boresighted and share the ``LIBERA_RAD`` frame, so one geometry query
+# serves all four. Should the FK ever carry real per-channel boresight offsets, per-channel
+# frames would return here, each channel would need its own query, and the product would
+# need per-channel geometry fields.
+INSTRUMENT_OBSERVERS: tuple[str, ...] = ("LIBERA_RAD",)
+DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_RAD"
 
 # --- Science tunables -----------------------------------------------------------------
 
