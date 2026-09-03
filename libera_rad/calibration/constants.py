@@ -50,9 +50,9 @@ CAL_PRODUCT_TIME_VARIABLE = "NOM_HK_PACKET_ICIE_TIME"
 #:
 #: This is the rad merge recipe, not the family's deployed input set. ``get_family_inputs``
 #: declares what libera_cdk stages on the manifest, which is a superset: SWC/LWC/SOLAR also
-#: stage AXIS-SAMPLE, the encoder source the AZROT/ELSCAN motor CKs are built from. cal-combine
-#: does not build them yet — it requires the finished CKs on the manifest and ignores a staged
-#: AXIS-SAMPLE granule. Every entry here must appear in ``get_family_inputs`` for its family.
+#: stage AXIS-SAMPLE, the encoder source the AZROT/ELSCAN motor CKs are built from, declared in
+#: :data:`_FAMILY_KERNEL_SOURCES` rather than here. Every entry in either table must appear in
+#: ``get_family_inputs`` for its family.
 _FAMILY_COMPANIONS: dict[DataProductIdentifier, tuple[DataProductIdentifier, ...]] = {
     DataProductIdentifier.l1a_icie_nom_hk_gain_family_trimmed: (
         DataProductIdentifier.l1a_icie_rad_full_decoded,
@@ -93,6 +93,24 @@ class CalEventSpec:
     #: Time coordinate the product filename is stamped from; always
     #: :data:`CAL_PRODUCT_TIME_VARIABLE`.
     time_variable: str
+    #: L1A inputs used to build this event's SPICE kernels, not to build the product.
+    #: See :data:`_FAMILY_KERNEL_SOURCES`.
+    kernel_source_products: tuple[DataProductIdentifier, ...] = ()
+
+
+#: L1A inputs consumed only to generate a family's SPICE kernels, keyed by the family TRIMMED
+#: ProductID. A family absent here attaches no motor attitude and needs no kernels.
+#:
+#: These are deliberately *not* companions: they are trimmed to the NOM-HK window and fed to
+#: ``create_kernel_from_l1a``, but never merged into the CAL product. AXIS-SAMPLE carries 200 Hz
+#: encoder angles on their own sample axis, and the family product definitions define no
+#: AXIS_SAMPLE variables — merging it would silently ship an undeclared stream, since strict
+#: conformance only rejects *missing* defined variables, never extra ones.
+_FAMILY_KERNEL_SOURCES: dict[DataProductIdentifier, tuple[DataProductIdentifier, ...]] = {
+    DataProductIdentifier.l1a_icie_nom_hk_swc_family_trimmed: (DataProductIdentifier.l1a_icie_axis_sample_decoded,),
+    DataProductIdentifier.l1a_icie_nom_hk_lwc_family_trimmed: (DataProductIdentifier.l1a_icie_axis_sample_decoded,),
+    DataProductIdentifier.l1a_icie_nom_hk_solar_family_trimmed: (DataProductIdentifier.l1a_icie_axis_sample_decoded,),
+}
 
 
 def _cal_event_from_obsid_spec(obsid_spec: ObsIdSpec) -> CalEventSpec | None:
@@ -108,6 +126,7 @@ def _cal_event_from_obsid_spec(obsid_spec: ObsIdSpec) -> CalEventSpec | None:
         trimmed_product=obsid_spec.trimmed_product,
         companion_products=companions,
         time_variable=CAL_PRODUCT_TIME_VARIABLE,
+        kernel_source_products=_FAMILY_KERNEL_SOURCES.get(obsid_spec.trimmed_product, ()),
     )
 
 

@@ -3,9 +3,11 @@
 Selected by the ``LIBERA_CAL_OBSID`` environment variable and invoked via
 ``libera-rad cal-combine <manifest>``.
 
-SWC/LWC/SOLAR events always attach SPICE-derived Azimuth/Elevation from
-AZROT-CK and ELSCAN-CK on the input manifest. Unlike L1B, cal-combine does
-not honor ``configuration.use_geo``.
+SWC/LWC/SOLAR events always attach SPICE-derived Azimuth/Elevation. The AZROT-CK
+and ELSCAN-CK kernels are generated here, per event, from the AXIS-SAMPLE-DECODED
+L1A input trimmed to the NOM-HK event window — cal-combine takes no SPICE inputs
+and ignores any kernels on the manifest. Unlike L1B, it does not honor
+``configuration.use_geo``.
 """
 
 from __future__ import annotations
@@ -23,11 +25,13 @@ from libera_utils.logutil import configure_task_logging
 
 from libera_rad.calibration.combiners.l1a_cal_event_utils import (
     add_input_files,
-    attach_azimuth_elevation_positions,
+    attach_azimuth_elevation_from_axis_sample,
     build_event_dataset,
     confirm_obsid_matches_hk,
+    extract_kernel_source_dataset,
     extract_nom_hk_dataset,
     family_needs_azimuth_elevation_positions,
+    nom_hk_event_window,
     read_all_cal_input_data,
 )
 from libera_rad.calibration.constants import LIBERA_CAL_OBSID_ENV, get_cal_event_spec
@@ -102,8 +106,7 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
         raise ValueError("PROCESSING_PATH environment variable is not set")
 
     logger.info("Step 2: Reading all input data from manifest files")
-    needs_azel = family_needs_azimuth_elevation_positions(event_spec.trimmed_product)
-    all_data, dynamic_kernel_sources = read_all_cal_input_data(input_manifest, require_azel_kernels=needs_azel)
+    all_data = read_all_cal_input_data(input_manifest)
 
     logger.info("Step 3: Confirming NOM-HK ObsID matches environment")
     nom_hk = extract_nom_hk_dataset(all_data, event_spec)
@@ -114,11 +117,14 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
     # NOM-HK inputs carry their own ProductID; overwrite before product write.
     cal_event.attrs["ProductID"] = event_spec.cal_product.value
 
-    if needs_azel:
-        logger.info("Step 4b: Attaching Azimuth_Position / Elevation_Position")
-        cal_event = attach_azimuth_elevation_positions(cal_event, dynamic_kernel_sources)
-        # The kernels are real inputs to this product, so record them alongside the L1A granules
-        cal_event = add_input_files(cal_event, dynamic_kernel_sources)
+    if family_needs_azimuth_elevation_positions(event_spec.trimmed_product):
+        logger.info("Step 4b: Generating event AZROT/ELSCAN CKs and attaching Az/El")
+        axis_file_name, axis_sample = extract_kernel_source_dataset(all_data, event_spec)
+        t0, t1 = nom_hk_event_window(nom_hk)
+        cal_event = attach_azimuth_elevation_from_axis_sample(cal_event, axis_sample, t0, t1)
+        # The AXIS-SAMPLE granule is the real input; the kernels built from it are intermediates
+        # that this run creates and discards, so they are not product provenance.
+        cal_event = add_input_files(cal_event, [axis_file_name])
 
     logger.info("Step 5: Writing data product %s", event_spec.cal_product.value)
     product_definition = get_cal_product_definition(event_spec)

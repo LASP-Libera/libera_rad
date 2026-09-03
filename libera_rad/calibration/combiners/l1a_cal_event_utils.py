@@ -1,4 +1,4 @@
-"""L1A calibration event utilities — manifest load, slicing, and event building.
+"""L1A calibration event utilities — manifest load, slicing, kernels, and event building.
 
 Shared helpers for ObsID-dispatched calibration products:
 
@@ -6,13 +6,16 @@ Shared helpers for ObsID-dispatched calibration products:
 - Select the family TRIMMED NOM-HK granule that defines the event
 - Confirm NOM-HK ObsIDs against ``LIBERA_CAL_OBSID``
 - Select companion products and slice them to the NOM-HK event window
+- Generate this event's motor CKs from AXIS-SAMPLE and query them for Azimuth/Elevation
 - Merge the selected streams into one calibration event dataset
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+import tempfile
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -21,7 +24,8 @@ import xarray as xr
 from cloudpathlib import S3Path
 from libera_utils import Manifest, smart_open
 from libera_utils.constants import DataProductIdentifier
-from libera_utils.io.filenaming import LiberaDataProductFilename
+from libera_utils.io.filenaming import LiberaDataProductFilename, PathType
+from libera_utils.kernel_maker import create_kernel_from_l1a
 from libera_utils.l1a.packet_slicing import find_sample_dims, slice_l1a_dataset_to_time_window
 from libera_utils.libera_spice.kernel_manager import KernelManager
 
@@ -36,11 +40,14 @@ from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
 
-#: Motor CK products required for SWC/LWC/SOLAR Azimuth/Elevation (furnish order).
-_REQUIRED_SPICE_CAL_AZEL: tuple[DataProductIdentifier, ...] = (
+#: Motor CK products generated per event from AXIS-SAMPLE (furnish order: AZ then EL).
+_GENERATED_SPICE_CAL_AZEL: tuple[DataProductIdentifier, ...] = (
     DataProductIdentifier.spice_az_ck,
     DataProductIdentifier.spice_el_ck,
 )
+
+#: Sample axis of the AXIS-SAMPLE-DECODED product, carrying the 200 Hz encoder angles.
+_AXIS_SAMPLE_TIME = "AXIS_SAMPLE_ICIE_TIME"
 
 #: Families that receive SPICE-derived Azimuth_Position / Elevation_Position, keyed by the
 #: family TRIMMED ProductID. GAIN is a full-rate merge with no motor attitude.
@@ -51,6 +58,7 @@ _AZEL_POSITION_FAMILIES: frozenset[DataProductIdentifier] = frozenset(
         DataProductIdentifier.l1a_icie_nom_hk_solar_family_trimmed,
     }
 )
+
 #: Global attribute listing the granules this product was built from.
 _INPUT_FILES_ATTR = "input_files"
 _RAD_SAMPLE_FPE_TIME = "RAD_SAMPLE_FPE_TIME"
@@ -58,98 +66,46 @@ _AZIMUTH_POSITION = "Azimuth_Position"
 _ELEVATION_POSITION = "Elevation_Position"
 
 
-def read_all_cal_input_data(
-    input_manifest: Manifest,
-    *,
-    require_azel_kernels: bool = True,
-) -> tuple[dict[str, xr.Dataset], list[str]]:
-    """Load decoded L1A datasets and optional AZROT/ELSCAN kernels from a cal manifest.
+def read_all_cal_input_data(input_manifest: Manifest) -> dict[str, xr.Dataset]:
+    """Load the decoded L1A datasets from a calibration input manifest.
 
-    When ``require_azel_kernels`` is true (SWC/LWC/SOLAR), AZROT-CK and ELSCAN-CK
-    are required and returned in furnish order. Other SPICE products on the
-    manifest are skipped with a warning.
-
-    When ``require_azel_kernels`` is false (GAIN), SPICE products are never
-    required; any ``.bc``/``.bsp`` files on the manifest are skipped.
+    Every manifest entry is an L1A granule. cal-combine has no SPICE inputs — it generates the
+    motor CKs it needs from the AXIS-SAMPLE-DECODED L1A input (see :func:`event_azel_kernels`).
 
     Parameters
     ----------
     input_manifest : Manifest
         Calibration combiner input manifest.
-    require_azel_kernels : bool, optional
-        Whether this calibration family needs motor AZROT/ELSCAN kernels.
 
     Returns
     -------
     dict of {str : xr.Dataset}
         Decoded L1A datasets keyed by filename.
-    list of str
-        Dynamic kernel paths in furnish order (AZROT then ELSCAN), or empty
-        when kernels are not required.
 
     Raises
     ------
-    ValueError
-        If required AZROT/ELSCAN kernels are missing or duplicated.
     Exception
-        If any NetCDF file cannot be opened or is invalid.
+        If any manifest entry cannot be opened as an L1A NetCDF granule.
     """
     all_data: dict[str, xr.Dataset] = {}
-    spice_files: dict[DataProductIdentifier, str] = {}
-    spice_allowlist = set(_REQUIRED_SPICE_CAL_AZEL)
 
     for i, file_info in enumerate(input_manifest.files):
         logger.info("Reading file %d/%d: %s", i + 1, len(input_manifest.files), file_info.filename)
         try:
-            if file_info.filename.endswith((".bc", ".bsp")):
-                if not require_azel_kernels:
-                    logger.warning("Skipping SPICE kernel %s (not required for this cal family)", file_info.filename)
-                    continue
-
-                product_id = LiberaDataProductFilename.from_file_path(file_info.filename).data_product_id
-                if product_id not in spice_allowlist:
-                    logger.warning(
-                        "Skipping SPICE file %s (%s); not in required AZROT/ELSCAN set",
-                        file_info.filename,
-                        product_id,
-                    )
-                    continue
-
-                if product_id in spice_files:
-                    raise ValueError(
-                        f"Duplicate SPICE data product {product_id} in manifest: "
-                        f"{spice_files[product_id]} and {file_info.filename}"
-                    )
-
-                spice_files[product_id] = file_info.filename
-                logger.info("Recorded SPICE kernel %s (%s)", file_info.filename, product_id)
-            else:
-                with smart_open(file_info.filename) as file_handle:
-                    LiberaDataProductFilename.from_file_path(file_info.filename)
-                    dataset = xr.open_dataset(file_handle, decode_times=True).load()
-                    all_data[file_info.filename] = dataset
-                    logger.info("Successfully loaded dataset: %s", file_info.filename)
+            with smart_open(file_info.filename) as file_handle:
+                LiberaDataProductFilename.from_file_path(file_info.filename)
+                dataset = xr.open_dataset(file_handle, decode_times=True).load()
+                all_data[file_info.filename] = dataset
+                logger.info("Successfully loaded dataset: %s", file_info.filename)
         except Exception:
             logger.error("Failed to process file %s", file_info.filename, exc_info=True)
             raise
 
-    dynamic_kernel_sources: list[str] = []
-    if require_azel_kernels:
-        missing = [product_id for product_id in _REQUIRED_SPICE_CAL_AZEL if product_id not in spice_files]
-        if missing:
-            labels = ", ".join(str(product_id) for product_id in missing)
-            raise ValueError(f"Input manifest missing required SPICE data products: {labels}")
-        dynamic_kernel_sources = [spice_files[product_id] for product_id in _REQUIRED_SPICE_CAL_AZEL]
-
-    logger.info(
-        "Successfully loaded %d datasets and %d SPICE kernel paths",
-        len(all_data),
-        len(dynamic_kernel_sources),
-    )
+    logger.info("Successfully loaded %d datasets", len(all_data))
     if not all_data:
         logger.warning("No data files were loaded from manifest")
 
-    return all_data, dynamic_kernel_sources
+    return all_data
 
 
 def attach_azimuth_elevation_positions(
@@ -163,7 +119,9 @@ def attach_azimuth_elevation_positions(
     cal_event : xr.Dataset
         Merged SWC/LWC/SOLAR calibration event dataset.
     dynamic_kernel_sources : sequence of str, Path, or S3Path
-        AZROT-CK and ELSCAN-CK paths from the input manifest.
+        AZROT-CK and ELSCAN-CK paths to furnish, in that order. In cal-combine these are the
+        event-scoped kernels built by :func:`event_azel_kernels`; the parameter stays generic so
+        the query is testable against any kernel pair.
 
     Returns
     -------
@@ -193,6 +151,138 @@ def attach_azimuth_elevation_positions(
         }
     )
     return cal_event
+
+
+@contextmanager
+def event_azel_kernels(
+    axis_sample: xr.Dataset,
+    t0: np.datetime64,
+    t1: np.datetime64,
+) -> Iterator[list[PathType]]:
+    """Build AZROT-CK and ELSCAN-CK covering the NOM-HK event window.
+
+    The AXIS-SAMPLE granule is trimmed to ``[t0, t1]`` before the kernels are built, so each CK
+    covers the calibration event and nothing else. Trimming is driven by
+    :func:`~libera_utils.l1a.packet_slicing.slice_l1a_dataset_to_time_window`, which selects whole
+    packets on ``AXIS_SAMPLE_ICIE_TIME`` — the same sample-time rule every other companion is
+    trimmed by, so the kernels and the merged streams are cut on one consistent basis.
+
+    The kernels are run-local intermediates rebuildable from the AXIS-SAMPLE granule, so they are
+    written to a temporary directory and deleted when the context exits. Only that granule is
+    recorded as a product input.
+
+    Parameters
+    ----------
+    axis_sample : xr.Dataset
+        Decoded AXIS-SAMPLE-DECODED dataset for the day containing the event.
+    t0 : np.datetime64
+        Event window start (inclusive), from NOM-HK.
+    t1 : np.datetime64
+        Event window end (inclusive), from NOM-HK.
+
+    Yields
+    ------
+    list of PathType
+        Generated kernel paths in furnish order (AZROT then ELSCAN).
+
+    Raises
+    ------
+    ValueError
+        If the AXIS-SAMPLE data has no packets or no samples inside the event window.
+    """
+    trimmed = slice_l1a_dataset_to_time_window(axis_sample, t0, t1)
+
+    empty_dims = [dim for dim in ("PACKET", _AXIS_SAMPLE_TIME) if trimmed.sizes.get(dim, 0) == 0]
+    if empty_dims:
+        raise ValueError(
+            f"AXIS-SAMPLE data has no data on {', '.join(empty_dims)} inside NOM-HK event window "
+            f"[{t0} — {t1}]; cannot generate Azimuth/Elevation kernels"
+        )
+
+    sample_times = trimmed[_AXIS_SAMPLE_TIME].values
+    logger.info(
+        "AXIS-SAMPLE: %d / %d packets selected, %d / %d %s samples, covering [%s — %s]",
+        trimmed.sizes.get("PACKET", 0),
+        axis_sample.sizes.get("PACKET", 0),
+        trimmed.sizes[_AXIS_SAMPLE_TIME],
+        axis_sample.sizes.get(_AXIS_SAMPLE_TIME, 0),
+        _AXIS_SAMPLE_TIME,
+        sample_times.min(),
+        sample_times.max(),
+    )
+
+    # A short base path keeps the generated kernel clear of SPICE's 80-character path limit,
+    # matching the convention libera_utils' own make_kernel uses.
+    with tempfile.TemporaryDirectory(prefix="/tmp/") as kernel_dir:  # nosec B108
+        kernel_paths = [
+            create_kernel_from_l1a(trimmed, product_id, kernel_dir, overwrite=True)
+            for product_id in _GENERATED_SPICE_CAL_AZEL
+        ]
+        logger.info("Generated event kernels: %s", [Path(str(path)).name for path in kernel_paths])
+        yield kernel_paths
+
+
+def attach_azimuth_elevation_from_axis_sample(
+    cal_event: xr.Dataset,
+    axis_sample: xr.Dataset,
+    t0: np.datetime64,
+    t1: np.datetime64,
+) -> xr.Dataset:
+    """Generate this event's motor CKs from AXIS-SAMPLE and attach Azimuth/Elevation.
+
+    The NOM-HK window defines the event, but a kernel has to *bracket* the times it is asked to
+    interpolate, so the axis data is cut to that window widened to the samples actually queried.
+    The two are not the same: companions are trimmed a whole packet at a time, and RAD and AXIS
+    are sampled on independently clocked 200 Hz grids, so the RAD edge sample can land past the
+    last AXIS sample of the same window — 10 ms past it, for 3 of 16150 samples, in ground-test
+    solar data. Cutting the axis data to the bare window leaves those samples uncovered, and
+    ``calculate_azimuth_elevation_for_timestamps`` turns an uncovered sample into ``-999.0``
+    fill rather than an error. Widening by the queried range costs one extra axis packet per
+    edge and removes that failure mode.
+
+    Kernel creation completes before the query context opens: ``create_kernel_from_l1a`` furnishes
+    kernels through its own ``KernelManager``, and the querying ``KernelManager`` clears the SPICE
+    pool when it exits, so the two must not be interleaved.
+
+    Parameters
+    ----------
+    cal_event : xr.Dataset
+        Merged SWC/LWC/SOLAR calibration event dataset.
+    axis_sample : xr.Dataset
+        Decoded AXIS-SAMPLE-DECODED dataset for the day containing the event.
+    t0 : np.datetime64
+        Event window start (inclusive), from NOM-HK.
+    t1 : np.datetime64
+        Event window end (inclusive), from NOM-HK.
+
+    Returns
+    -------
+    xr.Dataset
+        ``cal_event`` with ``Azimuth_Position`` and ``Elevation_Position`` assigned.
+
+    Raises
+    ------
+    ValueError
+        If ``RAD_SAMPLE_FPE_TIME`` is missing from ``cal_event``.
+    """
+    if _RAD_SAMPLE_FPE_TIME not in cal_event:
+        raise ValueError(f"Calibration event dataset is missing {_RAD_SAMPLE_FPE_TIME}")
+
+    queried = cal_event[_RAD_SAMPLE_FPE_TIME].values
+    kernel_t0 = min(t0, np.datetime64(queried.min()))
+    kernel_t1 = max(t1, np.datetime64(queried.max()))
+    if (kernel_t0, kernel_t1) != (t0, t1):
+        logger.info(
+            "Widening kernel window from NOM-HK [%s — %s] to [%s — %s] to cover the queried %s samples",
+            t0,
+            t1,
+            kernel_t0,
+            kernel_t1,
+            _RAD_SAMPLE_FPE_TIME,
+        )
+
+    with event_azel_kernels(axis_sample, kernel_t0, kernel_t1) as kernel_paths:
+        return attach_azimuth_elevation_positions(cal_event, kernel_paths)
 
 
 def family_needs_azimuth_elevation_positions(family: DataProductIdentifier) -> bool:
@@ -341,6 +431,37 @@ def _extract_named_input_dataset(
         if LiberaDataProductFilename.from_file_path(file_name).data_product_id == product_id.value:
             return file_name, all_data[file_name]
     raise ValueError("No dataset found in input files: " + product_id.value)
+
+
+def extract_kernel_source_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> tuple[str, xr.Dataset]:
+    """Return the ``(filename, dataset)`` of the event's SPICE kernel source granule.
+
+    Parameters
+    ----------
+    all_data : dict of {str : xr.Dataset}
+        Decoded L1A datasets keyed by filename.
+    event_spec : CalEventSpec
+        ObsID-specific calibration event specification.
+
+    Returns
+    -------
+    tuple of (str, xr.Dataset)
+        Source filename and kernel source dataset (AXIS-SAMPLE-DECODED).
+
+    Raises
+    ------
+    ValueError
+        If the family declares no kernel source, declares more than one, or the granule is
+        missing from the inputs.
+    """
+    kernel_sources = event_spec.kernel_source_products
+    if len(kernel_sources) != 1:
+        raise ValueError(
+            f"Calibration family {event_spec.trimmed_product.value} declares {len(kernel_sources)} kernel "
+            f"source products ({[p.value for p in kernel_sources]}); exactly one is required to generate "
+            f"Azimuth/Elevation kernels"
+        )
+    return _extract_named_input_dataset(all_data, kernel_sources[0])
 
 
 def select_and_slice_event_inputs(

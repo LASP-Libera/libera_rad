@@ -42,6 +42,7 @@ _REAL_EVENTS = [
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280212T000050_20280212T020052_R26163174745.nc",
             "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5RC1_20280212T000059_20280212T020011_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280212T000147_20280212T020019_R26163174745.nc",
+            "LIBERA_L1A_AXIS-SAMPLE-DECODED_V5-8-5RC1_20280212T000050_20280212T020052_R26163174745.nc",
         ],
         id="lwc-320",
     ),
@@ -54,6 +55,7 @@ _REAL_EVENTS = [
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
             "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5RC1_20280213T020149_20280213T040001_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280213T020154_20280213T035926_R26163174745.nc",
+            "LIBERA_L1A_AXIS-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
         ],
         id="swc-257",
     ),
@@ -64,6 +66,7 @@ _REAL_EVENTS = [
             "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5RC1_20280213T021710_20280213T021830_R26199213122.nc",
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280213T020154_20280213T035926_R26163174745.nc",
+            "LIBERA_L1A_AXIS-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
         ],
         id="solar-385",
     ),
@@ -74,6 +77,7 @@ _REAL_EVENTS = [
             "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5RC1_20280213T035840_20280213T040000_R26199213122.nc",
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5RC1_20280213T020154_20280213T035926_R26163174745.nc",
+            "LIBERA_L1A_AXIS-SAMPLE-DECODED_V5-8-5RC1_20280213T020114_20280213T040014_R26163174745.nc",
         ],
         id="solar-386",
     ),
@@ -104,14 +108,8 @@ def test_cal_combine_real_sample_event(
     event_spec = CAL_EVENT_BY_OBSID[obsid]
     sample_dir = test_l1a_cal_data_path / sample_subdir
     needs_azel = family_needs_azimuth_elevation_positions(event_spec.trimmed_product)
-    spice_kernel_dir = sample_dir / f"obsid_{obsid}" if needs_azel else None
 
-    manifest_path = build_cal_event_manifest(
-        sample_dir,
-        filenames,
-        input_dir,
-        spice_kernel_dir=spice_kernel_dir,
-    )
+    manifest_path = build_cal_event_manifest(sample_dir, filenames, input_dir)
     monkeypatch.setenv("PROCESSING_PATH", str(output_dir))
     monkeypatch.setenv(LIBERA_CAL_OBSID_ENV, str(obsid))
 
@@ -127,10 +125,15 @@ def test_cal_combine_real_sample_event(
     assert_filename_covers_data(dataset, output_file)
     _assert_source_obsids(dataset, obsid)
 
-    expected_inputs = list(filenames)
-    if spice_kernel_dir is not None:
-        expected_inputs += [path.name for path in sorted(spice_kernel_dir.glob("*.bc"))]
-    assert_input_files_provenance(dataset, expected_inputs)
+    # Every manifest granule is provenance, including the AXIS-SAMPLE input the motor CKs are
+    # built from. The kernels themselves are run-local intermediates and are not recorded.
+    assert_input_files_provenance(dataset, list(filenames))
+
+    # AXIS-SAMPLE is a kernel source, not a companion: its encoder stream must stay out of the
+    # product. Nothing else catches this — strict conformance rejects only *missing* defined
+    # variables, so an accidental merge would ship silently.
+    axis_leakage = [str(name) for name in (*dataset.variables, *dataset.dims) if str(name).startswith("AXIS_SAMPLE")]
+    assert not axis_leakage, f"AXIS-SAMPLE data leaked into the CAL product: {axis_leakage}"
 
     if needs_azel:
         assert_azimuth_elevation_positions(dataset)

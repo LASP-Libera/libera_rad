@@ -141,6 +141,25 @@ class TestCalEventRegistry:
         # ...combined with gain's full-rate merge recipe.
         assert noise.companion_products == gain.companion_products
         assert noise.time_variable == gain.time_variable
+        assert noise.kernel_source_products == gain.kernel_source_products
+
+    def test_azel_families_declare_axis_sample_as_kernel_source(self):
+        """SWC/LWC/SOLAR build their own motor CKs from AXIS-SAMPLE; gain needs no motor attitude."""
+        for obsid in (257, 320, 385):
+            spec = get_cal_event_spec(obsid)
+            assert spec.kernel_source_products == (DataProductIdentifier.l1a_icie_axis_sample_decoded,)
+
+        assert get_cal_event_spec(512).kernel_source_products == ()
+
+    def test_axis_sample_is_never_a_companion(self):
+        """AXIS-SAMPLE feeds kernel generation only — merging it would ship an undeclared stream.
+
+        The family product definitions declare no AXIS_SAMPLE variables, and strict conformance
+        only rejects *missing* defined variables, so an accidental companion would be written to
+        the product silently rather than failing the write.
+        """
+        for spec in CAL_EVENT_BY_OBSID.values():
+            assert DataProductIdentifier.l1a_icie_axis_sample_decoded not in spec.companion_products
 
     def test_all_five_lwc_temperatures_supported(self):
         """LWC ObsIDs 320-324 all resolve to the lwc family."""

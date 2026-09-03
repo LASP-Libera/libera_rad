@@ -34,9 +34,11 @@ def build_cal_event_manifest(
     input_dir: Path | S3Path,
     *,
     configuration: dict | None = None,
-    spice_kernel_dir: Path | None = None,
 ) -> Path | S3Path:
     """Copy selected sample files and write a per-event calibration input manifest.
+
+    Only L1A granules go on the manifest. cal-combine generates the AZROT/ELSCAN kernels it
+    needs from the AXIS-SAMPLE-DECODED input, so no SPICE files are supplied.
 
     Parameters
     ----------
@@ -48,8 +50,6 @@ def build_cal_event_manifest(
         Destination directory for copied inputs and the manifest.
     configuration : dict, optional
         Manifest configuration dictionary.
-    spice_kernel_dir : Path, optional
-        Directory containing AZROT-CK / ELSCAN-CK ``.bc`` files to include.
 
     Returns
     -------
@@ -62,11 +62,6 @@ def build_cal_event_manifest(
         dest = copy_cal_input_file(source, input_dir / name)
         copied.append(dest)
 
-    if spice_kernel_dir is not None:
-        for kernel_path in sorted(spice_kernel_dir.glob("LIBERA_SPICE_*.bc")):
-            dest = copy_cal_input_file(kernel_path, input_dir / kernel_path.name)
-            copied.append(dest)
-
     manifest = Manifest(
         manifest_type=ManifestType.INPUT,
         files=[],
@@ -78,24 +73,24 @@ def build_cal_event_manifest(
     return manifest.write(out_path=input_dir)
 
 
-#: Minimum share of Az/El samples SPICE must resolve.
-#:
-#: Not 1.0: companions are trimmed a whole packet at a time, so the edge packets contribute
-#: samples just outside the motor CK coverage and those take the -999 fill. Observed across the
-#: four Az/El sample events, 42-72 samples per product fall outside, worst case 0.9955. A floor
-#: rather than "any finite value" so a run where SPICE resolved almost nothing still fails.
-_MIN_AZEL_FINITE_FRACTION = 0.99
-
-
 def assert_azimuth_elevation_positions(dataset: xr.Dataset) -> None:
-    """Assert Azimuth_Position / Elevation_Position are on FPE time and mostly SPICE-derived."""
+    """Assert Azimuth_Position / Elevation_Position exist and are fully SPICE-derived.
+
+    Every sample must resolve. cal-combine builds its motor CKs from AXIS-SAMPLE trimmed to the
+    NOM-HK window, so the kernels no longer span the whole day: any RAD sample falling outside
+    the generated coverage comes back as ``-999.0`` fill from
+    ``calculate_azimuth_elevation_for_timestamps``, which swallows the per-sample SpiceyError.
+    Asserting on fill is what turns that coverage shortfall into a failure instead of a product
+    quietly full of sentinels.
+    """
     for name in ("Azimuth_Position", "Elevation_Position"):
         assert name in dataset, f"Missing {name}"
         assert dataset[name].dims == ("RAD_SAMPLE_FPE_TIME",)
         values = np.asarray(dataset[name].values, dtype=np.float64)
-        finite = np.isfinite(values) & (values != -999.0)
-        assert finite.mean() >= _MIN_AZEL_FINITE_FRACTION, (
-            f"{name} is only {finite.mean():.4f} SPICE-derived ({int((~finite).sum())} of {finite.size} samples filled)"
+        unresolved = ~np.isfinite(values) | (values == -999.0)
+        assert not unresolved.any(), (
+            f"{name} has {unresolved.sum()} / {values.size} unresolved samples; "
+            "the generated CK does not cover the queried RAD_SAMPLE_FPE_TIME range"
         )
 
 

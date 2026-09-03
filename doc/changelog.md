@@ -1,5 +1,11 @@
 # Version Changes
 
+## 0.7.1
+
+- cal-combine generates the AZROT-CK and ELSCAN-CK it needs instead of consuming supplied kernels, so it no longer depends on kernels being produced and delivered upstream. SWC/LWC/SOLAR take `AXIS-SAMPLE-DECODED` as an additional L1A input; it is trimmed to the NOM-HK event window on `AXIS_SAMPLE_ICIE_TIME` and passed to `libera_utils.kernel_maker.create_kernel_from_l1a`, so each CK covers exactly the calibration event. The kernels are run-local intermediates written to a temp directory and discarded after the query — only the AXIS-SAMPLE granule is recorded in `input_files`. cal-combine now has no SPICE inputs at all: `read_all_cal_input_data` reads L1A granules only, and the kernel intake (requiring, de-duplicating, and furnishing manifest AZROT/ELSCAN) is gone. The kernel window is the NOM-HK window widened to the `RAD_SAMPLE_FPE_TIME` samples actually queried: RAD and AXIS are clocked independently and trimmed a whole packet at a time, so the last RAD samples can land past the final AXIS sample of the same window (10 ms past it, for 3 of 16150 samples, in ground-test solar data) and would otherwise come back as `-999.0` fill.
+- Kernel source products are declared separately from merge companions (`_FAMILY_KERNEL_SOURCES`). AXIS-SAMPLE is deliberately not a companion: the family product definitions declare no `AXIS_SAMPLE` variables, and strict conformance only rejects _missing_ defined variables, so merging it would have silently written an undeclared 200 Hz stream into the CAL product.
+- Breaking manifest contract change: the SWC/LWC/SOLAR cal steps' `input-products` swap AZROT-CK and ELSCAN-CK for `AXIS-SAMPLE-DECODED`, which libera_cdk must restage. A 0.7.0 manifest does not run against 0.7.1.
+
 ## 0.7.0
 
 - Replace type-specific calibration combiners and `*-COMBINED` products with a single ObsID-dispatched `cal-combine` algorithm, selected by the `LIBERA_CAL_OBSID` environment variable. Invoke via `libera-rad cal-combine <manifest>` (docker-compose `cal-combine` service included). Outputs are ObsID-specific: `GAIN`, `NOISE`, `SWC-{λ}NM`, `LWC-{310,320,335,300,305}K`, `SOLAR-{ch}-{PRI,SEC,TER}`.

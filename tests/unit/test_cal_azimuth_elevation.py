@@ -54,101 +54,52 @@ class TestAttachAzimuthElevationPositions:
             utils.attach_azimuth_elevation_positions(event, ["az.bc", "el.bc"])
 
 
+def _read_manifest(manifest):
+    """Run read_all_cal_input_data with NetCDF opening and filename parsing stubbed out."""
+    mock_ds = xr.Dataset({"x": ("PACKET", [1])})
+    mock_handle = MagicMock()
+    mock_handle.__enter__ = MagicMock(return_value=mock_handle)
+    mock_handle.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("libera_rad.calibration.combiners.l1a_cal_event_utils.smart_open", return_value=mock_handle),
+        patch("libera_rad.calibration.combiners.l1a_cal_event_utils.xr.open_dataset") as mock_open,
+        patch(
+            "libera_rad.calibration.combiners.l1a_cal_event_utils.LiberaDataProductFilename.from_file_path"
+        ) as mock_from_path,
+    ):
+        mock_open.return_value.load.return_value = mock_ds
+        mock_fn = MagicMock()
+        mock_fn.data_product_id = DataProductIdentifier.l1a_icie_nom_hk_decoded
+        mock_from_path.return_value = mock_fn
+        return utils.read_all_cal_input_data(manifest)
+
+
 class TestReadAllCalInputData:
-    """Tests for read_all_cal_input_data kernel intake."""
+    """Tests for read_all_cal_input_data.
 
-    def test_requires_azel_kernels(self):
-        az_name = "LIBERA_SPICE_AZROT-CK_V001_20200101T000000_20200101T010000_R1.bc"
-        el_name = "LIBERA_SPICE_ELSCAN-CK_V001_20200101T000000_20200101T010000_R1.bc"
-        nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
+    cal-combine has no SPICE inputs: it generates its own motor CKs from AXIS-SAMPLE, so the
+    manifest carries L1A granules only.
+    """
 
-        az_file = MagicMock(filename=az_name)
-        el_file = MagicMock(filename=el_name)
-        nc_file = MagicMock(filename=nc_name)
+    def test_loads_l1a_datasets(self):
+        nc_names = [
+            "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc",
+            "LIBERA_L1A_AXIS-SAMPLE-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc",
+        ]
         manifest = MagicMock()
-        manifest.files = [nc_file, az_file, el_file]
+        manifest.files = [MagicMock(filename=name) for name in nc_names]
 
-        mock_ds = xr.Dataset({"x": ("PACKET", [1])})
-        mock_handle = MagicMock()
-        mock_handle.__enter__ = MagicMock(return_value=mock_handle)
-        mock_handle.__exit__ = MagicMock(return_value=False)
+        data = _read_manifest(manifest)
 
-        with (
-            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.smart_open", return_value=mock_handle),
-            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.xr.open_dataset") as mock_open,
-            patch(
-                "libera_rad.calibration.combiners.l1a_cal_event_utils.LiberaDataProductFilename.from_file_path"
-            ) as mock_from_path,
-        ):
-            mock_open.return_value.load.return_value = mock_ds
+        assert list(data) == nc_names
 
-            def _product_id(path: str):
-                mock_fn = MagicMock()
-                if "AZROT" in path:
-                    mock_fn.data_product_id = DataProductIdentifier.spice_az_ck
-                elif "ELSCAN" in path:
-                    mock_fn.data_product_id = DataProductIdentifier.spice_el_ck
-                else:
-                    mock_fn.data_product_id = DataProductIdentifier.l1a_icie_nom_hk_decoded
-                return mock_fn
+    def test_no_kernels_required(self):
+        """The old intake failed closed when AZROT/ELSCAN were absent; that requirement is gone."""
+        nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
+        manifest = MagicMock()
+        manifest.files = [MagicMock(filename=nc_name)]
 
-            mock_from_path.side_effect = _product_id
-            data, kernels = utils.read_all_cal_input_data(manifest, require_azel_kernels=True)
+        data = _read_manifest(manifest)
 
         assert nc_name in data
-        assert kernels == [az_name, el_name]
-
-    def test_missing_azel_raises(self):
-        nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
-        nc_file = MagicMock(filename=nc_name)
-        manifest = MagicMock()
-        manifest.files = [nc_file]
-
-        mock_ds = xr.Dataset({"x": ("PACKET", [1])})
-        mock_handle = MagicMock()
-        mock_handle.__enter__ = MagicMock(return_value=mock_handle)
-        mock_handle.__exit__ = MagicMock(return_value=False)
-
-        with (
-            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.smart_open", return_value=mock_handle),
-            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.xr.open_dataset") as mock_open,
-            patch(
-                "libera_rad.calibration.combiners.l1a_cal_event_utils.LiberaDataProductFilename.from_file_path"
-            ) as mock_from_path,
-        ):
-            mock_open.return_value.load.return_value = mock_ds
-            mock_fn = MagicMock()
-            mock_fn.data_product_id = DataProductIdentifier.l1a_icie_nom_hk_decoded
-            mock_from_path.return_value = mock_fn
-            with pytest.raises(ValueError, match="missing required SPICE data products"):
-                utils.read_all_cal_input_data(manifest, require_azel_kernels=True)
-
-    def test_gain_path_skips_spice(self, caplog):
-        az_name = "LIBERA_SPICE_AZROT-CK_V001_20200101T000000_20200101T010000_R1.bc"
-        nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
-        az_file = MagicMock(filename=az_name)
-        nc_file = MagicMock(filename=nc_name)
-        manifest = MagicMock()
-        manifest.files = [nc_file, az_file]
-
-        mock_ds = xr.Dataset({"x": ("PACKET", [1])})
-        mock_handle = MagicMock()
-        mock_handle.__enter__ = MagicMock(return_value=mock_handle)
-        mock_handle.__exit__ = MagicMock(return_value=False)
-
-        with (
-            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.smart_open", return_value=mock_handle),
-            patch("libera_rad.calibration.combiners.l1a_cal_event_utils.xr.open_dataset") as mock_open,
-            patch(
-                "libera_rad.calibration.combiners.l1a_cal_event_utils.LiberaDataProductFilename.from_file_path"
-            ) as mock_from_path,
-        ):
-            mock_open.return_value.load.return_value = mock_ds
-            mock_fn = MagicMock()
-            mock_fn.data_product_id = DataProductIdentifier.l1a_icie_nom_hk_decoded
-            mock_from_path.return_value = mock_fn
-            data, kernels = utils.read_all_cal_input_data(manifest, require_azel_kernels=False)
-
-        assert nc_name in data
-        assert kernels == []
-        assert "Skipping SPICE kernel" in caplog.text
