@@ -39,8 +39,8 @@ classifiers = [
 ]
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
-    # Temporary: pin to libera_utils Tier-1 cal branch until 5.10.3 is published.
-    "libera-utils @ git+https://github.com/LASP-Libera/libera_utils.git@LIBSDC-564-Tier1-Rad-cal",
+    "libera-utils == 5.10.6",
+    "lasp-curryer >= 0.5.0, <1.0",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",

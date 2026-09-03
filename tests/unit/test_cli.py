@@ -15,7 +15,7 @@ from libera_rad.calibration import cal_algorithm
     [
         (
             ["-v", "input_manifest.json"],
-            argparse.Namespace(func=l1b.algorithm, manifest="input_manifest.json", verbose=True),
+            argparse.Namespace(func=l1b.algorithm, manifest="input_manifest.json", verbose=True, version=False),
         ),
         (["--version"], argparse.Namespace(func=cli.print_version_info, manifest=None, verbose=False, version=True)),
         (
@@ -25,8 +25,4 @@ from libera_rad.calibration import cal_algorithm
     ],
 )
 def test_parse_cli_args(cli_args, parsed):
-    actual = vars(cli.parse_cli_args(cli_args))
-    expected = vars(parsed)
-    # Only compare keys present in the expected namespace (subcommand parser omits --version).
-    for key, value in expected.items():
-        assert actual[key] == value
+    assert dict(vars(cli.parse_cli_args(cli_args))) == dict(vars(parsed))

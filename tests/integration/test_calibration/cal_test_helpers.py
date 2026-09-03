@@ -78,14 +78,25 @@ def build_cal_event_manifest(
     return manifest.write(out_path=input_dir)
 
 
+#: Minimum share of Az/El samples SPICE must resolve.
+#:
+#: Not 1.0: companions are trimmed a whole packet at a time, so the edge packets contribute
+#: samples just outside the motor CK coverage and those take the -999 fill. Observed across the
+#: four Az/El sample events, 42-72 samples per product fall outside, worst case 0.9955. A floor
+#: rather than "any finite value" so a run where SPICE resolved almost nothing still fails.
+_MIN_AZEL_FINITE_FRACTION = 0.99
+
+
 def assert_azimuth_elevation_positions(dataset: xr.Dataset) -> None:
-    """Assert Azimuth_Position / Elevation_Position exist with finite SPICE values."""
+    """Assert Azimuth_Position / Elevation_Position are on FPE time and mostly SPICE-derived."""
     for name in ("Azimuth_Position", "Elevation_Position"):
         assert name in dataset, f"Missing {name}"
         assert dataset[name].dims == ("RAD_SAMPLE_FPE_TIME",)
         values = np.asarray(dataset[name].values, dtype=np.float64)
         finite = np.isfinite(values) & (values != -999.0)
-        assert np.any(finite), f"{name} expected finite SPICE-derived values"
+        assert finite.mean() >= _MIN_AZEL_FINITE_FRACTION, (
+            f"{name} is only {finite.mean():.4f} SPICE-derived ({int((~finite).sum())} of {finite.size} samples filled)"
+        )
 
 
 #: Slack allowed when bounding companion sample times by the NOM-HK window.
@@ -100,11 +111,10 @@ _SAMPLE_WINDOW_SLACK = np.timedelta64(2, "s")
 def assert_companions_within_nom_hk_window(dataset: xr.Dataset) -> None:
     """Assert companion *sample* times lie within the NOM-HK event window, plus one packet.
 
-    Sample time is what selects packets, so it is the axis the window actually bounds. Packet
-    times are deliberately *not* bounded: an FPE-skewed packet whose samples land inside the
-    window is kept, and its packet timestamp can sit well outside it (a RAD-SAMPLE packet
-    stamped 16 s past the window has been observed in ground-test data). Those are logged for
-    visibility rather than asserted on.
+    Sample time is what selects packets, so it is the axis the window actually bounds.
+    ``*_PACKET_ICIE_TIME`` is deliberately not bounded: an FPE-skewed packet whose samples land
+    inside the window is kept, and its own timestamp can sit well outside it (a RAD-SAMPLE
+    packet stamped 16 s past the window has been observed in ground-test data).
 
     Sample-to-packet integrity is covered by :func:`assert_sample_packet_axes_agree`.
     """
@@ -135,9 +145,8 @@ def assert_sample_packet_axes_agree(dataset: xr.Dataset) -> None:
     came from. Trimming renumbers it from 0 against the surviving packet axis, so in a written
     calibration product it must be exactly ``repeat(arange(n_packets), samples_per_packet)``.
 
-    Guards the defect where slicing the packet and sample axes independently left them covering
-    different packet runs — visible as a ``packet_index`` of 10–2434 against a 2432-long packet
-    dimension.
+    A packet and sample axis sliced to different packet runs shows up here and nowhere else:
+    the indices stay in range for the pre-trim axis and point at the wrong packets.
     """
     sample_dims = [str(dim) for dim in dataset.dims if str(dim).endswith("_FPE_TIME")]
     assert sample_dims, "Merged calibration product has no sample dimensions to check"
@@ -192,10 +201,9 @@ def assert_filename_covers_data(dataset: xr.Dataset, product_path: Path | S3Path
 def assert_input_files_provenance(dataset: xr.Dataset, expected_inputs: list[str]) -> None:
     """Assert ``input_files`` names the granules the product was actually built from.
 
-    Before this was fixed, a calibration product inherited ``input_files`` from its NOM-HK
-    input, which in turn had inherited the raw L0 CCSDS packet filenames from its own decode —
-    so the product listed its grandparents and named neither the L1A companions nor the SPICE
-    kernels it consumed.
+    It must list the L1A companions and SPICE kernels this run consumed. The merge inherits
+    attributes from the NOM-HK input, whose own ``input_files`` holds the L0 CCSDS packet files
+    from its decode, so ``ccsds_*`` entries mean the attribute was never rewritten.
     """
     input_files = [str(name) for name in np.atleast_1d(dataset.attrs["input_files"])]
 

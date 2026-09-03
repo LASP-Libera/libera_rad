@@ -33,12 +33,11 @@ LIBERA_CAL_OBSID_ENV = "LIBERA_CAL_OBSID"
 
 #: Time coordinate every cal product is named from.
 #:
-#: NOM-HK defines the calibration event: ``select_and_slice_event_inputs`` derives the window
-#: from NOM-HK packet time and every companion is trimmed to it, so NOM-HK is the only time
-#: base shared by all families. Naming from a companion instead describes one stream rather
-#: than the event — the gain product previously named from ``RAD_FULL_PACKET_ICIE_TIME`` and
-#: stamped a range four minutes shorter than the CAL data it contained. This is deliberately a
-#: single constant rather than a per-family setting so no family can reintroduce that.
+#: NOM-HK defines the calibration event — the window comes from its packet time and every
+#: companion is trimmed to it — so it is the only time base shared by all families. Naming a
+#: product from a companion stamps one stream's extent rather than the event's, which can be
+#: several minutes short of the data in the file. One constant rather than a per-family
+#: setting, so a new family cannot opt into that.
 #:
 #: The window is not a strict envelope of the merged product. Companions are trimmed a whole
 #: packet at a time, so an edge packet extends past the window by up to its own sample span,
@@ -50,9 +49,10 @@ CAL_PRODUCT_TIME_VARIABLE = "NOM_HK_PACKET_ICIE_TIME"
 #: TRIMMED ProductID from ``libera_utils.obsids``.
 #:
 #: This is the rad merge recipe, not the family's deployed input set. ``get_family_inputs``
-#: declares what libera_cdk stages on the manifest, which is a superset: it also carries streams
-#: consumed indirectly (AXIS-SAMPLE reaches cal-combine as AZROT/ELSCAN CK kernels, not as a
-#: merged companion). Every entry here must appear in ``get_family_inputs`` for its family.
+#: declares what libera_cdk stages on the manifest, which is a superset: SWC/LWC/SOLAR also
+#: stage AXIS-SAMPLE, the encoder source the AZROT/ELSCAN motor CKs are built from. cal-combine
+#: does not build them yet — it requires the finished CKs on the manifest and ignores a staged
+#: AXIS-SAMPLE granule. Every entry here must appear in ``get_family_inputs`` for its family.
 _FAMILY_COMPANIONS: dict[DataProductIdentifier, tuple[DataProductIdentifier, ...]] = {
     DataProductIdentifier.l1a_icie_nom_hk_gain_family_trimmed: (
         DataProductIdentifier.l1a_icie_rad_full_decoded,
@@ -76,8 +76,8 @@ _FAMILY_COMPANIONS: dict[DataProductIdentifier, tuple[DataProductIdentifier, ...
     # TODO [LIBSDC-811]: Add lunar cals
 }
 
-#: Calibration families rad cal-combine implements. Families in the registry without an entry
-#: here (lunar, camera) are not yet supported and their ObsIDs stay out of CAL_EVENT_BY_OBSID.
+#: Calibration families rad cal-combine implements. A registry family without an entry here
+#: (lunar) is unsupported and its ObsIDs stay out of CAL_EVENT_BY_OBSID.
 SUPPORTED_CAL_FAMILIES: frozenset[DataProductIdentifier] = frozenset(_FAMILY_COMPANIONS)
 
 
@@ -114,6 +114,9 @@ def _cal_event_from_obsid_spec(obsid_spec: ObsIdSpec) -> CalEventSpec | None:
 def get_cal_event_spec(obsid: int) -> CalEventSpec:
     """Return the rad cal-combine spec for a RAD ObsID.
 
+    The single gate from an ObsID number to a dispatchable event: callers hand it whatever
+    they were given and get either a spec or an explanation.
+
     Parameters
     ----------
     obsid : int
@@ -126,26 +129,40 @@ def get_cal_event_spec(obsid: int) -> CalEventSpec:
 
     Raises
     ------
-    KeyError
-        If the ObsID is unknown in ``libera_utils.obsids``.
     ValueError
-        If the ObsID is known but its family is not yet supported by rad cal-combine.
+        If the ObsID is not a RAD ObsID in ``libera_utils.obsids``, or is one whose family
+        rad cal-combine does not implement. The two cases carry different messages.
     """
-    obsid_spec = get_obsid_spec(NomHkObsidSource.RAD, obsid)
+    try:
+        obsid_spec = get_obsid_spec(NomHkObsidSource.RAD, obsid)
+    except KeyError:
+        raise ValueError(f"Unknown RAD ObsID {obsid}. cal-combine ObsIDs: {sorted(CAL_EVENT_BY_OBSID)}") from None
     event = _cal_event_from_obsid_spec(obsid_spec)
     if event is None:
         raise ValueError(
-            f"RAD ObsID {obsid} is not supported by libera_rad cal-combine "
-            f"(family={obsid_spec.trimmed_product}, cal_product={obsid_spec.cal_product})"
+            f"RAD ObsID {obsid} ({obsid_spec.description}) is known but not supported by "
+            f"libera_rad cal-combine (family={obsid_spec.trimmed_product}, "
+            f"cal_product={obsid_spec.cal_product}). cal-combine ObsIDs: {sorted(CAL_EVENT_BY_OBSID)}"
         )
     return event
 
 
 def _build_cal_event_by_obsid() -> dict[int, CalEventSpec]:
-    """Expand each supported family into its member ObsIDs via the shared registry."""
+    """Expand each supported family into its member ObsIDs via the shared registry.
+
+    Keyed by bare ObsID, unlike ``libera_utils.obsids.OBSID_REGISTRY`` which keys on
+    ``(source, obsid)`` because the two NOM-HK ObsID namespaces collide (256 is SWC-365NM on
+    RAD and Darks-of-Darks on WFOV). Dropping the source is only safe while every supported
+    family is a RAD family, so that is checked rather than assumed.
+    """
     events: dict[int, CalEventSpec] = {}
     for family_product in _FAMILY_COMPANIONS:
         for obsid_spec in get_family_specs(family_product):
+            if obsid_spec.source is not NomHkObsidSource.RAD:
+                raise ValueError(
+                    f"{family_product.name!r} is a {obsid_spec.source.name} family; cal-combine "
+                    f"indexes by bare ObsID and can only carry RAD families"
+                )
             event = _cal_event_from_obsid_spec(obsid_spec)
             if event is not None:
                 events[event.obsid] = event

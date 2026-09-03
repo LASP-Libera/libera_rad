@@ -59,7 +59,11 @@ def parse_cli_args(cli_args: list | None = None):
         parsed_args.func = cal_algorithm.algorithm
         return parsed_args
 
-    parser = argparse.ArgumentParser(prog="libera-rad", description="Libera radiometer science data processing CLI")
+    parser = argparse.ArgumentParser(
+        prog="libera-rad",
+        description="Libera radiometer science data processing CLI",
+        epilog="Calibration combine: libera-rad cal-combine <manifest> (also needs LIBERA_CAL_OBSID)",
+    )
     parser.add_argument(
         "--version",
         action="store_true",

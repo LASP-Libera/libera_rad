@@ -30,14 +30,19 @@ from libera_rad.calibration.combiners.l1a_cal_event_utils import (
     family_needs_azimuth_elevation_positions,
     read_all_cal_input_data,
 )
-from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV
+from libera_rad.calibration.constants import LIBERA_CAL_OBSID_ENV, get_cal_event_spec
 from libera_rad.config import get_cal_product_definition
 
 logger = logging.getLogger(__name__)
 
 
 def resolve_cal_obsid_from_env() -> int:
-    """Read and validate ``LIBERA_CAL_OBSID`` from the environment.
+    """Read the ``LIBERA_CAL_OBSID`` ObsID from the environment.
+
+    Returns the number only; :func:`~libera_rad.calibration.constants.get_cal_event_spec`
+    decides whether cal-combine can dispatch it, and
+    :func:`~libera_rad.calibration.combiners.l1a_cal_event_utils.confirm_obsid_matches_hk`
+    checks it against the ObsID the NOM-HK data actually carries.
 
     Returns
     -------
@@ -47,19 +52,15 @@ def resolve_cal_obsid_from_env() -> int:
     Raises
     ------
     ValueError
-        If the variable is missing, not an integer, or not a known cal ObsID.
+        If the variable is missing or is not an integer.
     """
     raw = os.getenv(LIBERA_CAL_OBSID_ENV)
     if raw is None or raw.strip() == "":
         raise ValueError(f"{LIBERA_CAL_OBSID_ENV} environment variable is not set")
     try:
-        obsid = int(raw)
+        return int(raw)
     except ValueError as exc:
         raise ValueError(f"{LIBERA_CAL_OBSID_ENV} must be an integer ObsID, got {raw!r}") from exc
-    if obsid not in CAL_EVENT_BY_OBSID:
-        known = sorted(CAL_EVENT_BY_OBSID)
-        raise ValueError(f"Unknown calibration ObsID {obsid}. Known ObsIDs: {known}")
-    return obsid
 
 
 def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Path:
@@ -79,7 +80,7 @@ def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Pat
     configure_task_logging(f"cal_combine_{now}")
 
     obsid = resolve_cal_obsid_from_env()
-    event_spec = CAL_EVENT_BY_OBSID[obsid]
+    event_spec = get_cal_event_spec(obsid)
     logger.info(
         "Resolved %s=%d → product=%s family=%s",
         LIBERA_CAL_OBSID_ENV,

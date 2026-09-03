@@ -26,10 +26,10 @@ class TestResolveCalObsidFromEnv:
         with pytest.raises(ValueError, match="must be an integer"):
             resolve_cal_obsid_from_env()
 
-    def test_unknown_obsid_raises(self, monkeypatch):
+    def test_unknown_obsid_is_not_rejected_here(self, monkeypatch):
+        """Dispatchability is ``get_cal_event_spec``'s call, not this function's."""
         monkeypatch.setenv(LIBERA_CAL_OBSID_ENV, "999")
-        with pytest.raises(ValueError, match="Unknown calibration ObsID"):
-            resolve_cal_obsid_from_env()
+        assert resolve_cal_obsid_from_env() == 999
 
 
 class TestConfirmObsidMatchesHk:

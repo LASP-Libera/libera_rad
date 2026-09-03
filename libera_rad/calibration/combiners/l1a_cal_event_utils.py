@@ -1,18 +1,18 @@
-"""L1A calibration event utilities — manifest load, slicing, and event builders.
+"""L1A calibration event utilities — manifest load, slicing, and event building.
 
 Shared helpers for ObsID-dispatched calibration products:
 
 - Load decoded L1A datasets from a calibration input manifest
-- Prefer TRIMMED NOM-HK inputs with legacy decoded fallback
+- Select the family TRIMMED NOM-HK granule that defines the event
 - Confirm NOM-HK ObsIDs against ``LIBERA_CAL_OBSID``
 - Select companion products and slice them to the NOM-HK event window
-- Build family event datasets (default merge path + family-specific overrides)
+- Merge the selected streams into one calibration event dataset
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -32,7 +32,6 @@ from libera_rad.calibration.constants import (
     LIBERA_CAL_OBSID_ENV,
     CalEventSpec,
 )
-from libera_rad.l1b import extract_input_dataset
 from libera_rad.version import version as libera_rad_version
 
 logger = logging.getLogger(__name__)
@@ -208,10 +207,13 @@ def family_needs_azimuth_elevation_positions(family: DataProductIdentifier) -> b
 
 
 def extract_named_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> tuple[str, xr.Dataset]:
-    """Return the NOM-HK ``(filename, dataset)`` from trimmed or full-day decoded inputs.
+    """Return the ``(filename, dataset)`` of the event's family TRIMMED NOM-HK granule.
 
-    Prefers the event's TRIMMED product, then falls back to ``NOM-HK-DECODED``
-    for fixtures that predate Step-1 trimming.
+    The trimmed granule is what defines the calibration event: it carries one ObsID, and its
+    packet time range is the window every companion is cropped to.
+
+    Exactly one granule must be present. A family TRIMMED ProductID names a whole calibration
+    family rather than one file: ``nom_hk_trim`` writes one per contiguous ObsID run.
 
     Parameters
     ----------
@@ -223,27 +225,38 @@ def extract_named_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: Ca
     Returns
     -------
     tuple of (str, xr.Dataset)
-        Source filename and NOM-HK dataset for the event.
+        Source filename and TRIMMED NOM-HK dataset for the event.
 
     Raises
     ------
     ValueError
-        If neither a TRIMMED nor decoded NOM-HK product is present.
+        If the family TRIMMED NOM-HK product is absent from the inputs, or if more than one of
+        its granules is present.
     """
-    preferred = (event_spec.trimmed_product, DataProductIdentifier.l1a_icie_nom_hk_decoded)
-    for product_id in preferred:
-        for file_name, dataset in all_data.items():
-            libera_filename = LiberaDataProductFilename.from_file_path(file_name)
-            if libera_filename.data_product_id == product_id.value:
-                logger.info("Using NOM-HK input product %s from %s", product_id.value, file_name)
-                return file_name, dataset
-    raise ValueError(
-        "No NOM-HK dataset found in input files. Expected one of: " + ", ".join(p.value for p in preferred)
-    )
+    product_id = event_spec.trimmed_product
+    matches = [
+        (file_name, dataset)
+        for file_name, dataset in all_data.items()
+        if LiberaDataProductFilename.from_file_path(file_name).data_product_id == product_id.value
+    ]
+    if not matches:
+        raise ValueError(
+            f"No {product_id.value} granule in the input files; cal-combine requires the "
+            f"trimmed NOM-HK granule that defines the calibration event"
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"Input manifest carries {len(matches)} {product_id.value} granules; cal-combine "
+            f"expects one NOM-HK granule per calibration event: "
+            f"{', '.join(Path(str(name)).name for name, _ in matches)}"
+        )
+    file_name, dataset = matches[0]
+    logger.info("Using NOM-HK input product %s from %s", product_id.value, file_name)
+    return file_name, dataset
 
 
 def extract_nom_hk_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
-    """Return the NOM-HK dataset from trimmed or full-day decoded inputs.
+    """Return the event's family TRIMMED NOM-HK dataset.
 
     Parameters
     ----------
@@ -266,7 +279,7 @@ def confirm_obsid_matches_hk(nom_hk: xr.Dataset, expected_obsid: int) -> None:
     Parameters
     ----------
     nom_hk : xr.Dataset
-        NOM-HK (trimmed or decoded) dataset containing ``ICIE__SW_OBSID_RAD``.
+        TRIMMED NOM-HK dataset containing ``ICIE__SW_OBSID_RAD``.
     expected_obsid : int
         ObsID from ``LIBERA_CAL_OBSID``.
 
@@ -327,16 +340,12 @@ def _extract_named_input_dataset(
     for file_name in all_data:
         if LiberaDataProductFilename.from_file_path(file_name).data_product_id == product_id.value:
             return file_name, all_data[file_name]
-    # Delegate so the raised error message stays identical to the shared extractor's
-    extract_input_dataset(all_data, product_id)
     raise ValueError("No dataset found in input files: " + product_id.value)
 
 
 def select_and_slice_event_inputs(
     all_data: dict[str, xr.Dataset],
     event_spec: CalEventSpec,
-    *,
-    nom_hk: xr.Dataset | None = None,
 ) -> tuple[list[xr.Dataset], list[str]]:
     """Select NOM-HK plus companions and slice companions to the event window.
 
@@ -351,9 +360,6 @@ def select_and_slice_event_inputs(
         Decoded L1A datasets keyed by filename.
     event_spec : CalEventSpec
         ObsID-specific calibration event specification.
-    nom_hk : xr.Dataset or None
-        Optional pre-selected NOM-HK dataset (e.g. already ObsID-filtered for
-        solar). When omitted, the TRIMMED/decoded NOM-HK product is extracted.
 
     Returns
     -------
@@ -369,9 +375,7 @@ def select_and_slice_event_inputs(
         If NOM-HK or any required companion product is missing, or if the
         NOM-HK window cannot be derived.
     """
-    nom_hk_file_name, extracted_nom_hk = extract_named_nom_hk_dataset(all_data, event_spec)
-    if nom_hk is None:
-        nom_hk = extracted_nom_hk
+    nom_hk_file_name, nom_hk = extract_named_nom_hk_dataset(all_data, event_spec)
 
     t0, t1 = nom_hk_event_window(nom_hk)
     logger.info("Slicing companions to event window: [%s — %s]", t0, t1)
@@ -401,10 +405,7 @@ def select_and_slice_event_inputs(
     return [nom_hk, *sliced_companions], input_file_names
 
 
-EventBuilder = Callable[[dict[str, xr.Dataset], CalEventSpec], xr.Dataset]
-
-
-def _build_standard_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
+def _merge_event_streams(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
     """Slice companions to the NOM-HK window and merge streams."""
     inputs, input_file_names = select_and_slice_event_inputs(all_data, event_spec)
     merged = merge_l1a_decoded_datasets(inputs)
@@ -412,34 +413,14 @@ def _build_standard_event_dataset(all_data: dict[str, xr.Dataset], event_spec: C
     return merged
 
 
-#: Optional family-specific builders. Empty by default; all current families use the
-#: standard path. Register an override when a future family needs custom prep.
-_FAMILY_EVENT_BUILDER_OVERRIDES: dict[DataProductIdentifier, EventBuilder] = {}
-
-
-def register_family_event_builder(family: DataProductIdentifier, builder: EventBuilder) -> None:
-    """Register or replace the event builder for a calibration family.
-
-    Parameters
-    ----------
-    family : DataProductIdentifier
-        Family TRIMMED ProductID (``CalEventSpec.trimmed_product``).
-    builder : callable
-        ``(all_data, event_spec) -> xr.Dataset`` implementation.
-    """
-    _FAMILY_EVENT_BUILDER_OVERRIDES[family] = builder
-
-
 def build_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpec) -> xr.Dataset:
     """Build one ObsID calibration event dataset for ``event_spec.trimmed_product``.
 
-    All current families use the same select → slice → merge path. Families with
-    extra prep can be registered via :func:`register_family_event_builder`.
+    Every family uses the same select → slice → merge path.
 
-    Common global attributes (``source_obsids``, ``algorithm_version``, ``date_created``) are
-    set here so all cal families write a uniform product header. ``date_created`` in particular
-    must be refreshed: the merge inherits its attributes from the NOM-HK input, so without this
-    the product would carry the timestamp of the Step-1 trim rather than of this run.
+    Sets ``source_obsids``, ``algorithm_version`` and ``date_created`` so every family writes a
+    uniform product header. ``date_created`` must be set here because the merge inherits its
+    attributes from the NOM-HK input, whose timestamp is the Step-1 trim's, not this run's.
 
     Parameters
     ----------
@@ -453,9 +434,8 @@ def build_event_dataset(all_data: dict[str, xr.Dataset], event_spec: CalEventSpe
     xr.Dataset
         Merged calibration event dataset.
     """
-    builder = _FAMILY_EVENT_BUILDER_OVERRIDES.get(event_spec.trimmed_product, _build_standard_event_dataset)
     logger.info("Creating %s calibration event dataset (ObsID %d)", event_spec.trimmed_product.value, event_spec.obsid)
-    event = builder(all_data, event_spec)
+    event = _merge_event_streams(all_data, event_spec)
     event.attrs["source_obsids"] = [event_spec.obsid]
     event.attrs["algorithm_version"] = libera_rad_version()
     event.attrs["date_created"] = datetime.now(tz=UTC).isoformat()

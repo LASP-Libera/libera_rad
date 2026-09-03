@@ -1,3 +1,4 @@
+import pytest
 import xarray as xr
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.obsids import (
@@ -107,8 +108,8 @@ class TestCalEventRegistry:
     def test_merge_recipe_is_a_subset_of_the_deployed_family_inputs(self):
         """Anything merged must also be staged on the manifest by the family's cdk node.
 
-        ``get_family_inputs`` is the deployed input set and is a superset: AXIS-SAMPLE reaches
-        cal-combine as AZROT/ELSCAN CK kernels rather than as a merged companion.
+        ``get_family_inputs`` is the deployed input set and is a superset: SWC/LWC/SOLAR also
+        stage AXIS-SAMPLE, the encoder source of the motor CKs, which cal-combine does not merge.
         """
         for event in CAL_EVENT_BY_OBSID.values():
             staged = set(get_family_inputs(event.trimmed_product))
@@ -116,6 +117,15 @@ class TestCalEventRegistry:
 
     def test_every_supported_family_has_a_product_definition(self):
         assert set(CAL_FAMILY_PRODUCT_DEFINITIONS) == set(SUPPORTED_CAL_FAMILIES)
+
+    def test_unknown_obsid_raises(self):
+        with pytest.raises(ValueError, match="Unknown RAD ObsID 999"):
+            get_cal_event_spec(999)
+
+    def test_known_but_unsupported_obsid_raises(self):
+        """Lunar 513 is in the registry; cal-combine has no family recipe for it."""
+        with pytest.raises(ValueError, match="known but not supported"):
+            get_cal_event_spec(513)
 
     def test_noise_is_distinct_event_on_the_gain_family(self):
         """Noise cal (ObsID 515) is its own event/product but combines on the gain family."""

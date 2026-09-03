@@ -7,6 +7,7 @@ import pytest
 from libera_utils import Manifest
 
 from libera_rad.calibration.cal_algorithm import algorithm
+from libera_rad.calibration.combiners.l1a_cal_event_utils import family_needs_azimuth_elevation_positions
 from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID, LIBERA_CAL_OBSID_ENV
 from tests.integration.test_calibration.cal_test_helpers import (
     assert_azimuth_elevation_positions,
@@ -21,9 +22,6 @@ from tests.integration.test_calibration.cal_test_helpers import (
 
 _SAMPLE_ONE = Path("sample_one")
 _SAMPLE_TWO = Path("sample_two")
-
-# ObsIDs that attach SPICE-derived Azimuth_Position / Elevation_Position.
-_AZEL_OBSIDS = frozenset({257, 320, 385, 386})
 
 _REAL_EVENTS = [
     pytest.param(
@@ -105,7 +103,8 @@ def test_cal_combine_real_sample_event(
     input_dir, output_dir = cal_io_paths
     event_spec = CAL_EVENT_BY_OBSID[obsid]
     sample_dir = test_l1a_cal_data_path / sample_subdir
-    spice_kernel_dir = sample_dir / f"obsid_{obsid}" if obsid in _AZEL_OBSIDS else None
+    needs_azel = family_needs_azimuth_elevation_positions(event_spec.trimmed_product)
+    spice_kernel_dir = sample_dir / f"obsid_{obsid}" if needs_azel else None
 
     manifest_path = build_cal_event_manifest(
         sample_dir,
@@ -133,7 +132,7 @@ def test_cal_combine_real_sample_event(
         expected_inputs += [path.name for path in sorted(spice_kernel_dir.glob("*.bc"))]
     assert_input_files_provenance(dataset, expected_inputs)
 
-    if obsid in _AZEL_OBSIDS:
+    if needs_azel:
         assert_azimuth_elevation_positions(dataset)
     else:
         assert "Azimuth_Position" not in dataset

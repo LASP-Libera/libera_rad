@@ -175,33 +175,77 @@ class TestSelectAndSliceEventInputs:
         with pytest.raises(ValueError, match=DataProductIdentifier.l1a_icie_rad_full_decoded.value):
             utils.select_and_slice_event_inputs(all_data, event_spec)
 
-    def test_uses_provided_nom_hk_without_reextract(self):
+    def test_solar_event_window_comes_from_its_own_nom_hk_granule(self):
         event_spec = CAL_EVENT_BY_OBSID[384]
         times = np.array(
             ["2025-01-01T00:00:00", "2025-01-01T00:01:00", "2025-01-01T00:02:00"],
             dtype="datetime64[ns]",
         )
-        full_nom_hk = xr.Dataset(
-            {"ICIE__SW_OBSID_RAD": ("PACKET", np.array([2, 384, 384], dtype=np.int32))},
-            coords={"PACKET_ICIE_TIME": ("PACKET", times)},
+        nom_hk = xr.Dataset(
+            {"ICIE__SW_OBSID_RAD": ("PACKET", np.array([384, 384], dtype=np.int32))},
+            coords={"PACKET_ICIE_TIME": ("PACKET", times[1:])},
         )
-        filtered = full_nom_hk.isel(PACKET=[1, 2])
         pev = xr.Dataset(
             {"X": ("PACKET", np.arange(3))},
             coords={"PACKET_ICIE_TIME": ("PACKET", times)},
         )
         rad = make_sample_companion("RAD_SAMPLE", times, samples_per_packet=2)
         all_data = {
-            (
-                "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc"
-            ): full_nom_hk,
+            ("LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc"): nom_hk,
             "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5_20250101T000000_20250101T000200_R26100000001.nc": pev,
             "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5_20250101T000000_20250101T000200_R26100000001.nc": rad,
         }
-        inputs, input_file_names = utils.select_and_slice_event_inputs(all_data, event_spec, nom_hk=filtered)
-        assert inputs[0] is filtered
+        inputs, input_file_names = utils.select_and_slice_event_inputs(all_data, event_spec)
+        assert inputs[0] is nom_hk
         assert inputs[1].sizes["PACKET"] == 2
         assert inputs[1].sizes["RAD_SAMPLE_FPE_TIME"] == 4
         assert inputs[2].sizes["PACKET"] == 2
-        # Provenance still names the NOM-HK granule the filtered Dataset came from
         assert "NOM-HK-SOLAR-FAMILY-TRIMMED" in input_file_names[0]
+
+
+class TestExtractNamedNomHkDataset:
+    """One trimmed NOM-HK granule per event; anything else is a malformed manifest."""
+
+    @staticmethod
+    def _nom_hk(obsid: int) -> xr.Dataset:
+        return xr.Dataset(
+            {"ICIE__SW_OBSID_RAD": ("PACKET", np.array([obsid], dtype=np.int32))},
+            coords={"PACKET_ICIE_TIME": ("PACKET", np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]"))},
+        )
+
+    def test_returns_the_single_family_granule(self):
+        event_spec = CAL_EVENT_BY_OBSID[385]
+        name = "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000100_R26100000001.nc"
+        all_data = {name: self._nom_hk(385)}
+
+        assert utils.extract_named_nom_hk_dataset(all_data, event_spec) == (name, all_data[name])
+
+    def test_two_family_granules_raise_and_name_both(self):
+        """A family ProductID covers several ObsIDs, so it cannot pick the event's granule."""
+        event_spec = CAL_EVENT_BY_OBSID[385]
+        first = "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000100_R26100000001.nc"
+        second = "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T010000_20250101T010100_R26100000001.nc"
+        all_data = {first: self._nom_hk(385), second: self._nom_hk(386)}
+
+        with pytest.raises(ValueError, match="expects one NOM-HK granule per calibration event") as exc:
+            utils.extract_named_nom_hk_dataset(all_data, event_spec)
+        assert first in str(exc.value)
+        assert second in str(exc.value)
+
+    def test_full_day_decoded_nom_hk_is_not_a_substitute(self):
+        """It spans many ObsIDs, so it would give a day-wide window instead of the event's."""
+        event_spec = CAL_EVENT_BY_OBSID[385]
+        name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20250101T000000_20250102T000000_R26100000001.nc"
+        all_data = {name: self._nom_hk(385)}
+
+        with pytest.raises(ValueError, match="No NOM-HK-SOLAR-FAMILY-TRIMMED granule"):
+            utils.extract_named_nom_hk_dataset(all_data, event_spec)
+
+    def test_no_nom_hk_at_all_raises(self):
+        event_spec = CAL_EVENT_BY_OBSID[385]
+        all_data = {
+            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5_20250101T000000_20250101T000100_R26100000001.nc": xr.Dataset(),
+        }
+
+        with pytest.raises(ValueError, match="No NOM-HK-SOLAR-FAMILY-TRIMMED granule"):
+            utils.extract_named_nom_hk_dataset(all_data, event_spec)
