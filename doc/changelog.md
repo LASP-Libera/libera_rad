@@ -1,5 +1,15 @@
 # Version Changes
 
+## 0.7.0
+
+- Replace type-specific calibration combiners and `*-COMBINED` products with a single ObsID-dispatched `cal-combine` algorithm, selected by the `LIBERA_CAL_OBSID` environment variable. Invoke via `libera-rad cal-combine <manifest>` (docker-compose `cal-combine` service included). Outputs are ObsID-specific: `GAIN`, `NOISE`, `SWC-{λ}NM`, `LWC-{310,320,335,300,305}K`, `SOLAR-{ch}-{PRI,SEC,TER}`.
+- Shared gain/noise/swc/lwc/solar event pipeline — NOM-HK ObsID check against `LIBERA_CAL_OBSID`, crop each family's declared companions to the TRIMMED NOM-HK window, merge only those streams (stray manifest files ignored), and write with family product-definition YAML (`ProductID` set from the ObsID registry). `CAL_EVENT_BY_OBSID` is derived from `libera_utils.obsids`; lunar cals remain deferred.
+- Support the noise calibration (RAD ObsID 515), which `libera_utils` split out of the original combined gain/noise ObsID 512. It is a distinct calibration event producing its own `NOISE` CAL product, but combines on the existing `gain` family — same full-rate merge recipe (RAD-FULL + CAL-FULL companions on `RAD_FULL_PACKET_ICIE_TIME`, no Az/El) and the same `GAIN_product_definition.yml` template, with `ProductID` set to `NOISE` at write time.
+- Track the renamed `libera_utils` calibration `DataProductIdentifier`s — `cal_lwc_temp{1,2,3}` became `cal_lwc_{310,320,335}k` (plus new `cal_lwc_{300,305}k` for ObsIDs 323/324), and `cal_lunar_cal{1,2}` became `cal_lunar_{south,north}_pole`. All five LWC blackbody temperatures now resolve to the `lwc` family.
+- Consume the `libera_utils` dependency-family TRIMMED products. One TRIMMED product covers a whole family (`NOM-HK-{GAIN,SWC,LWC,SOLAR}-FAMILY-TRIMMED`) rather than one per ObsID. The exact ObsID comes from `ICIE__SW_OBSID_RAD`, not the filename. cal-combine takes one trimmed NOM-HK granule holding one ObsID and rejects a manifest carrying more than one.
+- Take calibration family identity and membership from `libera_utils.obsids` rather than deriving it locally. The family key is the family TRIMMED `DataProductIdentifier`, replacing the `CalFamily` string literal and the `family_from_cal_product` prefix match, and `CAL_EVENT_BY_OBSID` is expanded from `get_family_specs`, so an ObsID added to an existing family becomes dispatchable with no libera_rad change. libera_rad still owns which streams are merged; that recipe is a subset of `get_family_inputs`, the wider set libera_cdk stages.
+- SWC, LWC, and SOLAR products include SPICE-derived `Azimuth_Position` / `Elevation_Position` on `RAD_SAMPLE_FPE_TIME`, computed from AZROT-CK and ELSCAN-CK on the input manifest. cal-combine does not honor L1B's `use_geo` flag. GAIN attaches no motor attitude and needs no kernels.
+
 ## 0.6.1
 
 - Migrate geolocation onto `curryer.compute.geometry.GeometryData`: remove the in-house SPICE subsatellite implementation (`_spacecraft_ecef_positions`, `_subsatellite_lla_from_ecef`, `calculate_libera_base_subsatellite_geolocation`) in favor of a single vectorized `calculate_geometry` call, and return instrument geolocation as one lat/lon/alt DataFrame.
