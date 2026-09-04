@@ -40,3 +40,26 @@ DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_RAD"
 # TODO[LIBSDC-739]: placeholder pending science confirmation of the useful off-nadir limit. The
 # measurement above covers one cross-track granule; other scan modes change both w and b.
 CLOCK_RATE_MIN_CONE_ANGLE_DEG = np.float32(12.0)
+
+# Angular slack added around the radiometer field of view when deciding whether the Moon's
+# light reaches the detectors. The geometric FOV itself is read from the instrument kernel
+# rather than hardcoded, and the lunar disk's own apparent radius (0.245 - 0.279 deg, from
+# curryer's ``moon_angular_radius``) is added separately, so this constant carries only the
+# margin beyond "any part of the lunar disk is inside the geometric cone".
+#
+# 5 degrees is roughly five times the IK's current 1 deg half-angle. It covers the three
+# things that put lunar signal on the detectors outside the geometric cone: near-field stray
+# light, which does not stop at the FOV edge and is the governing concern for an off-limb dark
+# measurement; pointing-knowledge and CK-interpolation error (<~0.1 deg); and the lunar disk
+# itself if the angular-radius term is ever dropped. It stays small against the Moon's
+# ~0.5 deg/hr apparent motion, so a flagged interval is set by the scan sweeping past the Moon
+# rather than by the buffer smearing it out.
+#
+# TODO[LIBSDC-827]: placeholder pending science sign-off. Note the geometric FOV it widens is
+# itself provisional -- the IK carries TODO[LIBSDC-601] for the ground-measured value -- so
+# this number should be revisited when the real FOV lands.
+MOON_FOV_BUFFER_DEG = np.float32(5.0)
+
+# Product fill for the integer Moon-in-view flag, distinguishing "no pointing data" from
+# "Moon not in view".
+MOON_IN_FOV_FILL_VALUE = np.int8(-128)

@@ -327,13 +327,16 @@ def process_l1a_to_l1b(
         lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(n_samples)
         azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
         geometry_data = geolocation.create_placeholder_geometry(n_samples)
+        moon_in_fov = geolocation.create_placeholder_moon_in_fov(n_samples)
     elif jpss_only_mode:
         if not dynamic_kernel_sources:
             raise ValueError("SPICE kernel sources are required for geolocation when jpss_only_mode is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
             geometry_data = geolocation.calculate_geometry(km, timestamps)
+            geometry_data = geolocation.add_moon_boresight_offsets(km, geometry_data)
             start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
+            moon_in_fov = geolocation.moon_in_field_of_view(km, geometry_data)
         lat_lon_alt = geolocation.subsatellite_lat_lon_alt(geometry_data)
         azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
     else:
@@ -343,8 +346,10 @@ def process_l1a_to_l1b(
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
             lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
             geometry_data = geolocation.calculate_geometry(km, timestamps)
+            geometry_data = geolocation.add_moon_boresight_offsets(km, geometry_data)
             start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
             azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+            moon_in_fov = geolocation.moon_in_field_of_view(km, geometry_data)
 
     # Interpolate temperatures
     interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
@@ -363,6 +368,7 @@ def process_l1a_to_l1b(
         azimuth=azimuth,
         elevation=elevation,
         geometry_data=geometry_data,
+        moon_in_fov=moon_in_fov,
         start_of_hour_state=start_of_hour_state,
     )
 
@@ -449,6 +455,7 @@ def _package_l1b_product(
     azimuth: np.ndarray,
     elevation: np.ndarray,
     geometry_data: pd.DataFrame,
+    moon_in_fov: np.ndarray,
     start_of_hour_state: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> tuple[dict[str, ndarray], dict[str, Any]]:
     """
@@ -465,6 +472,9 @@ def _package_l1b_product(
         position, velocity and attitude, and the boresight surface and orbital-frame angles)
         for the granule; always provided -- real values, or fill values in ``use_geo`` false
         mode, where geolocation is intentionally bypassed and no data is forthcoming.
+    moon_in_fov : np.ndarray
+        `int8` Moon-in-view flag on the L1B time grid, from
+        :func:`libera_rad.geolocation.moon_in_field_of_view`.
     start_of_hour_state : tuple[np.ndarray, np.ndarray], optional
         `(position, velocity)` on the 24-hour ``N_HOURS`` grid, each `(24, 3)` in ECEF.
         When omitted, the ``*_Start_Of_Hour`` fields are filled with the product fill value.
@@ -538,6 +548,9 @@ def _package_l1b_product(
     )
     along_track_angle = geometry_data["along_track_angle"].to_numpy().astype(np.float32)
     cross_track_angle = geometry_data["cross_track_angle"].to_numpy().astype(np.float32)
+    moon_boresight_angle = geometry_data["moon_boresight_angle"].to_numpy().astype(np.float32)
+    moon_azimuth_offset = geometry_data["moon_azimuth_offset"].to_numpy().astype(np.float32)
+    moon_elevation_offset = geometry_data["moon_elevation_offset"].to_numpy().astype(np.float32)
 
     if start_of_hour_state is not None:
         hourly_position, hourly_velocity = (arr.astype(np.float64) for arr in start_of_hour_state)
@@ -585,6 +598,10 @@ def _package_l1b_product(
         "Cone_Angle_Rate": cone_angle_rate,
         "Clock_Angle": clock_angle,
         "Clock_Angle_Rate": clock_angle_rate,
+        "Moon_Boresight_Angle": moon_boresight_angle,
+        "Moon_Azimuth_Offset": moon_azimuth_offset,
+        "Moon_Elevation_Offset": moon_elevation_offset,
+        "Moon_In_Field_Of_View": moon_in_fov.astype(np.int8),
         # Instrument
         "Operational_Mode": operational_mode.astype(np.uint16),
         "Filtered_Radiance_SW": calculated_radiance_by_channel.get(

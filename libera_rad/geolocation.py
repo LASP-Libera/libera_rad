@@ -21,6 +21,8 @@ from libera_rad.constants import (
     DEFAULT_INSTRUMENT_OBSERVER,
     DEFAULT_SPACECRAFT_OBSERVER,
     INSTRUMENT_OBSERVERS,
+    MOON_FOV_BUFFER_DEG,
+    MOON_IN_FOV_FILL_VALUE,
     SPACECRAFT_OBSERVERS,
 )
 
@@ -52,8 +54,22 @@ _INSTRUMENT_FIELDS = (
     geometry.GeometryField.CLOCK_ANGLE_RATE,
     geometry.GeometryField.ALONG_TRACK_ANGLE,
     geometry.GeometryField.CROSS_TRACK_ANGLE,
+    geometry.GeometryField.MOON_DIRECTION,
+    geometry.GeometryField.MOON_ANGULAR_RADIUS,
+    geometry.GeometryField.MOON_DISTANCE,
 )
 _GEOMETRY_FIELDS = _SPACECRAFT_FIELDS + _INSTRUMENT_FIELDS
+
+# Boresight-relative lunar offsets, derived here rather than requested from curryer. Ordered
+# to match the columns :func:`curryer.compute.spatial.boresight_offset_angles` returns.
+MOON_AZIMUTH_OFFSET_COLUMN = "moon_azimuth_offset"
+MOON_ELEVATION_OFFSET_COLUMN = "moon_elevation_offset"
+MOON_BORESIGHT_ANGLE_COLUMN = "moon_boresight_angle"
+MOON_OFFSET_COLUMNS = (
+    MOON_AZIMUTH_OFFSET_COLUMN,
+    MOON_ELEVATION_OFFSET_COLUMN,
+    MOON_BORESIGHT_ANGLE_COLUMN,
+)
 
 
 def _validate_observer(observer: str, allowed: tuple[str, ...], role: str) -> None:
@@ -331,6 +347,157 @@ def calculate_geometry(
     return spacecraft.join(instrument)
 
 
+def add_moon_boresight_offsets(
+    kernel_manager: KernelManager,
+    geometry_data: pd.DataFrame,
+    instrument_observer: str = DEFAULT_INSTRUMENT_OBSERVER,
+) -> pd.DataFrame:
+    """
+    Add the boresight-relative lunar azimuth and elevation offsets to the geometry data.
+
+    curryer reports the Moon as a unit vector in the instrument's FOV frame
+    (``moon_direction_x/y/z``). The azimuth/elevation pair the L1B product carries is one of
+    several ways to name that same direction, and picking one is a product decision rather
+    than a geometry one, so the decomposition happens here. The math is still curryer's
+    :func:`curryer.compute.spatial.boresight_offset_angles`; what Libera supplies is the
+    instrument whose boresight and FOV reference vector fix the origin and the signs.
+
+    The offsets are a signed intrinsic azimuth-then-elevation pair about the boresight, in
+    (-180, 180] and [-90, 90], with the azimuth origin taken from the instrument kernel's
+    ``FOV_REF_VECTOR``. They are not two independent projected angles like
+    ``Along_Track_Angle`` / ``Cross_Track_Angle``, and the sign of the elevation follows the
+    boresight's orientation in its FOV frame. The third column is the total separation, in
+    [0, 180], which :func:`moon_in_field_of_view` thresholds.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the instrument FK/IK furnished; the boresight and the FOV
+        reference vector are kernel-pool reads.
+    geometry_data : pd.DataFrame
+        Output of :func:`calculate_geometry`, carrying the ``moon_direction_x/y/z`` columns.
+    instrument_observer : str
+        SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
+        ``"LIBERA_RAD"``.
+
+    Returns
+    -------
+    pd.DataFrame
+        `geometry_data` with :data:`MOON_OFFSET_COLUMNS` appended, in degrees. Samples
+        without lunar geometry stay NaN across all three.
+
+    Raises
+    ------
+    ValueError
+        If ``instrument_observer`` is not a known Libera instrument frame.
+    RuntimeError
+        If the instrument's field of view cannot be read from the furnished kernels.
+    """
+    _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
+    kernel_manager.ensure_known_kernels_are_furnished()
+
+    try:
+        fov = sp.ext.instrument_fov(instrument_observer)
+    except SpiceyError as err:
+        raise RuntimeError(
+            f"Could not read the field of view for {instrument_observer!r}: {_spice_error_message(err)}"
+        ) from err
+
+    direction_columns = list(geometry.GeometryField.MOON_DIRECTION.columns)
+    direction = geometry_data[direction_columns].to_numpy(dtype=np.float64)
+    offsets = spatial.boresight_offset_angles(direction, fov.boresight, reference_vector=fov.ref_vector, degrees=True)
+    return geometry_data.assign(**dict(zip(MOON_OFFSET_COLUMNS, offsets.T, strict=True)))
+
+
+def moon_in_field_of_view(
+    kernel_manager: KernelManager,
+    geometry_data: pd.DataFrame,
+    buffer_deg: float = MOON_FOV_BUFFER_DEG,
+    instrument_observer: str = DEFAULT_INSTRUMENT_OBSERVER,
+) -> np.ndarray:
+    """
+    Flag the samples where lunar light can reach the radiometer detectors.
+
+    A sample is flagged when any part of the lunar disk falls inside the instrument's
+    geometric field of view widened by :data:`MOON_FOV_BUFFER_DEG`:
+
+        ``moon_boresight_angle <= fov_half_angle + moon_angular_radius + buffer_deg``
+
+    The three terms are deliberately separate. The FOV half angle is read from the
+    instrument kernel rather than hardcoded, so the provisional 1 degree value
+    (``TODO[LIBSDC-601]``) is corrected by a kernel delivery and not a code change. The
+    lunar angular radius is per-sample from curryer, which turns the test into "is any of
+    the disk in view" rather than "is the Moon's center in view" -- a 0.25 degree
+    difference that matters at small buffers. Only the buffer is a science tunable.
+
+    This is a threshold on the boresight angle rather than SPICE's ``fovtrg``: it takes a
+    buffer, it is vectorized over the whole 100 Hz granule, and it needs no lunar
+    body-fixed frame kernels. Consumers wanting their own tolerance should threshold
+    ``moon_boresight_angle`` directly instead of reinterpreting this flag.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the instrument FK/IK furnished; the FOV half angle is a
+        kernel-pool read.
+    geometry_data : pd.DataFrame
+        Geometry carrying the ``moon_angular_radius`` column from :func:`calculate_geometry`
+        and the ``moon_boresight_angle`` column that :func:`add_moon_boresight_offsets`
+        derives, so it must have been through both.
+    buffer_deg : float
+        Angular margin beyond the lunar disk and the geometric FOV, in degrees.
+    instrument_observer : str
+        SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
+        ``"LIBERA_RAD"``.
+
+    Returns
+    -------
+    np.ndarray
+        `int8` array, shape `(N,)`: 1 in view, 0 not in view, and
+        :data:`MOON_IN_FOV_FILL_VALUE` where the lunar geometry is unavailable (no
+        pointing coverage), which keeps "unknown" distinct from "not in view".
+
+    Raises
+    ------
+    ValueError
+        If ``instrument_observer`` is not a known Libera instrument frame, or if
+        ``geometry_data`` has not been through :func:`add_moon_boresight_offsets`.
+    RuntimeError
+        If the instrument's field of view cannot be read from the furnished kernels.
+    """
+    _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
+    if MOON_BORESIGHT_ANGLE_COLUMN not in geometry_data:
+        raise ValueError(
+            f"Geometry data has no {MOON_BORESIGHT_ANGLE_COLUMN!r} column;"
+            " run `add_moon_boresight_offsets` on it first!"
+        )
+    kernel_manager.ensure_known_kernels_are_furnished()
+
+    try:
+        fov_half_angle = sp.ext.instrument_fov(instrument_observer).half_angle(degrees=True)
+    except SpiceyError as err:
+        raise RuntimeError(
+            f"Could not read the field of view for {instrument_observer!r}: {_spice_error_message(err)}"
+        ) from err
+
+    (angular_radius_column,) = geometry.GeometryField.MOON_ANGULAR_RADIUS.columns
+    boresight_angle = geometry_data[MOON_BORESIGHT_ANGLE_COLUMN].to_numpy(dtype=np.float64)
+    angular_radius = geometry_data[angular_radius_column].to_numpy(dtype=np.float64)
+
+    threshold = fov_half_angle + angular_radius + float(buffer_deg)
+    unavailable = np.isnan(boresight_angle) | np.isnan(angular_radius)
+    in_view = np.where(unavailable, MOON_IN_FOV_FILL_VALUE, (boresight_angle <= threshold).astype(np.int8))
+
+    logger.debug(
+        "Moon in FOV: %d of %d samples within %.3f deg of boresight (%d without lunar geometry)",
+        int((in_view == 1).sum()),
+        in_view.size,
+        fov_half_angle + float(buffer_deg),
+        int(unavailable.sum()),
+    )
+    return in_view.astype(np.int8)
+
+
 def calculate_start_of_hour_state(
     kernel_manager: KernelManager,
     timestamps: np.ndarray,
@@ -428,13 +595,15 @@ def create_placeholder_geometry(n_samples: int) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        One column per :data:`_GEOMETRY_FIELDS` output column, filled with the fill value.
+        One column per :data:`_GEOMETRY_FIELDS` output column plus
+        :data:`MOON_OFFSET_COLUMNS`, filled with the fill value.
     """
     angle_fill = np.full(n_samples, -999.0, dtype=np.float32)
     distance_fill = np.full(n_samples, -9999.0, dtype=np.float64)
     distance_columns = {
         geometry.GeometryField.SC_RADIUS.columns[0],
         geometry.GeometryField.SC_ALTITUDE.columns[0],
+        geometry.GeometryField.MOON_DISTANCE.columns[0],
         *geometry.GeometryField.SC_POSITION_INERTIAL.columns,
     }
     data = {
@@ -442,7 +611,29 @@ def create_placeholder_geometry(n_samples: int) -> pd.DataFrame:
         for field in _GEOMETRY_FIELDS
         for column in field.columns
     }
+    # Derived downstream of curryer, so absent from ``_GEOMETRY_FIELDS``.
+    data.update({column: angle_fill for column in MOON_OFFSET_COLUMNS})
     return pd.DataFrame(data)
+
+
+def create_placeholder_moon_in_fov(n_samples: int) -> np.ndarray:
+    """
+    Placeholder Moon-in-view flag for ``use_geo`` false mode.
+
+    Filled rather than 0: with geolocation bypassed the Moon's position is unknown, which
+    is not the same claim as "the Moon was not in view".
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+
+    Returns
+    -------
+    np.ndarray
+        `int8` array filled with :data:`MOON_IN_FOV_FILL_VALUE`.
+    """
+    return np.full(n_samples, MOON_IN_FOV_FILL_VALUE, dtype=np.int8)
 
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
