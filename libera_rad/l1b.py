@@ -334,6 +334,7 @@ def process_l1a_to_l1b(
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
             geometry_data = geolocation.calculate_geometry(km, timestamps)
+            geometry_data = geolocation.add_moon_boresight_offsets(km, geometry_data)
             start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
             moon_in_fov = geolocation.moon_in_field_of_view(km, geometry_data)
         lat_lon_alt = geolocation.subsatellite_lat_lon_alt(geometry_data)
@@ -345,6 +346,7 @@ def process_l1a_to_l1b(
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
             lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
             geometry_data = geolocation.calculate_geometry(km, timestamps)
+            geometry_data = geolocation.add_moon_boresight_offsets(km, geometry_data)
             start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
             azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
             moon_in_fov = geolocation.moon_in_field_of_view(km, geometry_data)

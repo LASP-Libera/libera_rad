@@ -40,10 +40,10 @@ classifiers = [
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
     "libera-utils == 5.10.7",
-    # Pinned: needs the moon_* boresight-offset geometry fields from curryer #186, which is
-    # not released. Pinned to a commit so an upstream push cannot change what CI resolves.
+    # Pinned: needs the moon_direction geometry field from curryer #186, which is not
+    # released. Pinned to a commit so an upstream push cannot change what CI resolves.
     # Unpin when curryer #186 merges and is released.
-    "lasp-curryer @ git+https://github.com/lasp/curryer.git@75d354751441c398ba73f8195b2c1bbf2635a9b2",
+    "lasp-curryer @ git+https://github.com/lasp/curryer.git@df5efa34ad0acbf55b9915d514bcffed17bcdf7e",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
     "pandas >=2.0, <3.0",
