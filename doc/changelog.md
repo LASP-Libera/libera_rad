@@ -1,5 +1,13 @@
 # Version Changes
 
+## 0.8.0
+
+- Add lunar geolocation for the radiometer: `Moon_Boresight_Angle`, `Moon_Azimuth_Offset`, `Moon_Elevation_Offset` and `Moon_In_Field_Of_View` on the L1B product, for identifying lunar calibration events and rejecting contaminated off-limb dark measurements.
+- Derive the azimuth/elevation pair in `geolocation.add_moon_boresight_offsets` from curryer's `moon_direction` unit vector via `curryer.compute.spatial.boresight_offset_angles`. Naming a direction as an az/el pair is a product decision rather than a geometry one, so the decomposition lives here; the instrument's boresight and `FOV_REF_VECTOR` fix the azimuth origin and the elevation sign. These fields ride the instrument observer, so they are NaN in `jpss_only` alongside the other boresight fields.
+- Add `moon_in_field_of_view`, thresholding the boresight angle against the instrument field-of-view half angle plus the lunar disk's own angular radius plus `MOON_FOV_BUFFER_DEG`. The half angle is read from the instrument kernel rather than hardcoded, so the provisional 1 degree value is corrected by a kernel delivery and not a code change, and the per-sample disk radius makes the test "is any of the disk in view" rather than "is the Moon's center in view". Samples with no lunar geometry take a fill value rather than 0, keeping "unknown" distinct from "Moon not in view". Both the buffer and the geometric field of view it widens are placeholders pending science sign-off (`TODO[LIBSDC-601]`).
+- Correct the `Cross_Track_Angle` `long_name`, which read "Along-track angle of the Libera field of view at the surface".
+- Require `lasp-curryer >= 0.5.2` for the `moon_direction` geometry field and `spatial.boresight_offset_angles`, and `libera-utils == 5.10.11`.
+
 ## 0.7.0
 
 - Replace type-specific calibration combiners and `*-COMBINED` products with a single ObsID-dispatched `cal-combine` algorithm, selected by the `LIBERA_CAL_OBSID` environment variable. Invoke via `libera-rad cal-combine <manifest>` (docker-compose `cal-combine` service included). Outputs are ObsID-specific: `GAIN`, `NOISE`, `SWC-{λ}NM`, `LWC-{310,320,335,300,305}K`, `SOLAR-{ch}-{PRI,SEC,TER}`.
