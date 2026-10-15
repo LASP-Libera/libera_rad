@@ -1,5 +1,13 @@
 # Version Changes
 
+## 0.9.0
+
+- Derive `Cone_Angle_Rate` and `Clock_Angle_Rate` from the motor encoders as a backward two-point difference, per the heritage definition (QA-6), instead of requesting curryer's orbital-frame rates. `Clock_Angle_Rate` is now the azimuth encoder rate, which has no singularity at nadir, so the 12 degree nadir gate and `CLOCK_RATE_MIN_CONE_ANGLE_DEG` are removed (LIBSDC-739).
+- Take both encoder differences along the shorter arc, so crossing an encoder's wrap reads as the small motion it is rather than a full revolution.
+- Raise `ValueError` when no sample interval in a granule is near the 10 ms output cadence, rather than shipping both rates entirely filled.
+- Fill both rates in `jpss_only` and `use_geo` false modes, which have no encoder angles.
+- Redefine both rate `long_name`s as encoder rates and state that no range editing is applied (QA-7).
+
 ## 0.8.0
 
 - Add lunar geolocation for the radiometer: `Moon_Boresight_Angle`, `Moon_Azimuth_Offset`, `Moon_Elevation_Offset` and `Moon_In_Field_Of_View` on the L1B product, for identifying lunar calibration events and rejecting contaminated off-limb dark measurements.
@@ -20,19 +28,16 @@
 
 ## 0.6.1
 
-- Derive `Cone_Angle_Rate` and `Clock_Angle_Rate` from the motor encoder angles, a backward two-point difference over the sample interval, matching the heritage definition (QA-6). `Clock_Angle_Rate` is the azimuth encoder's own rate and is deliberately not the time derivative of `Clock_Angle`: the clock angle is an azimuth about nadir and so is singular there, and differencing it would report thousands of degrees per second at every nadir crossing regardless of how the instrument was moving. The encoder has no such pole, so neither rate needs an off-nadir gate to stay inside its declared range (LIBSDC-739); on the reference granule 5 samples of 3000 are filled, all at its leading edge where the motor CK has no coverage, and `Clock_Angle_Rate` peaks at 0.003 deg/s against a declared `valid_range` of `[-20, 20]`. Encoder differences are taken along the shorter arc, so a pass through either encoder's wrap reads as the fraction of a degree the mechanism turned.
-- Fill both rates in `jpss_only` and `use_geo` false modes via `create_placeholder_scan_rates`, rather than reporting the zero rate that the placeholder encoder angles would otherwise imply.
-- Justify both rate `valid_range`s against the Libera scan profile rather than leaving them inherited. `EL_MAX` is 62.5 deg/s and `AZ_MAX` is 4.0 deg/s, and there is no fast retrace or fast slew, so `[-100, 100]` and `[-20, 20]` stand with ample headroom -- the granule's two-point elevation rate averages 62.46 deg/s against the commanded 62.5 with 0.72 deg/s of servo jitter and a 63.67 peak. Kept narrow deliberately: nothing clips these values on write, so the band is an assertion rather than a filter, and `test_curryer_geometry_fields_within_valid_range` is what fails when a granule leaves it.
-- Record in both rate `long_name`s that no range editing is applied, matching the heritage flag definitions (QA-7), where the only failure mode is an angle being unavailable for the current or previous sample.
 - Migrate geolocation onto `curryer.compute.geometry.GeometryData`: remove the in-house SPICE subsatellite implementation (`_spacecraft_ecef_positions`, `_subsatellite_lla_from_ecef`, `calculate_libera_base_subsatellite_geolocation`) in favor of a single vectorized `calculate_geometry` call, and return instrument geolocation as one lat/lon/alt DataFrame.
 - Populate `Subsatellite_Latitude`/`_Longitude`/`_Colatitude`, `Subsolar_Latitude`/`_Longitude`/`_Colatitude`, and `Radius_of_Satellite_from_Center_of_Earth`, all of which previously shipped as `-999`/`-9999` fill.
 - Move `use_geo: false` fill values out of L1B packaging into `geolocation.create_placeholder_geometry`, alongside the existing azimuth/lat-lon producers; the packager now always receives a geometry DataFrame and no longer branches on its absence.
 - Raise a parsed, user-facing `RuntimeError` when a curryer SPICE query fails or returns no coverage for the granule, instead of silently packaging NaN.
-- Query the spacecraft and instrument observers separately in `calculate_geometry`, populating the boresight surface geometry: `Viewing_Zenith_Surface`, `Solar_Zenith_Surface`, `Viewing_Azimuth_Surface_WRT_North`, `Solar_Azimuth_Surface_WRT_North`, `Relative_Azimuth_Surface`, and `Cone_Angle`. Boresight fields are NaN in `jpss_only` mode, where the instrument frame does not resolve; the spacecraft fields still come through.
+- Query the spacecraft and instrument observers separately in `calculate_geometry`, populating the boresight surface geometry: `Viewing_Zenith_Surface`, `Solar_Zenith_Surface`, `Viewing_Azimuth_Surface_WRT_North`, `Solar_Azimuth_Surface_WRT_North`, `Relative_Azimuth_Surface`, `Cone_Angle`, and `Cone_Angle_Rate`. Boresight fields are NaN in `jpss_only` mode, where the instrument frame does not resolve; the spacecraft fields still come through.
 - Derive `Colatitude` from curryer's `surface_colatitude` rather than computing it locally.
 - Validate the spacecraft and instrument observer frames against the Libera FK (`SPACECRAFT_OBSERVERS`, `INSTRUMENT_OBSERVERS`), raising `ValueError` for a frame used in the wrong role rather than silently computing geometry for the wrong optic.
-- Populate the motion/attitude fields: `Satellite_Velocity`, `Satellite_Attitude_Q0..Q3`, `Clock_Angle`, `Along_Track_Angle`, `Cross_Track_Angle`, and `Line_Of_Sight`. Velocity and attitude ride the spacecraft observer, so they still resolve in `jpss_only`; the clock and along/cross-track angles ride the instrument observer and are NaN there.
+- Populate the motion/attitude fields: `Satellite_Velocity`, `Satellite_Attitude_Q0..Q3`, `Clock_Angle`, `Clock_Angle_Rate`, `Along_Track_Angle`, `Cross_Track_Angle`, and `Line_Of_Sight`. Velocity and attitude ride the spacecraft observer, so they still resolve in `jpss_only`; the clock and along/cross-track angles ride the instrument observer and are NaN there.
 - Add `calculate_start_of_hour_state`, populating `Satellite_Position_Start_Of_Hour` and `Satellite_Velocity_Start_Of_Hour` on the fixed 24-hour `N_HOURS` grid for the granule's start day.
+- Gate `Clock_Angle_Rate` inside a 12 degree nadir cone, where the clock angle is an azimuth about nadir and its rate is a coordinate singularity rather than a real derivative. Ungated, 204 of 2995 reference samples exceeded the declared `valid_range` of `[-20, 20]`, peaking at 7588 deg/s.
 - Add `libera_rad.constants` for the geometry SPICE frames and science tunables, replacing defaults previously embedded at their call sites.
 - Require `lasp-curryer >= 0.5.0` for the `GeometryField` enum and the SPICE error classifier.
 
