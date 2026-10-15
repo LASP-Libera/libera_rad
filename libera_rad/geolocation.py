@@ -20,9 +20,12 @@ from spiceypy.utils.exceptions import SpiceyError
 from libera_rad.constants import (
     DEFAULT_INSTRUMENT_OBSERVER,
     DEFAULT_SPACECRAFT_OBSERVER,
+    GIMBAL_NADIR_ELEVATION_DEG,
     INSTRUMENT_OBSERVERS,
     MOON_FOV_BUFFER_DEG,
     MOON_IN_FOV_FILL_VALUE,
+    NOMINAL_SAMPLE_PERIOD_S,
+    SAMPLE_PERIOD_TOLERANCE_S,
     SPACECRAFT_OBSERVERS,
 )
 
@@ -49,9 +52,7 @@ _INSTRUMENT_FIELDS = (
     geometry.GeometryField.SOLAR_AZIMUTH,
     geometry.GeometryField.RELATIVE_AZIMUTH,
     geometry.GeometryField.CONE_ANGLE,
-    geometry.GeometryField.CONE_ANGLE_RATE,
     geometry.GeometryField.CLOCK_ANGLE,
-    geometry.GeometryField.CLOCK_ANGLE_RATE,
     geometry.GeometryField.ALONG_TRACK_ANGLE,
     geometry.GeometryField.CROSS_TRACK_ANGLE,
     geometry.GeometryField.MOON_DIRECTION,
@@ -192,6 +193,29 @@ def create_placeholder_azimuth_elevation(n_samples: int, fill_value: float = -99
         np.full(n_samples, fill, dtype=np.float32),
         np.full(n_samples, fill, dtype=np.float32),
     )
+
+
+def create_placeholder_scan_rates(n_samples: int, fill_value: float = -999.0) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Placeholder scan rates for the modes with no motor encoder record.
+
+    Filled rather than zero: with no motor CK, a zero rate would claim the gimbal was at rest
+    when its motion is unknown.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+    fill_value : float
+        Product fill value for ``Cone_Angle_Rate`` and ``Clock_Angle_Rate``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)``, each shape ``(N,)`` float32, all filled.
+    """
+    fill = np.full(n_samples, np.float32(fill_value), dtype=np.float32)
+    return fill, fill.copy()
 
 
 def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarray]:
@@ -692,14 +716,13 @@ def _az_el_from_et(et: float) -> tuple[float, float] | None:
 
 def _az_el_on_et_times(et_times: np.ndarray, fill_value: float) -> tuple[np.ndarray, np.ndarray]:
     """Compute az/el at every ET sample (full-resolution SPICE path)."""
-    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
-    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
+    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
 
     for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
         result = _az_el_from_et(float(et))
         if result is not None:
-            az[i] = np.float32(result[0])
-            el[i] = np.float32(result[1])
+            az[i], el[i] = result
 
     return az, el
 
@@ -730,7 +753,8 @@ def calculate_azimuth_elevation_for_timestamps(
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
-        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float32.
+        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float64. Kept at full
+        precision so the scan rates difference unrounded angles; writers cast to float32.
     """
     km.ensure_known_kernels_are_furnished()
 
@@ -739,3 +763,113 @@ def calculate_azimuth_elevation_for_timestamps(
     dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
     et_times = spicetime.adapt(dt64_times, "dt64", "et")
     return _az_el_on_et_times(et_times, fill_value)
+
+
+def calculate_scan_rates(
+    azimuth: np.ndarray,
+    elevation: np.ndarray,
+    timestamps: np.ndarray,
+    fill_value: float = -999.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Cone- and clock-angle rates, differenced from the motor encoder angles.
+
+    Follows the heritage definition (QA-6), a backward two-point difference of the encoder
+    angles over the measured sample interval::
+
+        clock rate = d(azimuth) / dt
+        cone  rate = d(elevation) / dt, signed negative toward nadir
+
+    ``Clock_Angle_Rate`` is therefore the azimuth encoder rate, not the derivative of
+    ``Clock_Angle``, which is singular at nadir.
+
+    Both differences are taken along the shorter arc. Elevation arrives in ``(-180, 180]``
+    from ``m2eul`` and azimuth in ``[0, 360)``, so a step across either cut reads as the
+    fraction of a degree the mechanism turned, not a full revolution.
+
+    The cone-rate sign follows the heritage rules about :data:`GIMBAL_NADIR_ELEVATION_DEG`:
+    the elevation rate, negated on the negative side of nadir, so it reads negative toward
+    nadir and positive away. Where the offset from nadir changes sign within an interval --
+    at nadir, or at anti-nadir on a calibration slew -- the direction is ambiguous and the
+    magnitude is reported.
+
+    No range editing is applied (QA-7): a rate is filled only where it cannot be formed.
+
+    Parameters
+    ----------
+    azimuth : np.ndarray
+        Motor azimuth on the L1B time grid, degrees in ``[0, 360)``, ``fill_value`` where
+        unavailable.
+    elevation : np.ndarray
+        Motor elevation on the same grid, degrees in ``(-180, 180]``, nadir at
+        :data:`GIMBAL_NADIR_ELEVATION_DEG`, ``fill_value`` where unavailable.
+    timestamps : np.ndarray
+        L1B output time grid as ``datetime64[ns]``.
+    fill_value : float
+        Product fill value, honoured on input and emitted on output.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)``, each shape ``(N,)`` float32, degrees per
+        second. Filled for the first sample, wherever either encoder angle is filled or
+        NaN, and wherever the sample spacing differs from :data:`NOMINAL_SAMPLE_PERIOD_S`
+        by more than :data:`SAMPLE_PERIOD_TOLERANCE_S`.
+
+    Raises
+    ------
+    ValueError
+        If the encoder angles and timestamps do not share one length, or if the encoder
+        angles are known across some interval but no interval is within
+        :data:`SAMPLE_PERIOD_TOLERANCE_S` of :data:`NOMINAL_SAMPLE_PERIOD_S`, which means
+        the time grid is not the L1B output cadence.
+    """
+    azimuth = np.asarray(azimuth, dtype=np.float64)
+    elevation = np.asarray(elevation, dtype=np.float64)
+    times = np.asarray(timestamps, dtype="datetime64[ns]")
+    if not azimuth.shape == elevation.shape == times.shape:
+        raise ValueError(
+            "Encoder angles and timestamps must share one length; got azimuth "
+            f"{azimuth.shape}, elevation {elevation.shape}, timestamps {times.shape}"
+        )
+
+    fill = np.float32(fill_value)
+    cone_rate = np.full(azimuth.size, fill, dtype=np.float32)
+    clock_rate = np.full(azimuth.size, fill, dtype=np.float32)
+    if azimuth.size < 2:
+        return cone_rate, clock_rate
+
+    delta_t = np.diff(times).astype("timedelta64[ns]").astype(np.float64) / 1e9
+    known = (azimuth != fill_value) & (elevation != fill_value) & np.isfinite(azimuth) & np.isfinite(elevation)
+    known_pairs = known[:-1] & known[1:]
+    usable = (np.abs(delta_t - NOMINAL_SAMPLE_PERIOD_S) <= SAMPLE_PERIOD_TOLERANCE_S) & known_pairs
+    if known_pairs.any() and not usable.any():
+        raise ValueError(
+            f"No sample interval is within {SAMPLE_PERIOD_TOLERANCE_S} s of the {NOMINAL_SAMPLE_PERIOD_S} s "
+            f"L1B cadence (median spacing {np.median(delta_t):.6f} s); the scan rates cannot be formed"
+        )
+
+    # Wrapped rather than shifted, so the sign test flips at both nadir and anti-nadir for any
+    # nadir reading, not only 0.
+    previous_offset = (elevation[:-1] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
+    current_offset = (elevation[1:] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        elevation_rate = ((np.diff(elevation) + 180.0) % 360.0 - 180.0) / delta_t
+        azimuth_rate = ((np.diff(azimuth) + 180.0) % 360.0 - 180.0) / delta_t
+    # Non-strict, so an endpoint exactly at nadir keeps the sign of the interval it belongs to.
+    signed_cone_rate = np.where(
+        (previous_offset <= 0.0) & (current_offset <= 0.0),
+        -elevation_rate,
+        np.where((previous_offset >= 0.0) & (current_offset >= 0.0), elevation_rate, np.abs(elevation_rate)),
+    )
+
+    cone_rate[1:] = np.where(usable, signed_cone_rate, fill).astype(np.float32)
+    clock_rate[1:] = np.where(usable, azimuth_rate, fill).astype(np.float32)
+    logger.debug(
+        "Scan rates: %d of %d samples usable; |cone| max %.3f deg/s, |clock| max %.3f deg/s",
+        int(usable.sum()),
+        azimuth.size,
+        float(np.max(np.abs(cone_rate[cone_rate != fill]), initial=0.0)),
+        float(np.max(np.abs(clock_rate[clock_rate != fill]), initial=0.0)),
+    )
+    return cone_rate, clock_rate

@@ -46,11 +46,13 @@ _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     "Solar_Azimuth_Surface_WRT_North",
     "Relative_Azimuth_Surface",
     "Cone_Angle",
+    # Differenced from the motor encoders rather than derived by curryer, but they share this
+    # group's invariant: they need the motor CK.
     "Cone_Angle_Rate",
+    "Clock_Angle_Rate",
     # Orbital-frame look angles and the boresight vector -- also instrument observer, so these
     # are fill in jpss_only for the same reason as the surface geometry above.
     "Clock_Angle",
-    "Clock_Angle_Rate",
     "Along_Track_Angle",
     "Cross_Track_Angle",
     "Line_Of_Sight",
@@ -412,6 +414,26 @@ class TestL1bPhysicalInvariants:
             f"min={computed.min()}, max={computed.max()}"
         )
 
+    def test_scan_rates_match_the_reference_scan(self, l1b_product_dataset):
+        """The reference granule is a fixed-azimuth cross-track scan.
+
+        The clock rate is the azimuth encoder rate, so it reads zero throughout. The cone rate
+        must be negative toward nadir and positive away, which away from nadir is the sign of
+        the change in the independently computed Cone_Angle; that also checks the elevation
+        encoder's nadir reading.
+        """
+        fill = -999.0
+        clock_rate = l1b_product_dataset["Clock_Angle_Rate"].values
+        computed = (clock_rate != fill) & np.isfinite(clock_rate)
+        assert computed.sum() > 0.99 * clock_rate.size
+        assert np.max(np.abs(clock_rate[computed])) < 1e-3
+
+        cone_rate = l1b_product_dataset["Cone_Angle_Rate"].values[1:]
+        cone_angle = l1b_product_dataset["Cone_Angle"].values
+        off_nadir = (cone_rate != fill) & np.isfinite(cone_rate) & (np.minimum(cone_angle[:-1], cone_angle[1:]) > 1.0)
+        assert off_nadir.sum() > 0.9 * cone_rate.size
+        np.testing.assert_array_equal(np.sign(cone_rate[off_nadir]), np.sign(np.diff(cone_angle)[off_nadir]))
+
     def test_subsatellite_point_tracks_instrument_ground_point(self, l1b_product_dataset):
         """The subsatellite point must stay near the instrument ground point.
 
@@ -541,6 +563,7 @@ class TestL1bJpssOnlyIntegration:
             "Relative_Azimuth_Surface",
             "Cone_Angle",
             "Cone_Angle_Rate",
+            "Clock_Angle_Rate",
         ],
     )
     def test_jpss_only_boresight_geometry_is_fill(self, jpss_only_l1b_product_dataset, var_name):

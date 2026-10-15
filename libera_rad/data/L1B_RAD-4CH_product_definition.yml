@@ -302,10 +302,14 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the cone angle. The cone rate is negative when scanning toward Nadir,
-        positive when scanning away from Nadir, and zero when the cone angle is constant.
-        The cone rate is not measured, but is approximated with two consecutive cone angle positions.
+        Rate of the elevation encoder angle, from a backward two-point difference over the sample
+        interval. Negative when scanning toward Nadir, positive when scanning away; where the scan
+        crosses Nadir within a sample, the magnitude is reported. No range editing is applied;
+        filled where an encoder angle or a usable sample interval is unavailable.
       units: degrees s-1
+      # The scan profile's elevation ceiling is EL_MAX = 62.5 deg/s, with no fast retrace or slew.
+      # Nothing clips these values on write, so this range is an assertion, enforced by
+      # test_curryer_geometry_fields_within_valid_range in the L1B integration suite.
       valid_range: [-100, 100]
       _FillValue: -999
   Clock_Angle:
@@ -323,12 +327,13 @@ variables:
     dimensions: ["RADIOMETER_TIME"]
     attributes:
       long_name: >-
-        Angular velocity of the clock angle. The clock rate is negative when the azimuth angle
-        is decreasing, positive when the azimuth angle is increasing, and zero when the clock angle
-        is constant. However, when the azimuth changes direction, the magnitude of the clock rate
-        will approach 0 deg/sec and then increase before settling back to the nominal magnitude.
-        The clock rate is not measured, but is approximated with two consecutive clock angle positions.
+        Rate of the azimuth encoder angle, from a backward two-point difference over the sample
+        interval; not the time derivative of Clock_Angle, which is singular at Nadir. Negative
+        when the azimuth decreases, positive when it increases. No range editing is applied;
+        filled where an encoder angle or a usable sample interval is unavailable.
       units: degrees s-1
+      # The scan profile's azimuth ceiling is AZ_MAX = 4.0 deg/s; a fixed-azimuth cross-track
+      # scan reads zero throughout.
       valid_range: [-20, 20]
       _FillValue: -999
 

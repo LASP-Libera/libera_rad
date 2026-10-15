@@ -1,5 +1,13 @@
 # Version Changes
 
+## 0.9.0
+
+- Derive `Cone_Angle_Rate` and `Clock_Angle_Rate` from the motor encoders as a backward two-point difference, per the heritage definition (QA-6), instead of requesting curryer's orbital-frame rates. `Clock_Angle_Rate` is now the azimuth encoder rate, which has no singularity at nadir, so the 12 degree nadir gate and `CLOCK_RATE_MIN_CONE_ANGLE_DEG` are removed (LIBSDC-739).
+- Take both encoder differences along the shorter arc, so crossing an encoder's wrap reads as the small motion it is rather than a full revolution.
+- Raise `ValueError` when no sample interval in a granule is near the 10 ms output cadence, rather than shipping both rates entirely filled.
+- Fill both rates in `jpss_only` and `use_geo` false modes, which have no encoder angles.
+- Redefine both rate `long_name`s as encoder rates and state that no range editing is applied (QA-7).
+
 ## 0.8.0
 
 - Add lunar geolocation for the radiometer: `Moon_Boresight_Angle`, `Moon_Azimuth_Offset`, `Moon_Elevation_Offset` and `Moon_In_Field_Of_View` on the L1B product, for identifying lunar calibration events and rejecting contaminated off-limb dark measurements.
