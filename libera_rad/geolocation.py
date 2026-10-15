@@ -199,9 +199,8 @@ def create_placeholder_scan_rates(n_samples: int, fill_value: float = -999.0) ->
     """
     Placeholder scan rates for the modes with no motor encoder record.
 
-    Filled rather than zero: with no motor CK the encoder angles are not measured, and a
-    zero rate would assert that the gimbal was at rest, which is a different claim from
-    "the gimbal motion is unknown".
+    Filled rather than zero: with no motor CK, a zero rate would claim the gimbal was at rest
+    when its motion is unknown.
 
     Parameters
     ----------
@@ -717,14 +716,13 @@ def _az_el_from_et(et: float) -> tuple[float, float] | None:
 
 def _az_el_on_et_times(et_times: np.ndarray, fill_value: float) -> tuple[np.ndarray, np.ndarray]:
     """Compute az/el at every ET sample (full-resolution SPICE path)."""
-    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
-    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
+    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
 
     for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
         result = _az_el_from_et(float(et))
         if result is not None:
-            az[i] = np.float32(result[0])
-            el[i] = np.float32(result[1])
+            az[i], el[i] = result
 
     return az, el
 
@@ -755,7 +753,8 @@ def calculate_azimuth_elevation_for_timestamps(
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
-        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float32.
+        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float64. Kept at full
+        precision so the scan rates difference unrounded angles; writers cast to float32.
     """
     km.ensure_known_kernels_are_furnished()
 
@@ -775,44 +774,26 @@ def calculate_scan_rates(
     """
     Cone- and clock-angle rates, differenced from the motor encoder angles.
 
-    Follows the heritage definition (QA-6, QA-7), which differences the *encoder* angles
-    rather than the orbital-frame angles the two product fields are named after::
+    Follows the heritage definition (QA-6), a backward two-point difference of the encoder
+    angles over the measured sample interval::
 
         clock rate = d(azimuth) / dt
         cone  rate = d(elevation) / dt, signed negative toward nadir
 
-    ``Clock_Angle_Rate`` is therefore not the time derivative of ``Clock_Angle``, and
-    deliberately so. The clock angle is an azimuth about nadir and so is singular there: as
-    the boresight passes nadir its azimuth swings ~180 degrees, and differencing that gives
-    thousands of degrees per second regardless of how the instrument is actually moving. The
-    azimuth encoder has no such pole, so its rate stays inside the declared valid range
-    without gating the samples near nadir.
+    ``Clock_Angle_Rate`` is therefore the azimuth encoder rate, not the derivative of
+    ``Clock_Angle``, which is singular at nadir.
 
-    Elevation arrives folded into ``(-180, 180]`` -- it is an Euler angle from ``m2eul``, which
-    resolves that branch -- so a commanded -222.58 degree calibration position reads as +137.42,
-    its true angle from nadir. Azimuth is re-wrapped to ``[0, 360)`` by its producer. Each range
-    carries a discontinuity, and both differences are therefore taken along the shorter arc,
-    which reads the step across one as the fraction of a degree the mechanism actually turned
-    rather than as a whole revolution.
+    Both differences are taken along the shorter arc. Elevation arrives in ``(-180, 180]``
+    from ``m2eul`` and azimuth in ``[0, 360)``, so a step across either cut reads as the
+    fraction of a degree the mechanism turned, not a full revolution.
 
-    No range editing is applied to either result. The heritage flags are explicit that the only
-    failure mode is an angle being unavailable for the current or previous sample (QA-7), so
-    nothing here rejects a value for being large. Conformance to the declared ``valid_range`` is
-    asserted against the written product by the L1B integration suite, not enforced here.
+    The cone-rate sign follows the heritage rules about :data:`GIMBAL_NADIR_ELEVATION_DEG`:
+    the elevation rate, negated on the negative side of nadir, so it reads negative toward
+    nadir and positive away. Where the offset from nadir changes sign within an interval --
+    at nadir, or at anti-nadir on a calibration slew -- the direction is ambiguous and the
+    magnitude is reported.
 
-    The cone-rate sign follows the heritage quadrant rules, expressed against
-    :data:`GIMBAL_NADIR_ELEVATION_DEG` rather than the heritage 90 degree nadir: negative while
-    the boresight scans toward nadir, positive while it scans away, and the magnitude of the
-    encoder rate across an interval whose elevation offset changes sign. That covers both
-    turning points of the angle from nadir -- the nadir crossing itself, and the anti-nadir
-    crossing at the encoder's ``+/-180``, which a slew to a calibration position traverses. The
-    angle from nadir reverses inside such an interval, so the magnitude is the honest report and
-    a direction would be invented. The heritage encoder spans only a half turn about nadir and
-    so never reaches the second case.
-
-    Azimuth is differenced along the shorter arc, so a pass through the encoder's 360 degree
-    wrap reads as the small rate it physically is rather than as -36000 deg/s. A true rate
-    beyond half a revolution per sample would alias, which no scan mechanism approaches.
+    No range editing is applied (QA-7): a rate is filled only where it cannot be formed.
 
     Parameters
     ----------
@@ -838,7 +819,10 @@ def calculate_scan_rates(
     Raises
     ------
     ValueError
-        If the encoder angles and timestamps do not share one length.
+        If the encoder angles and timestamps do not share one length, or if the encoder
+        angles are known across some interval but no interval is within
+        :data:`SAMPLE_PERIOD_TOLERANCE_S` of :data:`NOMINAL_SAMPLE_PERIOD_S`, which means
+        the time grid is not the L1B output cadence.
     """
     azimuth = np.asarray(azimuth, dtype=np.float64)
     elevation = np.asarray(elevation, dtype=np.float64)
@@ -857,26 +841,29 @@ def calculate_scan_rates(
 
     delta_t = np.diff(times).astype("timedelta64[ns]").astype(np.float64) / 1e9
     known = (azimuth != fill_value) & (elevation != fill_value) & np.isfinite(azimuth) & np.isfinite(elevation)
-    usable = (np.abs(delta_t - NOMINAL_SAMPLE_PERIOD_S) <= SAMPLE_PERIOD_TOLERANCE_S) & known[:-1] & known[1:]
+    known_pairs = known[:-1] & known[1:]
+    usable = (np.abs(delta_t - NOMINAL_SAMPLE_PERIOD_S) <= SAMPLE_PERIOD_TOLERANCE_S) & known_pairs
+    if known_pairs.any() and not usable.any():
+        raise ValueError(
+            f"No sample interval is within {SAMPLE_PERIOD_TOLERANCE_S} s of the {NOMINAL_SAMPLE_PERIOD_S} s "
+            f"L1B cadence (median spacing {np.median(delta_t):.6f} s); the scan rates cannot be formed"
+        )
 
-    # Offsets are wrapped, not just shifted: the sign test has to flip at the two turning points
-    # of the angle from nadir, and only a wrapped offset puts them there for a nadir reading
-    # other than 0. A no-op while :data:`GIMBAL_NADIR_ELEVATION_DEG` is 0, which is itself an
-    # inference pending confirmation.
+    # Wrapped rather than shifted, so the sign test flips at both nadir and anti-nadir for any
+    # nadir reading, not only 0.
     previous_offset = (elevation[:-1] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
     current_offset = (elevation[1:] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
     with np.errstate(invalid="ignore", divide="ignore"):
         elevation_rate = ((np.diff(elevation) + 180.0) % 360.0 - 180.0) / delta_t
         azimuth_rate = ((np.diff(azimuth) + 180.0) % 360.0 - 180.0) / delta_t
-    # Non-strict, so an endpoint sitting exactly at the nadir reading keeps the sign of the
-    # interval it belongs to instead of falling through to the ambiguous-crossing branch.
-    toward_nadir = np.where(
+    # Non-strict, so an endpoint exactly at nadir keeps the sign of the interval it belongs to.
+    signed_cone_rate = np.where(
         (previous_offset <= 0.0) & (current_offset <= 0.0),
         -elevation_rate,
         np.where((previous_offset >= 0.0) & (current_offset >= 0.0), elevation_rate, np.abs(elevation_rate)),
     )
 
-    cone_rate[1:] = np.where(usable, toward_nadir, fill).astype(np.float32)
+    cone_rate[1:] = np.where(usable, signed_cone_rate, fill).astype(np.float32)
     clock_rate[1:] = np.where(usable, azimuth_rate, fill).astype(np.float32)
     logger.debug(
         "Scan rates: %d of %d samples usable; |cone| max %.3f deg/s, |clock| max %.3f deg/s",

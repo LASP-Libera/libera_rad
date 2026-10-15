@@ -466,6 +466,16 @@ def test_create_placeholder_azimuth_elevation():
     assert np.all(el == np.float32(-999))
 
 
+def test_create_placeholder_scan_rates():
+    # Filled, not zero: a zero rate would claim the gimbal was at rest.
+    cone_rate, clock_rate = geolocation.create_placeholder_scan_rates(5)
+
+    assert np.all(cone_rate == np.float32(-999))
+    assert np.all(clock_rate == np.float32(-999))
+    assert cone_rate.dtype == np.float32
+    assert clock_rate.dtype == np.float32
+
+
 def test_create_jpss_only_motor_angles():
     az, el = geolocation.create_jpss_only_motor_angles(3)
     assert np.all(az == 0)
@@ -545,8 +555,7 @@ class TestCalculateScanRates:
 
     def test_endpoint_exactly_at_nadir_keeps_its_interval_sign(self):
         # A reading of exactly the nadir value is not an ambiguous crossing: approaching it is
-        # still motion toward nadir and has to stay negative. Strict comparisons sent both
-        # arriving intervals to the abs branch and reported them as receding.
+        # still motion toward nadir and has to stay negative.
         times = _grid(5)
         elevation = np.array([1.0, 0.0, -1.0, 0.0, 1.0])
 
@@ -589,14 +598,33 @@ class TestCalculateScanRates:
     @pytest.mark.parametrize(("period_s", "usable"), [(0.005, True), (0.015, True), (0.0049, False), (0.0151, False)])
     def test_sample_spacing_tolerance_is_inclusive_at_both_ends(self, period_s, usable):
         # The band is |dt - nominal| <= tolerance, so 5 ms and 15 ms are in and just outside is out.
-        times = _grid(3, period_s=period_s)
+        # The first interval is nominal, so the granule as a whole is on cadence.
+        times = _grid(2)
+        times = np.append(times, times[-1] + np.timedelta64(round(period_s * 1e9), "ns"))
 
         cone_rate, clock_rate = geolocation.calculate_scan_rates(
             np.array([10.0, 10.5, 11.0]), np.array([30.0, 31.0, 32.0]), times
         )
 
-        assert bool(cone_rate[1] != self.FILL) is usable
-        assert bool(clock_rate[1] != self.FILL) is usable
+        assert bool(cone_rate[2] != self.FILL) is usable
+        assert bool(clock_rate[2] != self.FILL) is usable
+
+    def test_granule_off_the_output_cadence_raises(self):
+        # A 2 ms grid has no usable interval anywhere: the time grid is not the L1B cadence, and
+        # filling both rates for the whole granule would hide that.
+        with pytest.raises(ValueError, match="L1B cadence"):
+            geolocation.calculate_scan_rates(
+                np.array([10.0, 10.5, 11.0]), np.array([30.0, 31.0, 32.0]), _grid(3, period_s=0.002)
+            )
+
+    def test_off_cadence_granule_with_no_known_angles_is_all_fill(self):
+        # With no encoder angles there is no rate to lose, so the cadence is not checked.
+        missing = np.full(3, -999.0)
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(missing, missing, _grid(3, period_s=0.002))
+
+        assert np.all(cone_rate == self.FILL)
+        assert np.all(clock_rate == self.FILL)
 
     def test_no_nadir_singularity(self):
         # The point of differencing the encoder: a scan sweeping through nadir keeps the clock
@@ -614,8 +642,7 @@ class TestCalculateScanRates:
         computed = clock_rate != self.FILL
         assert computed.sum() == 199
         np.testing.assert_allclose(clock_rate[computed], 0.5, atol=1e-2)
-        # Both stay inside their declared valid_ranges, which is the whole point: the old
-        # derivative needed a 12 degree nadir gate to manage that and still filled 15% of samples.
+        # Both stay inside their declared valid_ranges with no sample near nadir excluded.
         assert np.all(np.abs(clock_rate[computed]) <= 20.0)
         assert np.all(np.abs(cone_rate[computed]) <= 100.0)
 
@@ -671,18 +698,7 @@ class TestCalculateScanRates:
         assert cone_rate.tolist() == [-999.0]
         assert clock_rate.tolist() == [-999.0]
 
-    def test_mismatched_lengths_raise(self):
+    @pytest.mark.parametrize(("n_azimuth", "n_elevation", "n_times"), [(3, 4, 3), (3, 3, 4)])
+    def test_mismatched_lengths_raise(self, n_azimuth, n_elevation, n_times):
         with pytest.raises(ValueError, match="must share one length"):
-            geolocation.calculate_scan_rates(np.zeros(3), np.zeros(4), _grid(3))
-
-    def test_mismatched_timestamp_length_raises(self):
-        with pytest.raises(ValueError, match="must share one length"):
-            geolocation.calculate_scan_rates(np.zeros(3), np.zeros(3), _grid(4))
-
-    def test_placeholder_scan_rates_are_filled_not_zero(self):
-        cone_rate, clock_rate = geolocation.create_placeholder_scan_rates(5)
-
-        assert np.all(cone_rate == self.FILL)
-        assert np.all(clock_rate == self.FILL)
-        assert cone_rate.dtype == np.float32
-        assert clock_rate.dtype == np.float32
+            geolocation.calculate_scan_rates(np.zeros(n_azimuth), np.zeros(n_elevation), _grid(n_times))
