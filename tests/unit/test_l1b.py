@@ -437,9 +437,8 @@ class TestProcessL1aToL1b:
             assert not np.any(result["Clock_Angle"] == np.float32(-999))
             assert np.allclose(result["Along_Track_Angle"], -0.16, atol=1e-4)
             assert np.allclose(result["Cross_Track_Angle"], np.linspace(-60, 60, 100), atol=1e-3)
-            # Both rates are differenced from the encoder angles, which the mock parks at
-            # zero: every interval reads a rate of zero, and only the first sample -- which
-            # has no predecessor -- is filled. No nadir gate is involved.
+            # Both rates are differenced from the encoder angles, which the mock parks at zero,
+            # so every interval reads zero and only the first sample, with no predecessor, fills.
             for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
                 assert result[name][0] == np.float32(-999), f"{name} first sample should be filled"
                 assert np.all(result[name][1:] == np.float32(0)), f"{name} should be zero for a parked gimbal"
