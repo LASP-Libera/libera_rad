@@ -294,10 +294,8 @@ class TestProcessL1aToL1b:
     @pytest.fixture
     def mock_input_data(self):
         """Create mock input data."""
-        # 5 ms raw samples. The real timestamp decimation is 2:1, which puts the output grid
-        # at the 10 ms the product defines and the scan rates are differenced over. The sample
-        # count is separate: downsample_libera_signal is mocked 10:1 below, so the cadence and
-        # the 100-sample length come from different paths and will not agree by construction.
+        # 5 ms raw samples decimate 2:1 onto the 10 ms output grid. The 100-sample length comes
+        # separately from the 10:1 downsample_libera_signal mock below.
         rad_times = pd.date_range("2025-01-01", periods=1000, freq="5ms").values
         rad_data = xr.Dataset(
             {
@@ -437,8 +435,7 @@ class TestProcessL1aToL1b:
             assert not np.any(result["Clock_Angle"] == np.float32(-999))
             assert np.allclose(result["Along_Track_Angle"], -0.16, atol=1e-4)
             assert np.allclose(result["Cross_Track_Angle"], np.linspace(-60, 60, 100), atol=1e-3)
-            # Both rates are differenced from the encoder angles, which the mock parks at zero,
-            # so every interval reads zero and only the first sample, with no predecessor, fills.
+            # The mock parks the gimbal at zero, so only the first sample, with no predecessor, fills.
             for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
                 assert result[name][0] == np.float32(-999), f"{name} first sample should be filled"
                 assert np.all(result[name][1:] == np.float32(0)), f"{name} should be zero for a parked gimbal"
@@ -513,8 +510,6 @@ class TestProcessL1aToL1b:
         assert np.all(result["Moon_Azimuth_Offset"] == np.float32(-999))
         assert np.all(result["Moon_Elevation_Offset"] == np.float32(-999))
         assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
-        # No encoder record at all, so the rates fill rather than reporting the zero their
-        # placeholder angles would difference to.
         for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
             assert np.all(result[name] == np.float32(-999)), f"{name} should be filled when use_geo is False"
 
@@ -627,8 +622,6 @@ class TestProcessL1aToL1b:
         # than claiming the Moon was absent.
         mock_moon_fov.assert_called_once()
         assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
-        # The scan rates are differenced from the motor encoders, which jpss_only does not
-        # have; they take the product fill rather than NaN or a misleading zero.
         for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
             assert np.all(result[name] == np.float32(-999)), f"{name} should be filled in jpss_only mode"
         # Spacecraft-observer fields still resolve without the motor CK.

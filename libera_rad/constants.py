@@ -48,18 +48,16 @@ MOON_IN_FOV_FILL_VALUE = np.int8(-128)
 
 # --- Gimbal scan-rate conventions ------------------------------------------------------
 
-# L1B output cadence. ``radiometer.radiance`` decimates onto this grid and the scan rates are
-# differenced over it.
+# L1B output cadence; the scan rates are differenced over this grid.
 L1B_OUTPUT_HZ = 100
 
-# Nominal scan-rate interval and the tolerance outside which a spacing is not a usable interval;
-# an unusable interval fills both rates. Rates divide by the measured interval, not by this
-# nominal period as heritage QA-6 does: at a tolerance of half the period, the nominal divisor
-# could misreport a rate by a factor of two.
+# Scan-rate intervals further than the tolerance from nominal fill both rates. Rates divide by
+# the measured interval; heritage divides by the nominal period, which at this tolerance could
+# misreport a rate by up to a factor of two.
 NOMINAL_SAMPLE_PERIOD_S = 1.0 / L1B_OUTPUT_HZ
 SAMPLE_PERIOD_TOLERANCE_S = 0.005
 
-# Elevation encoder reading at nadir. Heritage writes its cone-rate sign rules around a 90 degree
-# nadir at mid-range of its encoder; the Libera encoder reads 0 at nadir and sweeps +/-72 degrees
-# about it. That mapping is inferred from the structure of the heritage rules, not documented.
+# Elevation encoder reading at nadir. Heritage puts nadir at 90 degrees; the Libera encoder
+# reads 0 at nadir and sweeps +/-72 degrees about it. Inferred from the heritage sign rules,
+# not documented.
 GIMBAL_NADIR_ELEVATION_DEG = np.float32(0.0)

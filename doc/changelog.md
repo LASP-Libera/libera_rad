@@ -2,17 +2,16 @@
 
 ## 0.9.0
 
-- Derive `Cone_Angle_Rate` and `Clock_Angle_Rate` from the motor encoders as a backward two-point difference, per the heritage definition (QA-6), instead of requesting curryer's orbital-frame rates. `Clock_Angle_Rate` is now the azimuth encoder rate, which has no singularity at nadir, so the 12 degree nadir gate and `CLOCK_RATE_MIN_CONE_ANGLE_DEG` are removed (LIBSDC-739).
-- Take both encoder differences along the shorter arc, so crossing an encoder's wrap reads as the small motion it is rather than a full revolution.
-- Raise `ValueError` when no sample interval in a granule is near the 10 ms output cadence, rather than shipping both rates entirely filled.
-- Fill both rates in `jpss_only` and `use_geo` false modes, which have no encoder angles.
-- Redefine both rate `long_name`s as encoder rates and state that no range editing is applied (QA-7).
+- Derive `Cone_Angle_Rate` and `Clock_Angle_Rate` from the motor encoder angles, following the CERES heritage scan-rate algorithm, instead of from curryer's orbital-frame angles. `Clock_Angle_Rate` is now the azimuth encoder rate, which has no singularity at nadir, so the 12 degree nadir gate and `CLOCK_RATE_MIN_CONE_ANGLE_DEG` are removed.
+- Take both encoder differences along the shorter arc, and raise `ValueError` when no sample interval in a granule is on the 10 ms output cadence.
+- Fill both rates in `jpss_only` and `use_geo: false` modes, which have no encoder angles.
+- Shorten both rate `long_name`s, move the definitions to `comment`, and drop their `valid_range`s, since no range editing is applied to the rates.
 
 ## 0.8.0
 
 - Add lunar geolocation for the radiometer: `Moon_Boresight_Angle`, `Moon_Azimuth_Offset`, `Moon_Elevation_Offset` and `Moon_In_Field_Of_View` on the L1B product, for identifying lunar calibration events and rejecting contaminated off-limb dark measurements.
 - Derive the azimuth/elevation pair in `geolocation.add_moon_boresight_offsets` from curryer's `moon_direction` unit vector via `curryer.compute.spatial.boresight_offset_angles`. Naming a direction as an az/el pair is a product decision rather than a geometry one, so the decomposition lives here; the instrument's boresight and `FOV_REF_VECTOR` fix the azimuth origin and the elevation sign. These fields ride the instrument observer, so they are NaN in `jpss_only` alongside the other boresight fields.
-- Add `moon_in_field_of_view`, thresholding the boresight angle against the instrument field-of-view half angle plus the lunar disk's own angular radius plus `MOON_FOV_BUFFER_DEG`. The half angle is read from the instrument kernel rather than hardcoded, so the provisional 1 degree value is corrected by a kernel delivery and not a code change, and the per-sample disk radius makes the test "is any of the disk in view" rather than "is the Moon's center in view". Samples with no lunar geometry take a fill value rather than 0, keeping "unknown" distinct from "Moon not in view". Both the buffer and the geometric field of view it widens are placeholders pending science sign-off (`TODO[LIBSDC-601]`).
+- Add `moon_in_field_of_view`, thresholding the boresight angle against the instrument field-of-view half angle plus the lunar disk's own angular radius plus `MOON_FOV_BUFFER_DEG`. The half angle is read from the instrument kernel rather than hardcoded, so the provisional 1 degree value is corrected by a kernel delivery and not a code change, and the per-sample disk radius makes the test "is any of the disk in view" rather than "is the Moon's center in view". Samples with no lunar geometry take a fill value rather than 0, keeping "unknown" distinct from "Moon not in view". Both the buffer and the geometric field of view it widens are placeholders pending science sign-off.
 - Correct the `Cross_Track_Angle` `long_name`, which read "Along-track angle of the Libera field of view at the surface".
 - Require `lasp-curryer >= 0.5.2` for the `moon_direction` geometry field and `spatial.boresight_offset_angles`, and `libera-utils == 5.10.11`.
 

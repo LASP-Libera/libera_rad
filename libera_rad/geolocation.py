@@ -197,10 +197,10 @@ def create_placeholder_azimuth_elevation(n_samples: int, fill_value: float = -99
 
 def create_placeholder_scan_rates(n_samples: int, fill_value: float = -999.0) -> tuple[np.ndarray, np.ndarray]:
     """
-    Placeholder scan rates for the modes with no motor encoder record.
+    Placeholder scan rates for the ``use_geo: false`` and ``jpss_only`` modes.
 
-    Filled rather than zero: with no motor CK, a zero rate would claim the gimbal was at rest
-    when its motion is unknown.
+    Neither mode has a motor encoder record, so the rates are filled; a zero would claim the
+    gimbal was at rest.
 
     Parameters
     ----------
@@ -753,8 +753,8 @@ def calculate_azimuth_elevation_for_timestamps(
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
-        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float64. Kept at full
-        precision so the scan rates difference unrounded angles; writers cast to float32.
+        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float64 so the scan
+        rates difference unrounded angles; writers cast to float32.
     """
     km.ensure_known_kernels_are_furnished()
 
@@ -772,28 +772,21 @@ def calculate_scan_rates(
     fill_value: float = -999.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Cone- and clock-angle rates, differenced from the motor encoder angles.
+    Cone- and clock-angle rates from the motor encoder angles.
 
-    Follows the heritage definition (QA-6), a backward two-point difference of the encoder
-    angles over the measured sample interval::
+    Follows the CERES heritage scan-rate algorithm, a backward two-point difference over the
+    measured sample interval:
 
         clock rate = d(azimuth) / dt
-        cone  rate = d(elevation) / dt, signed negative toward nadir
+        cone rate = d(elevation) / dt, negative toward nadir and positive away
 
     ``Clock_Angle_Rate`` is therefore the azimuth encoder rate, not the derivative of
-    ``Clock_Angle``, which is singular at nadir.
+    ``Clock_Angle``, which is singular at nadir. Both differences take the shorter arc, so a
+    step across an encoder's wrap reads as the small motion it is.
 
-    Both differences are taken along the shorter arc. Elevation arrives in ``(-180, 180]``
-    from ``m2eul`` and azimuth in ``[0, 360)``, so a step across either cut reads as the
-    fraction of a degree the mechanism turned, not a full revolution.
-
-    The cone-rate sign follows the heritage rules about :data:`GIMBAL_NADIR_ELEVATION_DEG`:
-    the elevation rate, negated on the negative side of nadir, so it reads negative toward
-    nadir and positive away. Where the offset from nadir changes sign within an interval --
-    at nadir, or at anti-nadir on a calibration slew -- the direction is ambiguous and the
-    magnitude is reported.
-
-    No range editing is applied (QA-7): a rate is filled only where it cannot be formed.
+    An interval that crosses nadir, or anti-nadir on a calibration slew, has no single
+    direction and reports the positive magnitude, as heritage does. No range editing is
+    applied (CERES BDS quality flag QA-7): a rate is filled only where it cannot be formed.
 
     Parameters
     ----------
@@ -812,17 +805,15 @@ def calculate_scan_rates(
     -------
     tuple[np.ndarray, np.ndarray]
         ``(cone_angle_rate, clock_angle_rate)``, each shape ``(N,)`` float32, degrees per
-        second. Filled for the first sample, wherever either encoder angle is filled or
-        NaN, and wherever the sample spacing differs from :data:`NOMINAL_SAMPLE_PERIOD_S`
-        by more than :data:`SAMPLE_PERIOD_TOLERANCE_S`.
+        second. Filled for the first sample, where either encoder angle is fill or NaN, and
+        where the spacing is more than :data:`SAMPLE_PERIOD_TOLERANCE_S` from
+        :data:`NOMINAL_SAMPLE_PERIOD_S`.
 
     Raises
     ------
     ValueError
-        If the encoder angles and timestamps do not share one length, or if the encoder
-        angles are known across some interval but no interval is within
-        :data:`SAMPLE_PERIOD_TOLERANCE_S` of :data:`NOMINAL_SAMPLE_PERIOD_S`, which means
-        the time grid is not the L1B output cadence.
+        If the inputs differ in length, or if the angles are known across some interval but
+        no interval is on the L1B cadence.
     """
     azimuth = np.asarray(azimuth, dtype=np.float64)
     elevation = np.asarray(elevation, dtype=np.float64)
@@ -849,14 +840,13 @@ def calculate_scan_rates(
             f"L1B cadence (median spacing {np.median(delta_t):.6f} s); the scan rates cannot be formed"
         )
 
-    # Wrapped rather than shifted, so the sign test flips at both nadir and anti-nadir for any
-    # nadir reading, not only 0.
+    # Offsets from nadir, wrapped so the sign flips at both nadir and anti-nadir.
     previous_offset = (elevation[:-1] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
     current_offset = (elevation[1:] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
     with np.errstate(invalid="ignore", divide="ignore"):
         elevation_rate = ((np.diff(elevation) + 180.0) % 360.0 - 180.0) / delta_t
         azimuth_rate = ((np.diff(azimuth) + 180.0) % 360.0 - 180.0) / delta_t
-    # Non-strict, so an endpoint exactly at nadir keeps the sign of the interval it belongs to.
+    # Non-strict, so an endpoint exactly at nadir keeps its interval's sign.
     signed_cone_rate = np.where(
         (previous_offset <= 0.0) & (current_offset <= 0.0),
         -elevation_rate,

@@ -339,8 +339,6 @@ def process_l1a_to_l1b(
             moon_in_fov = geolocation.moon_in_field_of_view(km, geometry_data)
         lat_lon_alt = geolocation.subsatellite_lat_lon_alt(geometry_data)
         azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
-        # jpss_only carries no motor CK, so the encoder angles are placeholders and their
-        # rates are unknown rather than zero.
         scan_rates = geolocation.create_placeholder_scan_rates(n_samples)
     else:
         if not dynamic_kernel_sources:
