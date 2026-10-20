@@ -45,9 +45,7 @@ def test_calculate_geometry_uses_curryer():
             "solar_azimuth": [120.0, 121.0],
             "relative_azimuth": [150.0, 151.0],
             "cone_angle": [5.0, 6.0],
-            "cone_angle_rate": [0.5, -0.5],
             "clock_angle": [90.0, 270.0],
-            "clock_angle_rate": [1.0, -1.0],
             "along_track_angle": [-0.16, -0.16],
             "cross_track_angle": [-30.0, 30.0],
             "moon_direction_x": [0.0, 0.6],
@@ -468,6 +466,16 @@ def test_create_placeholder_azimuth_elevation():
     assert np.all(el == np.float32(-999))
 
 
+def test_create_placeholder_scan_rates():
+    # Filled, not zero: a zero rate would claim the gimbal was at rest.
+    cone_rate, clock_rate = geolocation.create_placeholder_scan_rates(5)
+
+    assert np.all(cone_rate == np.float32(-999))
+    assert np.all(clock_rate == np.float32(-999))
+    assert cone_rate.dtype == np.float32
+    assert clock_rate.dtype == np.float32
+
+
 def test_create_jpss_only_motor_angles():
     az, el = geolocation.create_jpss_only_motor_angles(3)
     assert np.all(az == 0)
@@ -505,3 +513,172 @@ def test_calculate_azimuth_elevation_for_timestamps():
 
     km.ensure_known_kernels_are_furnished.assert_called_once()
     mock_full.assert_called_once_with(et_times, -999.0)
+
+
+def _grid(n, period_s=0.01):
+    """`n` timestamps at the nominal radiometer cadence."""
+    return (
+        np.datetime64("2025-01-01T00:00:00", "ns") + np.arange(n) * np.timedelta64(int(period_s * 1e9), "ns")
+    ).astype("datetime64[ns]")
+
+
+class TestCalculateScanRates:
+    """Scan rates differenced from the motor encoder angles."""
+
+    FILL = np.float32(-999.0)
+
+    def test_clock_rate_is_the_azimuth_encoder_rate(self):
+        # 0.5 deg per 10 ms sample is 50 deg/s.
+        times = _grid(4)
+        azimuth = np.array([10.0, 10.5, 11.0, 11.5])
+        elevation = np.full(4, 30.0)
+
+        _, clock_rate = geolocation.calculate_scan_rates(azimuth, elevation, times)
+
+        assert clock_rate[0] == self.FILL
+        np.testing.assert_allclose(clock_rate[1:], 50.0, atol=1e-3)
+
+    def test_cone_rate_is_negative_toward_nadir_and_positive_away(self):
+        # The raw elevation rate is positive throughout; the sign says toward or away from nadir.
+        times = _grid(5)
+        elevation = np.array([-3.0, -2.0, -1.0, 1.0, 2.0])
+        azimuth = np.full(5, 45.0)
+
+        cone_rate, _ = geolocation.calculate_scan_rates(azimuth, elevation, times)
+
+        # toward, toward, crossing nadir (positive magnitude), away
+        np.testing.assert_allclose(cone_rate[1:], [-100.0, -100.0, 200.0, 100.0], atol=1e-3)
+
+    def test_endpoint_exactly_at_nadir_keeps_its_interval_sign(self):
+        # Reaching nadir exactly is motion toward it, not a crossing.
+        times = _grid(5)
+        elevation = np.array([1.0, 0.0, -1.0, 0.0, 1.0])
+
+        cone_rate, _ = geolocation.calculate_scan_rates(np.full(5, 45.0), elevation, times)
+
+        # toward, away, toward, away
+        np.testing.assert_allclose(cone_rate[1:], [-100.0, 100.0, -100.0, 100.0], atol=1e-3)
+
+    def test_descending_nadir_straddle_still_reports_the_magnitude(self):
+        # A descending crossing has a raw rate of -200 deg/s, so only the magnitude rule gives +200.
+        cone_rate, _ = geolocation.calculate_scan_rates(np.full(2, 45.0), np.array([1.0, -1.0]), _grid(2))
+
+        np.testing.assert_allclose(cone_rate[1], 200.0, atol=1e-3)
+
+    def test_elevation_across_the_180_branch_cut(self):
+        # m2eul folds elevation into (-180, 180]; a raw difference across the cut is ~36000 deg/s.
+        times = _grid(5)
+        elevation = np.array([-179.0, -179.625, 179.75, 179.125, 178.5])
+
+        cone_rate, _ = geolocation.calculate_scan_rates(np.full(5, 45.0), elevation, times)
+
+        np.testing.assert_allclose(cone_rate[1:], [62.5, 62.5, -62.5, -62.5], atol=1e-3)
+
+    def test_rate_uses_the_measured_interval_not_the_nominal_one(self):
+        # Heritage divides by a fixed 0.01 s; at 15 ms a 1 degree step is 66.67 deg/s, not 100.
+        times = _grid(3, period_s=0.015)
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(
+            np.array([10.0, 11.0, 12.0]), np.array([30.0, 31.0, 32.0]), times
+        )
+
+        np.testing.assert_allclose(cone_rate[1:], 1.0 / 0.015, atol=1e-3)
+        np.testing.assert_allclose(clock_rate[1:], 1.0 / 0.015, atol=1e-3)
+
+    @pytest.mark.parametrize(("period_s", "usable"), [(0.005, True), (0.015, True), (0.0049, False), (0.0151, False)])
+    def test_sample_spacing_tolerance_is_inclusive_at_both_ends(self, period_s, usable):
+        # The first interval is nominal, so the granule as a whole is on cadence.
+        times = _grid(2)
+        times = np.append(times, times[-1] + np.timedelta64(round(period_s * 1e9), "ns"))
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(
+            np.array([10.0, 10.5, 11.0]), np.array([30.0, 31.0, 32.0]), times
+        )
+
+        assert bool(cone_rate[2] != self.FILL) is usable
+        assert bool(clock_rate[2] != self.FILL) is usable
+
+    def test_granule_off_the_output_cadence_raises(self):
+        with pytest.raises(ValueError, match="L1B cadence"):
+            geolocation.calculate_scan_rates(
+                np.array([10.0, 10.5, 11.0]), np.array([30.0, 31.0, 32.0]), _grid(3, period_s=0.002)
+            )
+
+    def test_off_cadence_granule_with_no_known_angles_is_all_fill(self):
+        # With no encoder angles there is no rate to lose, so the cadence is not checked.
+        missing = np.full(3, -999.0)
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(missing, missing, _grid(3, period_s=0.002))
+
+        assert np.all(cone_rate == self.FILL)
+        assert np.all(clock_rate == self.FILL)
+
+    def test_no_nadir_singularity(self):
+        # Differencing Clock_Angle would spike at the nadir crossing; the azimuth encoder does not.
+        times = _grid(200)
+        elevation = np.linspace(-60.0, 60.0, 200)
+        # A moving azimuth that starts just below the wrap, so a parked-gimbal zero cannot pass.
+        azimuth = (359.9995 + 0.5 * np.arange(200) * 0.01) % 360.0
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(azimuth, elevation, times)
+
+        computed = clock_rate != self.FILL
+        assert computed.sum() == 199
+        np.testing.assert_allclose(clock_rate[computed], 0.5, atol=1e-2)
+        # Within the scan profile ceilings, with no sample near nadir excluded.
+        assert np.all(np.abs(clock_rate[computed]) <= 20.0)
+        assert np.all(np.abs(cone_rate[computed]) <= 100.0)
+
+    def test_azimuth_wrap_is_the_shorter_arc(self):
+        # Crossing 360 -> 0 is a small motion, not a -36000 deg/s reversal.
+        times = _grid(3)
+        azimuth = np.array([359.95, 0.05, 0.15])
+
+        _, clock_rate = geolocation.calculate_scan_rates(azimuth, np.full(3, 30.0), times)
+
+        np.testing.assert_allclose(clock_rate[1:], 10.0, atol=1e-3)
+
+    def test_off_cadence_spacing_is_filled(self):
+        times = np.array(
+            ["2025-01-01T00:00:00.00", "2025-01-01T00:00:00.01", "2025-01-01T00:00:00.50"],
+            dtype="datetime64[ns]",
+        )
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(
+            np.array([10.0, 10.5, 11.0]), np.array([30.0, 31.0, 32.0]), times
+        )
+
+        assert cone_rate[1] != self.FILL
+        assert clock_rate[1] != self.FILL
+        assert cone_rate[2] == self.FILL
+        assert clock_rate[2] == self.FILL
+
+    @pytest.mark.parametrize("bad", [-999.0, np.nan])
+    @pytest.mark.parametrize("encoder", ["azimuth", "elevation"])
+    def test_unavailable_encoder_angles_propagate_fill(self, encoder, bad):
+        # Either encoder missing fills both rates.
+        times = _grid(4)
+        azimuth = np.array([10.0, 10.5, 11.0, 11.5])
+        elevation = np.array([30.0, 31.0, 32.0, 33.0])
+        if encoder == "azimuth":
+            azimuth[2] = bad
+        else:
+            elevation[2] = bad
+
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(azimuth, elevation, times)
+
+        assert clock_rate[1] != self.FILL
+        assert clock_rate[2] == self.FILL
+        assert clock_rate[3] == self.FILL
+        assert cone_rate[2] == self.FILL
+        assert cone_rate[3] == self.FILL
+
+    def test_single_sample_is_all_fill(self):
+        cone_rate, clock_rate = geolocation.calculate_scan_rates(np.array([10.0]), np.array([30.0]), _grid(1))
+
+        assert cone_rate.tolist() == [-999.0]
+        assert clock_rate.tolist() == [-999.0]
+
+    @pytest.mark.parametrize(("n_azimuth", "n_elevation", "n_times"), [(3, 4, 3), (3, 3, 4)])
+    def test_mismatched_lengths_raise(self, n_azimuth, n_elevation, n_times):
+        with pytest.raises(ValueError, match="must share one length"):
+            geolocation.calculate_scan_rates(np.zeros(n_azimuth), np.zeros(n_elevation), _grid(n_times))

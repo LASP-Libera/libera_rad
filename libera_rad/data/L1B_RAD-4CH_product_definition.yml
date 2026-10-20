@@ -301,12 +301,13 @@ variables:
     dtype: float32
     dimensions: ["RADIOMETER_TIME"]
     attributes:
-      long_name: >-
-        Angular velocity of the cone angle. The cone rate is negative when scanning toward Nadir,
-        positive when scanning away from Nadir, and zero when the cone angle is constant.
-        The cone rate is not measured, but is approximated with two consecutive cone angle positions.
+      long_name: Rate of the elevation encoder angle
+      comment: >-
+        Backward two-point difference over the sample interval. Negative when scanning toward
+        Nadir, positive when scanning away; an interval that crosses Nadir reports the positive
+        magnitude. No range editing is applied; filled where an encoder angle or a usable
+        sample interval is unavailable.
       units: degrees s-1
-      valid_range: [-100, 100]
       _FillValue: -999
   Clock_Angle:
     dtype: float32
@@ -322,14 +323,13 @@ variables:
     dtype: float32
     dimensions: ["RADIOMETER_TIME"]
     attributes:
-      long_name: >-
-        Angular velocity of the clock angle. The clock rate is negative when the azimuth angle
-        is decreasing, positive when the azimuth angle is increasing, and zero when the clock angle
-        is constant. However, when the azimuth changes direction, the magnitude of the clock rate
-        will approach 0 deg/sec and then increase before settling back to the nominal magnitude.
-        The clock rate is not measured, but is approximated with two consecutive clock angle positions.
+      long_name: Rate of the azimuth encoder angle
+      comment: >-
+        Backward two-point difference over the sample interval; not the time derivative of
+        Clock_Angle, which is singular at Nadir. Positive when the azimuth increases. No range
+        editing is applied; filled where an encoder angle or a usable sample interval is
+        unavailable.
       units: degrees s-1
-      valid_range: [-20, 20]
       _FillValue: -999
 
   Moon_Boresight_Angle:

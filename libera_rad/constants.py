@@ -23,24 +23,6 @@ DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_RAD"
 
 # --- Science tunables -----------------------------------------------------------------
 
-# Off-nadir gate for Clock_Angle_Rate. The clock angle is an azimuth about nadir, so its rate
-# is singular there; as the cross-track scan crosses nadir the azimuth swings ~180 degrees
-# faster than the 100 Hz sampling resolves, making the finite difference an aliasing artifact
-# rather than a derivative. Ungated, samples reach ~8000 deg/s against a declared valid_range
-# of [-20, 20].
-#
-# The largest surviving rate sits at the gate boundary and falls off as 1/gate**2: for a scan of
-# angular speed w whose closest approach to nadir is b, the rate at cone angle g is w*b/g**2.
-# Measured on the in-repo granule at the 100 Hz product cadence across 65 minutes of kernel
-# coverage, that envelope is 43.4 * (6/g)**2 deg/s, so satisfying the declared range needs
-# g >= 8.8 degrees. 12 degrees holds the surviving rate near 10.8 deg/s -- about a factor of two
-# of margin against a faster scan or a wider nadir miss -- and fills 15% of samples where a
-# 6 degree gate filled 7.5%.
-#
-# TODO[LIBSDC-739]: placeholder pending science confirmation of the useful off-nadir limit. The
-# measurement above covers one cross-track granule; other scan modes change both w and b.
-CLOCK_RATE_MIN_CONE_ANGLE_DEG = np.float32(12.0)
-
 # Angular slack added around the radiometer field of view when deciding whether the Moon's
 # light reaches the detectors. The geometric FOV itself is read from the instrument kernel
 # rather than hardcoded, and the lunar disk's own apparent radius (0.245 - 0.279 deg, from
@@ -63,3 +45,19 @@ MOON_FOV_BUFFER_DEG = np.float32(5.0)
 # Product fill for the integer Moon-in-view flag, distinguishing "no pointing data" from
 # "Moon not in view".
 MOON_IN_FOV_FILL_VALUE = np.int8(-128)
+
+# --- Gimbal scan-rate conventions ------------------------------------------------------
+
+# L1B output cadence; the scan rates are differenced over this grid.
+L1B_OUTPUT_HZ = 100
+
+# Scan-rate intervals further than the tolerance from nominal fill both rates. Rates divide by
+# the measured interval; heritage divides by the nominal period, which at this tolerance could
+# misreport a rate by up to a factor of two.
+NOMINAL_SAMPLE_PERIOD_S = 1.0 / L1B_OUTPUT_HZ
+SAMPLE_PERIOD_TOLERANCE_S = 0.005
+
+# Elevation encoder reading at nadir. Heritage puts nadir at 90 degrees; the Libera encoder
+# reads 0 at nadir and sweeps +/-72 degrees about it. Inferred from the heritage sign rules,
+# not documented.
+GIMBAL_NADIR_ELEVATION_DEG = np.float32(0.0)

@@ -20,9 +20,12 @@ from spiceypy.utils.exceptions import SpiceyError
 from libera_rad.constants import (
     DEFAULT_INSTRUMENT_OBSERVER,
     DEFAULT_SPACECRAFT_OBSERVER,
+    GIMBAL_NADIR_ELEVATION_DEG,
     INSTRUMENT_OBSERVERS,
     MOON_FOV_BUFFER_DEG,
     MOON_IN_FOV_FILL_VALUE,
+    NOMINAL_SAMPLE_PERIOD_S,
+    SAMPLE_PERIOD_TOLERANCE_S,
     SPACECRAFT_OBSERVERS,
 )
 
@@ -49,9 +52,7 @@ _INSTRUMENT_FIELDS = (
     geometry.GeometryField.SOLAR_AZIMUTH,
     geometry.GeometryField.RELATIVE_AZIMUTH,
     geometry.GeometryField.CONE_ANGLE,
-    geometry.GeometryField.CONE_ANGLE_RATE,
     geometry.GeometryField.CLOCK_ANGLE,
-    geometry.GeometryField.CLOCK_ANGLE_RATE,
     geometry.GeometryField.ALONG_TRACK_ANGLE,
     geometry.GeometryField.CROSS_TRACK_ANGLE,
     geometry.GeometryField.MOON_DIRECTION,
@@ -192,6 +193,29 @@ def create_placeholder_azimuth_elevation(n_samples: int, fill_value: float = -99
         np.full(n_samples, fill, dtype=np.float32),
         np.full(n_samples, fill, dtype=np.float32),
     )
+
+
+def create_placeholder_scan_rates(n_samples: int, fill_value: float = -999.0) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Placeholder scan rates for the ``use_geo: false`` and ``jpss_only`` modes.
+
+    Neither mode has a motor encoder record, so the rates are filled; a zero would claim the
+    gimbal was at rest.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+    fill_value : float
+        Product fill value for ``Cone_Angle_Rate`` and ``Clock_Angle_Rate``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)``, each shape ``(N,)`` float32, all filled.
+    """
+    fill = np.full(n_samples, np.float32(fill_value), dtype=np.float32)
+    return fill, fill.copy()
 
 
 def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarray]:
@@ -692,14 +716,13 @@ def _az_el_from_et(et: float) -> tuple[float, float] | None:
 
 def _az_el_on_et_times(et_times: np.ndarray, fill_value: float) -> tuple[np.ndarray, np.ndarray]:
     """Compute az/el at every ET sample (full-resolution SPICE path)."""
-    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
-    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
+    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
 
     for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
         result = _az_el_from_et(float(et))
         if result is not None:
-            az[i] = np.float32(result[0])
-            el[i] = np.float32(result[1])
+            az[i], el[i] = result
 
     return az, el
 
@@ -730,7 +753,8 @@ def calculate_azimuth_elevation_for_timestamps(
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
-        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float32.
+        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float64 so the scan
+        rates difference unrounded angles; writers cast to float32.
     """
     km.ensure_known_kernels_are_furnished()
 
@@ -739,3 +763,103 @@ def calculate_azimuth_elevation_for_timestamps(
     dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
     et_times = spicetime.adapt(dt64_times, "dt64", "et")
     return _az_el_on_et_times(et_times, fill_value)
+
+
+def calculate_scan_rates(
+    azimuth: np.ndarray,
+    elevation: np.ndarray,
+    timestamps: np.ndarray,
+    fill_value: float = -999.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Cone- and clock-angle rates from the motor encoder angles.
+
+    Follows the CERES heritage scan-rate algorithm, a backward two-point difference over the
+    measured sample interval:
+
+        clock rate = d(azimuth) / dt
+        cone rate = d(elevation) / dt, negative toward nadir and positive away
+
+    ``Clock_Angle_Rate`` is therefore the azimuth encoder rate, not the derivative of
+    ``Clock_Angle``, which is singular at nadir. Both differences take the shorter arc, so a
+    step across an encoder's wrap reads as the small motion it is.
+
+    An interval that crosses nadir, or anti-nadir on a calibration slew, has no single
+    direction and reports the positive magnitude, as heritage does. No range editing is
+    applied (CERES BDS quality flag QA-7): a rate is filled only where it cannot be formed.
+
+    Parameters
+    ----------
+    azimuth : np.ndarray
+        Motor azimuth on the L1B time grid, degrees in ``[0, 360)``, ``fill_value`` where
+        unavailable.
+    elevation : np.ndarray
+        Motor elevation on the same grid, degrees in ``(-180, 180]``, nadir at
+        :data:`GIMBAL_NADIR_ELEVATION_DEG`, ``fill_value`` where unavailable.
+    timestamps : np.ndarray
+        L1B output time grid as ``datetime64[ns]``.
+    fill_value : float
+        Product fill value, honoured on input and emitted on output.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)``, each shape ``(N,)`` float32, degrees per
+        second. Filled for the first sample, where either encoder angle is fill or NaN, and
+        where the spacing is more than :data:`SAMPLE_PERIOD_TOLERANCE_S` from
+        :data:`NOMINAL_SAMPLE_PERIOD_S`.
+
+    Raises
+    ------
+    ValueError
+        If the inputs differ in length, or if the angles are known across some interval but
+        no interval is on the L1B cadence.
+    """
+    azimuth = np.asarray(azimuth, dtype=np.float64)
+    elevation = np.asarray(elevation, dtype=np.float64)
+    times = np.asarray(timestamps, dtype="datetime64[ns]")
+    if not azimuth.shape == elevation.shape == times.shape:
+        raise ValueError(
+            "Encoder angles and timestamps must share one length; got azimuth "
+            f"{azimuth.shape}, elevation {elevation.shape}, timestamps {times.shape}"
+        )
+
+    fill = np.float32(fill_value)
+    cone_rate = np.full(azimuth.size, fill, dtype=np.float32)
+    clock_rate = np.full(azimuth.size, fill, dtype=np.float32)
+    if azimuth.size < 2:
+        return cone_rate, clock_rate
+
+    delta_t = np.diff(times).astype("timedelta64[ns]").astype(np.float64) / 1e9
+    known = (azimuth != fill_value) & (elevation != fill_value) & np.isfinite(azimuth) & np.isfinite(elevation)
+    known_pairs = known[:-1] & known[1:]
+    usable = (np.abs(delta_t - NOMINAL_SAMPLE_PERIOD_S) <= SAMPLE_PERIOD_TOLERANCE_S) & known_pairs
+    if known_pairs.any() and not usable.any():
+        raise ValueError(
+            f"No sample interval is within {SAMPLE_PERIOD_TOLERANCE_S} s of the {NOMINAL_SAMPLE_PERIOD_S} s "
+            f"L1B cadence (median spacing {np.median(delta_t):.6f} s); the scan rates cannot be formed"
+        )
+
+    # Offsets from nadir, wrapped so the sign flips at both nadir and anti-nadir.
+    previous_offset = (elevation[:-1] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
+    current_offset = (elevation[1:] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        elevation_rate = ((np.diff(elevation) + 180.0) % 360.0 - 180.0) / delta_t
+        azimuth_rate = ((np.diff(azimuth) + 180.0) % 360.0 - 180.0) / delta_t
+    # Non-strict, so an endpoint exactly at nadir keeps its interval's sign.
+    signed_cone_rate = np.where(
+        (previous_offset <= 0.0) & (current_offset <= 0.0),
+        -elevation_rate,
+        np.where((previous_offset >= 0.0) & (current_offset >= 0.0), elevation_rate, np.abs(elevation_rate)),
+    )
+
+    cone_rate[1:] = np.where(usable, signed_cone_rate, fill).astype(np.float32)
+    clock_rate[1:] = np.where(usable, azimuth_rate, fill).astype(np.float32)
+    logger.debug(
+        "Scan rates: %d of %d samples usable; |cone| max %.3f deg/s, |clock| max %.3f deg/s",
+        int(usable.sum()),
+        azimuth.size,
+        float(np.max(np.abs(cone_rate[cone_rate != fill]), initial=0.0)),
+        float(np.max(np.abs(clock_rate[clock_rate != fill]), initial=0.0)),
+    )
+    return cone_rate, clock_rate
