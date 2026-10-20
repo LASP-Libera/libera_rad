@@ -5,6 +5,7 @@
 - Write `Altitude` as NaN in `jpss_only` mode. It held the spacecraft altitude in km under a field declared in meters, and inside the declared range, so nothing caught it. `Altitude` is the height of the boresight's surface point, which `jpss_only` cannot locate.
 - Widen `Cone_Angle`'s `valid_range` from `[0, 90]` to `[0, 180]`, so a reader that honours the range does not mask a calibration slew past 90 degrees.
 - Drop the empty `valid_range` from the four `Filtered_Radiance_*_Uncertainty` fields until their units are decided.
+- Add the L1B observation geometry learning notebook, `learning_notebooks/l1b_geometry_fields.ipynb`, with its helpers in `geometry_helpers.py` and `cartopy` in the `extras` dependency group.
 - Read the motor encoder angles with curryer's `spatial.frame_to_frame_euler` instead of a per-sample `pxform`/`m2eul` loop. The angles and their fill are unchanged.
 
 ## 0.9.0
