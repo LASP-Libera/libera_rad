@@ -577,9 +577,10 @@ def subsatellite_lat_lon_alt(geometry_data: pd.DataFrame) -> pd.DataFrame:
     """
     Extract subsatellite ``lat``/``lon``/``alt`` from the geometry fields.
 
-    The subsatellite ground point's latitude/longitude plus the spacecraft geodetic
-    altitude, in the columns the product packager consumes. Used as the geolocation in
-    ``jpss_only`` mode, where no instrument pointing is available.
+    The subsatellite ground point's latitude/longitude, in the columns the product packager
+    consumes. Used as the geolocation in ``jpss_only`` mode, where no instrument pointing is
+    available. ``alt`` is NaN: the product's ``Altitude`` is the height of the boresight's
+    surface point, which this mode cannot locate, as for an off-Earth sample with pointing.
 
     Parameters
     ----------
@@ -589,15 +590,14 @@ def subsatellite_lat_lon_alt(geometry_data: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Columns ``lat``, ``lon``, ``alt``, on the input's uGPS index.
+        Columns ``lat``, ``lon`` in degrees and ``alt`` (all NaN), on the input's uGPS index.
     """
     subsatellite_lat, subsatellite_lon, _ = geometry.GeometryField.SUBSATELLITE.columns
-    (spacecraft_altitude,) = geometry.GeometryField.SC_ALTITUDE.columns
     return pd.DataFrame(
         {
             "lat": geometry_data[subsatellite_lat].to_numpy(),
             "lon": geometry_data[subsatellite_lon].to_numpy(),
-            "alt": geometry_data[spacecraft_altitude].to_numpy(),
+            "alt": np.full(len(geometry_data), np.nan),
         },
         index=geometry_data.index,
     )
@@ -688,45 +688,6 @@ def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
     )
 
 
-def _az_el_from_et(et: float) -> tuple[float, float] | None:
-    """
-    Motor encoder azimuth and elevation (degrees) at one ET epoch.
-
-    Angles are Euler angles from the CK frame chain
-    ``LIBERA_BASE_COORD → LIBERA_AZ_COORD → LIBERA_EL_COORD``, matching
-    ``libera_utils`` tier-0 kernel tests. Returns None when SPICE has no transform.
-    """
-    # TODO[LIBSDC-739]: Use curryer frame_euler + spice_error_to_val when curryer#158 lands.
-    try:
-        # TODO[LIBSDC-611]: Re-evaluate the naming of the frames.
-        _TWO_PI = float(2.0 * np.pi)
-        m_az = sp.pxform("LIBERA_BASE_COORD", "LIBERA_AZ_COORD", et)
-        az_rad = float(sp.m2eul(m_az, 1, 2, 3)[2])
-        az_deg = np.degrees((az_rad + _TWO_PI) % _TWO_PI)
-
-        m_el = sp.pxform("LIBERA_AZ_COORD", "LIBERA_EL_COORD", et)
-        el_rad = float(sp.m2eul(m_el, 1, 2, 3)[0])
-        el_deg = np.degrees(el_rad)
-    except SpiceyError:
-        logger.debug("SPICE frame transform unavailable at ET %.6f", et, exc_info=True)
-        return None
-
-    return az_deg, el_deg
-
-
-def _az_el_on_et_times(et_times: np.ndarray, fill_value: float) -> tuple[np.ndarray, np.ndarray]:
-    """Compute az/el at every ET sample (full-resolution SPICE path)."""
-    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
-    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
-
-    for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
-        result = _az_el_from_et(float(et))
-        if result is not None:
-            az[i], el[i] = result
-
-    return az, el
-
-
 def calculate_azimuth_elevation_for_timestamps(
     km: KernelManager,
     timestamps: np.ndarray,
@@ -758,11 +719,17 @@ def calculate_azimuth_elevation_for_timestamps(
     """
     km.ensure_known_kernels_are_furnished()
 
-    # TODO[LIBSDC-788]: CK coverage check (via KernelManager?) before az/el pxform loop.
+    # TODO[LIBSDC-788]: CK coverage check (via KernelManager?) before the az/el frame transforms.
 
-    dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
-    et_times = spicetime.adapt(dt64_times, "dt64", "et")
-    return _az_el_on_et_times(et_times, fill_value)
+    ugps_times = spicetime.adapt(np.asarray(timestamps, dtype="datetime64[ns]"), "dt64")
+    # TODO[LIBSDC-611]: Re-evaluate the naming of the frames.
+    azimuth = spatial.frame_to_frame_euler("LIBERA_BASE_COORD", "LIBERA_AZ_COORD", ugps_times, allow_nans=True)
+    elevation = spatial.frame_to_frame_euler("LIBERA_AZ_COORD", "LIBERA_EL_COORD", ugps_times, allow_nans=True)
+    azimuth_deg = azimuth["euler3"].to_numpy() % 360.0
+    elevation_deg = elevation["euler1"].to_numpy()
+    # Either transform missing leaves the sample without a pointing, so both angles fill.
+    known = np.isfinite(azimuth_deg) & np.isfinite(elevation_deg)
+    return np.where(known, azimuth_deg, fill_value), np.where(known, elevation_deg, fill_value)
 
 
 def calculate_scan_rates(
@@ -775,10 +742,11 @@ def calculate_scan_rates(
     Cone- and clock-angle rates from the motor encoder angles.
 
     Follows the CERES heritage scan-rate algorithm, a backward two-point difference over the
-    measured sample interval:
+    measured sample interval. The cone rate is the rate of the elevation encoder's distance
+    from nadir, so it is negative toward nadir and positive away:
 
         clock rate = d(azimuth) / dt
-        cone rate = d(elevation) / dt, negative toward nadir and positive away
+        cone rate = d|elevation - GIMBAL_NADIR_ELEVATION_DEG| / dt
 
     ``Clock_Angle_Rate`` is therefore the azimuth encoder rate, not the derivative of
     ``Clock_Angle``, which is singular at nadir. Both differences take the shorter arc, so a

@@ -295,7 +295,7 @@ variables:
         the instrument view vector from the satellite to the Earth point
         (computed using the orbit vector)
       units: degrees
-      valid_range: [0, 90]
+      valid_range: [0, 180]
       _FillValue: -999
   Cone_Angle_Rate:
     dtype: float32
@@ -417,7 +417,6 @@ variables:
     attributes:
       long_name: Uncertainty in the filtered shortwave radiance
       units: None # Placeholder: TBC percent or absolute if including
-      valid_range: [] #Depends on units
       _FillValue: -999
   Filtered_Radiance_LW:
     dtype: float32
@@ -435,7 +434,6 @@ variables:
     attributes:
       long_name: Uncertainty in the filtered longwave radiance
       units: None # Placeholder: TBC percent or absolute if including
-      valid_range: [] #Depends on units
       _FillValue: -999
   Filtered_Radiance_Tot:
     dtype: float32
@@ -453,7 +451,6 @@ variables:
     attributes:
       long_name: Uncertainty in the filtered total radiance
       units: None # Placeholder: TBC percent or absolute if including
-      valid_range: [] #Depends on units
       _FillValue: -999
   Filtered_Radiance_SSW:
     dtype: float32
@@ -471,7 +468,6 @@ variables:
     attributes:
       long_name: Uncertainty in the filtered split-shortwave radiance
       units: None # Placeholder: TBC percent or absolute if including
-      valid_range: [] #Depends on units
       _FillValue: -999
   Quality_Flag:
     dtype: uint32
