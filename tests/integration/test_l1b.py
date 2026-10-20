@@ -516,13 +516,13 @@ class TestL1bJpssOnlyIntegration:
 
         non_fill_lat = lat[(lat != lat_fill) & np.isfinite(lat)]
         non_fill_lon = lon[(lon != lon_fill) & np.isfinite(lon)]
-        non_fill_alt = alt[(alt != alt_fill) & np.isfinite(alt)]
 
         assert len(non_fill_lat) > 0
         assert len(non_fill_lon) > 0
         assert np.all((non_fill_lat >= -90) & (non_fill_lat <= 90))
         assert np.all((non_fill_lon >= -180) & (non_fill_lon <= 180))
-        assert np.all(np.abs(non_fill_alt) < 5000), "Altitude should be near surface, not orbit height"
+        # No boresight surface point, so no height for one; the spacecraft altitude does not belong here.
+        assert not np.any((alt != alt_fill) & np.isfinite(alt)), "jpss_only Altitude should be NaN or fill"
 
         assert np.allclose(
             jpss_only_l1b_product_dataset["Subsatellite_Latitude"].values,

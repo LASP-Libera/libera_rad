@@ -455,7 +455,8 @@ def test_subsatellite_lat_lon_alt():
     assert list(result.columns) == ["lat", "lon", "alt"]
     assert result["lat"].tolist() == [10.0, 11.0]
     assert result["lon"].tolist() == [20.0, 21.0]
-    assert result["alt"].tolist() == [800.0, 801.0]
+    # No boresight surface point in jpss_only, so no height for one.
+    assert np.all(np.isnan(result["alt"].to_numpy()))
 
 
 def test_create_placeholder_azimuth_elevation():
@@ -494,25 +495,29 @@ def test_create_placeholder_geolocation_dataframe():
     assert np.all(result["alt"].to_numpy() == np.float32(-9999))
 
 
-def test_az_el_from_et_returns_none_on_spice_error():
-    with patch("libera_rad.geolocation.sp.pxform", side_effect=SpiceyError("SPICE(NOFRAME)")):
-        assert geolocation._az_el_from_et(0.0) is None
-
-
 def test_calculate_azimuth_elevation_for_timestamps():
-    timestamps = np.array(["2025-01-01T00:00:00", "2025-01-01T00:00:01"], dtype="datetime64[ns]")
-    et_times = np.array([1.0, 2.0])
+    timestamps = np.array(["2025-01-01T00:00:00", "2025-01-01T00:00:01", "2025-01-01T00:00:02"], dtype="datetime64[ns]")
+    # Azimuth is euler3 of BASE -> AZ, wrapped to [0, 360); elevation is euler1 of AZ -> EL.
+    # A gap in either transform fills both angles at that sample.
+    euler = {
+        ("LIBERA_BASE_COORD", "LIBERA_AZ_COORD"): pd.DataFrame(
+            {"euler1": [0.0, 0.0, 0.0], "euler2": [0.0, 0.0, 0.0], "euler3": [-10.0, 20.0, 30.0]}
+        ),
+        ("LIBERA_AZ_COORD", "LIBERA_EL_COORD"): pd.DataFrame(
+            {"euler1": [5.0, np.nan, -7.0], "euler2": [0.0, 0.0, 0.0], "euler3": [0.0, 0.0, 0.0]}
+        ),
+    }
     km = Mock()
-    with (
-        patch.object(
-            geolocation, "_az_el_on_et_times", return_value=(np.zeros(2, np.float32), np.zeros(2, np.float32))
-        ) as mock_full,
-        patch("libera_rad.geolocation.spicetime.adapt", return_value=et_times),
-    ):
-        geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+    with patch(
+        "libera_rad.geolocation.spatial.frame_to_frame_euler",
+        side_effect=lambda from_frame, to_frame, ugps, allow_nans: euler[(from_frame, to_frame)],
+    ) as mock_euler:
+        azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
 
     km.ensure_known_kernels_are_furnished.assert_called_once()
-    mock_full.assert_called_once_with(et_times, -999.0)
+    assert all(call.kwargs["allow_nans"] for call in mock_euler.call_args_list)
+    np.testing.assert_array_equal(azimuth, [350.0, -999.0, 30.0])
+    np.testing.assert_array_equal(elevation, [5.0, -999.0, -7.0])
 
 
 def _grid(n, period_s=0.01):
