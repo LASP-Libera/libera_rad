@@ -32,18 +32,12 @@ class TestReadAllInputData:
     def mock_manifest(self):
         """Create a mock manifest with test files."""
         manifest = Mock()
-        file_info_1 = Mock()
-        file_info_1.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
-        file_info_2 = Mock()
-        file_info_2.filename = "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
-        file_info_3 = Mock()
-        file_info_3.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
-        file_info_4 = Mock()
-        file_info_4.filename = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
-        file_info_5 = Mock()
-        file_info_5.filename = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp"
-        file_info_6 = Mock()
-        file_info_6.filename = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc"
+        file_info_1 = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260402T192956000000.nc"
+        file_info_2 = "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260402T192956000000.nc"
+        file_info_3 = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
+        file_info_4 = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
+        file_info_5 = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bsp"
+        file_info_6 = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bc"
         manifest.files = [file_info_1, file_info_2, file_info_3, file_info_4, file_info_5, file_info_6]
         manifest.configuration = {}
         return manifest
@@ -74,10 +68,10 @@ class TestReadAllInputData:
             all_data, dynamic_kernel_sources = l1b.read_all_input_data(mock_manifest)
 
             assert dynamic_kernel_sources == [
-                "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc",
-                "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc",
-                "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp",
-                "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc",
+                "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc",
+                "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc",
+                "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bsp",
+                "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bc",
             ]
             assert len(all_data) == 2
 
@@ -97,8 +91,13 @@ class TestReadAllInputData:
             all_data, _ = l1b.read_all_input_data(mock_manifest)
 
             assert len(all_data) == 2  # Two NetCDF files
-            assert "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc" in all_data
-            assert "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc" in all_data
+            assert (
+                "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260402T192956000000.nc"
+                in all_data
+            )
+            assert (
+                "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260402T192956000000.nc" in all_data
+            )
 
     def test_read_all_input_data_handles_file_not_found(self, mock_manifest):
         """Test error handling when file is not found."""
@@ -114,10 +113,8 @@ class TestReadAllInputData:
     def test_read_all_input_data_rejects_incomplete_spice_manifest(self):
         """Production mode requires four dynamic SPICE kernels before processing."""
         manifest = Mock()
-        az_file = Mock()
-        az_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
-        el_file = Mock()
-        el_file.filename = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        az_file = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
+        el_file = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
         manifest.files = [az_file, el_file]
         manifest.configuration = {}
 
@@ -143,16 +140,11 @@ class TestReadAllInputData:
         manifest = Mock()
 
         # Create a mix of file types
-        nc_file = Mock()
-        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
-        az_file = Mock()
-        az_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
-        el_file = Mock()
-        el_file.filename = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
-        bsp_file = Mock()
-        bsp_file.filename = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp"
-        jpss_ck = Mock()
-        jpss_ck.filename = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc"
+        nc_file = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260402T192956000000.nc"
+        az_file = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
+        el_file = "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
+        bsp_file = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bsp"
+        jpss_ck = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bc"
 
         manifest.files = [nc_file, az_file, el_file, bsp_file, jpss_ck]
         manifest.configuration = {}
@@ -171,12 +163,12 @@ class TestReadAllInputData:
             all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
             assert len(all_data) == 1
-            assert nc_file.filename in all_data
+            assert nc_file in all_data
             assert dynamic_kernel_sources == [
-                az_file.filename,
-                el_file.filename,
-                bsp_file.filename,
-                jpss_ck.filename,
+                az_file,
+                el_file,
+                bsp_file,
+                jpss_ck,
             ]
 
     def test_read_all_input_data_use_geo_false_skips_spice(self, mock_dataset, caplog):
@@ -184,10 +176,8 @@ class TestReadAllInputData:
         import logging
 
         manifest = Mock()
-        nc_file = Mock()
-        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
-        bc_file = Mock()
-        bc_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
+        nc_file = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260402T192956000000.nc"
+        bc_file = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
         manifest.files = [nc_file, bc_file]
         manifest.configuration = {"use_geo": False}
 
@@ -204,7 +194,7 @@ class TestReadAllInputData:
                 all_data, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
         assert len(all_data) == 1
-        assert nc_file.filename in all_data
+        assert nc_file in all_data
         assert dynamic_kernel_sources == []
         assert "use_geo is false: skipping SPICE kernel" in caplog.text
 
@@ -213,14 +203,10 @@ class TestReadAllInputData:
         import logging
 
         manifest = Mock()
-        nc_file = Mock()
-        nc_file.filename = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26092192956.nc"
-        az_file = Mock()
-        az_file.filename = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26092192956.bc"
-        jpss_spk = Mock()
-        jpss_spk.filename = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp"
-        jpss_ck = Mock()
-        jpss_ck.filename = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc"
+        nc_file = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260402T192956000000.nc"
+        az_file = "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260402T192956000000.bc"
+        jpss_spk = "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bsp"
+        jpss_ck = "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bc"
         manifest.files = [nc_file, az_file, jpss_spk, jpss_ck]
         manifest.configuration = {"jpss_only": True}
 
@@ -236,7 +222,7 @@ class TestReadAllInputData:
                 mock_open_dataset.return_value.load.return_value = mock_dataset
                 _, dynamic_kernel_sources = l1b.read_all_input_data(manifest)
 
-        assert dynamic_kernel_sources == [jpss_spk.filename, jpss_ck.filename]
+        assert dynamic_kernel_sources == [jpss_spk, jpss_ck]
         assert "jpss_only mode: skipping SPICE file" in caplog.text
 
 
@@ -249,8 +235,9 @@ class TestExtractInputDataset:
         hk_dataset = xr.Dataset({"hk_var": (["time"], np.array([4, 5, 6]))})
 
         all_input_data = {
-            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": rad_dataset,
-            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": hk_dataset,
+            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549"
+            "_R20260116T183821000000.nc": rad_dataset,
+            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R20260116T183621000000.nc": hk_dataset,
         }
 
         rad_data = l1b.extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_rad_sample_decoded)
@@ -262,7 +249,7 @@ class TestExtractInputDataset:
     def test_extract_input_dataset_missing_data(self):
         """Test error raised when the requested dataset is missing."""
         all_input_data = {
-            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": xr.Dataset()
+            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R20260116T183621000000.nc": xr.Dataset()
         }
 
         with pytest.raises(ValueError, match="No dataset found in input files: RAD-SAMPLE-DECODED"):
@@ -314,8 +301,8 @@ class TestProcessL1aToL1b:
         )
 
         return {
-            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": rad_data,
-            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": nom_hk_data,
+            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R20260116T183821000000.nc": rad_data,
+            "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R20260116T183821000000.nc": nom_hk_data,
         }
 
     def test_process_l1a_to_l1b(self, mock_input_data):
@@ -518,8 +505,8 @@ class TestProcessL1aToL1b:
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
         """jpss_only uses LIBERA_BASE geo and zero motor angles."""
         dynamic_kernel_sources = [
-            "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bsp",
-            "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26092192956.bc",
+            "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bsp",
+            "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260402T192956000000.bc",
         ]
         with (
             patch("libera_rad.radiometer.radiance._load_calibration_data") as mock_load_cal,
@@ -765,5 +752,5 @@ class TestAlgorithm:
         output_manifest_obj = Manifest.from_file(output_manifest_path)
 
         for file in output_manifest_obj.files:
-            data_product = xr.open_dataset(file.filename)
+            data_product = xr.open_dataset(file)
             print(data_product)

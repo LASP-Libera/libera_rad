@@ -90,23 +90,27 @@ def generate_input_manifest(tmp_path, test_integration_data_path):
     def _build(configuration: dict | None = None) -> str:
         l1a_radiometer_test_file = (
             test_integration_data_path
-            / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+            / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc"
         )
         l1a_housekeeping_test_file = (
             test_integration_data_path
-            / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+            / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc"
         )
         spice_kernel_elevation_file = (
-            test_integration_data_path / "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26016220328.bc"
+            test_integration_data_path
+            / "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R20260116T220328000000.bc"
         )
         spice_kernel_azimuth_file = (
-            test_integration_data_path / "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26016220138.bc"
+            test_integration_data_path
+            / "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260116T220138000000.bc"
         )
         spice_kernel_jpss_spk_file = (
-            test_integration_data_path / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp"
+            test_integration_data_path
+            / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bsp"
         )
         spice_kernel_jpss_ck_file = (
-            test_integration_data_path / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc"
+            test_integration_data_path
+            / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bc"
         )
 
         input_manifest = Manifest(

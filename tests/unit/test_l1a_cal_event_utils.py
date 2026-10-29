@@ -80,10 +80,12 @@ class TestSelectAndSliceEventInputs:
         rad_full = make_sample_companion("RAD_FULL", times, samples_per_packet=2)
         cal_full = make_sample_companion("CAL_FULL", times, samples_per_packet=2)
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc": nom_hk,
-            "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000300_R26100000001.nc": rad_full,
-            "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5_20250101T000000_20250101T000300_R26100000001.nc": cal_full,
-            "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5_20250101T000000_20250101T000300_R26100000001.nc": xr.Dataset(),
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200"
+            "_R20260410T000001000000.nc": nom_hk,
+            "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000300_R20260410T000001000000.nc": rad_full,
+            "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5_20250101T000000_20250101T000300_R20260410T000001000000.nc": cal_full,
+            "LIBERA_L1A_PEC-SW-STAT-DECODED_V5-8-5_20250101T000000_20250101T000300"
+            "_R20260410T000001000000.nc": xr.Dataset(),
         }
 
         inputs, input_file_names = utils.select_and_slice_event_inputs(all_data, event_spec)
@@ -116,11 +118,12 @@ class TestSelectAndSliceEventInputs:
             coords={"PACKET_ICIE_TIME": ("PACKET", times[4:7])},
         )
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000004_20250101T000006_R26100000001.nc": nom_hk,
-            "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000009_R26100000001.nc": (
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000004_20250101T000006"
+            "_R20260410T000001000000.nc": nom_hk,
+            "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000009_R20260410T000001000000.nc": (
                 make_sample_companion("RAD_FULL", times, samples_per_packet=3)
             ),
-            "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5_20250101T000000_20250101T000009_R26100000001.nc": (
+            "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5_20250101T000000_20250101T000009_R20260410T000001000000.nc": (
                 make_sample_companion("CAL_FULL", times, samples_per_packet=3)
             ),
         }
@@ -147,11 +150,12 @@ class TestSelectAndSliceEventInputs:
             coords={"PACKET_ICIE_TIME": ("PACKET", times[4:6])},
         )
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000004_20250101T000005_R26100000001.nc": nom_hk,
-            "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000005_R26100000001.nc": (
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000004_20250101T000005"
+            "_R20260410T000001000000.nc": nom_hk,
+            "LIBERA_L1A_RAD-FULL-DECODED_V5-8-5_20250101T000000_20250101T000005_R20260410T000001000000.nc": (
                 make_sample_companion("RAD_FULL", times, samples_per_packet=2, sample_times=skewed_samples)
             ),
-            "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5_20250101T000000_20250101T000005_R26100000001.nc": (
+            "LIBERA_L1A_CAL-FULL-DECODED_V5-8-5_20250101T000000_20250101T000005_R20260410T000001000000.nc": (
                 make_sample_companion("CAL_FULL", times, samples_per_packet=2)
             ),
         }
@@ -170,7 +174,8 @@ class TestSelectAndSliceEventInputs:
             coords={"PACKET_ICIE_TIME": ("PACKET", np.array(["2025-01-01T00:00:00"], dtype="datetime64[ns]"))},
         )
         all_data = {
-            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000000_R26100000001.nc": nom_hk,
+            "LIBERA_L1A_NOM-HK-GAIN-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000000"
+            "_R20260410T000001000000.nc": nom_hk,
         }
         with pytest.raises(ValueError, match=DataProductIdentifier.l1a_icie_rad_full_decoded.value):
             utils.select_and_slice_event_inputs(all_data, event_spec)
@@ -191,9 +196,12 @@ class TestSelectAndSliceEventInputs:
         )
         rad = make_sample_companion("RAD_SAMPLE", times, samples_per_packet=2)
         all_data = {
-            ("LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200_R26100000001.nc"): nom_hk,
-            "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5_20250101T000000_20250101T000200_R26100000001.nc": pev,
-            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5_20250101T000000_20250101T000200_R26100000001.nc": rad,
+            (
+                "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000100_20250101T000200"
+                "_R20260410T000001000000.nc"
+            ): nom_hk,
+            "LIBERA_L1A_PEV-SW-STAT-DECODED_V5-8-5_20250101T000000_20250101T000200_R20260410T000001000000.nc": pev,
+            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5_20250101T000000_20250101T000200_R20260410T000001000000.nc": rad,
         }
         inputs, input_file_names = utils.select_and_slice_event_inputs(all_data, event_spec)
         assert inputs[0] is nom_hk
@@ -215,7 +223,7 @@ class TestExtractNamedNomHkDataset:
 
     def test_returns_the_single_family_granule(self):
         event_spec = CAL_EVENT_BY_OBSID[385]
-        name = "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000100_R26100000001.nc"
+        name = "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000100_R20260410T000001000000.nc"
         all_data = {name: self._nom_hk(385)}
 
         assert utils.extract_named_nom_hk_dataset(all_data, event_spec) == (name, all_data[name])
@@ -223,8 +231,12 @@ class TestExtractNamedNomHkDataset:
     def test_two_family_granules_raise_and_name_both(self):
         """A family ProductID covers several ObsIDs, so it cannot pick the event's granule."""
         event_spec = CAL_EVENT_BY_OBSID[385]
-        first = "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000100_R26100000001.nc"
-        second = "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T010000_20250101T010100_R26100000001.nc"
+        first = (
+            "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T000000_20250101T000100_R20260410T000001000000.nc"
+        )
+        second = (
+            "LIBERA_L1A_NOM-HK-SOLAR-FAMILY-TRIMMED_V5-8-5_20250101T010000_20250101T010100_R20260410T000001000000.nc"
+        )
         all_data = {first: self._nom_hk(385), second: self._nom_hk(386)}
 
         with pytest.raises(ValueError, match="expects one NOM-HK granule per calibration event") as exc:
@@ -235,7 +247,7 @@ class TestExtractNamedNomHkDataset:
     def test_full_day_decoded_nom_hk_is_not_a_substitute(self):
         """It spans many ObsIDs, so it would give a day-wide window instead of the event's."""
         event_spec = CAL_EVENT_BY_OBSID[385]
-        name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20250101T000000_20250102T000000_R26100000001.nc"
+        name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20250101T000000_20250102T000000_R20260410T000001000000.nc"
         all_data = {name: self._nom_hk(385)}
 
         with pytest.raises(ValueError, match="No NOM-HK-SOLAR-FAMILY-TRIMMED granule"):
@@ -244,7 +256,8 @@ class TestExtractNamedNomHkDataset:
     def test_no_nom_hk_at_all_raises(self):
         event_spec = CAL_EVENT_BY_OBSID[385]
         all_data = {
-            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5_20250101T000000_20250101T000100_R26100000001.nc": xr.Dataset(),
+            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-8-5_20250101T000000_20250101T000100"
+            "_R20260410T000001000000.nc": xr.Dataset(),
         }
 
         with pytest.raises(ValueError, match="No NOM-HK-SOLAR-FAMILY-TRIMMED granule"):

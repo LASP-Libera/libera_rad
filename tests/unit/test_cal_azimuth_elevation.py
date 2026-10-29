@@ -62,9 +62,9 @@ class TestReadAllCalInputData:
         el_name = "LIBERA_SPICE_ELSCAN-CK_V001_20200101T000000_20200101T010000_R1.bc"
         nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
 
-        az_file = MagicMock(filename=az_name)
-        el_file = MagicMock(filename=el_name)
-        nc_file = MagicMock(filename=nc_name)
+        az_file = az_name
+        el_file = el_name
+        nc_file = nc_name
         manifest = MagicMock()
         manifest.files = [nc_file, az_file, el_file]
 
@@ -100,7 +100,7 @@ class TestReadAllCalInputData:
 
     def test_missing_azel_raises(self):
         nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
-        nc_file = MagicMock(filename=nc_name)
+        nc_file = nc_name
         manifest = MagicMock()
         manifest.files = [nc_file]
 
@@ -126,8 +126,8 @@ class TestReadAllCalInputData:
     def test_gain_path_skips_spice(self, caplog):
         az_name = "LIBERA_SPICE_AZROT-CK_V001_20200101T000000_20200101T010000_R1.bc"
         nc_name = "LIBERA_L1A_NOM-HK-DECODED_V5-8-5_20200101T000000_20200101T010000_R1.nc"
-        az_file = MagicMock(filename=az_name)
-        nc_file = MagicMock(filename=nc_name)
+        az_file = az_name
+        nc_file = nc_name
         manifest = MagicMock()
         manifest.files = [nc_file, az_file]
 
