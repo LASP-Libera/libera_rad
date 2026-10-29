@@ -83,12 +83,17 @@ def l1b_product_file_path(tmp_path_factory, test_integration_data_path):
     """Run the L1B algorithm once per test module and return the output data file path."""
     libera_files = [
         test_integration_data_path
-        / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc",
-        test_integration_data_path / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc",
-        test_integration_data_path / "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26016220328.bc",
-        test_integration_data_path / "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26016220138.bc",
-        test_integration_data_path / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp",
-        test_integration_data_path / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc",
+        / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc",
+        test_integration_data_path
+        / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc",
+        test_integration_data_path
+        / "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R20260116T220328000000.bc",
+        test_integration_data_path
+        / "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260116T220138000000.bc",
+        test_integration_data_path
+        / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bsp",
+        test_integration_data_path
+        / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bc",
     ]
     tmp_path = tmp_path_factory.mktemp("l1b_product")
     input_manifest = Manifest(manifest_type=ManifestType.INPUT, files=libera_files, configuration={})
@@ -111,7 +116,7 @@ def l1b_product_file_path(tmp_path_factory, test_integration_data_path):
 
     output_manifest = Manifest.from_file(output_manifest_path)
     assert len(output_manifest.files) == 1, "Expected exactly one L1B output file in manifest"
-    return output_manifest.files[0].filename
+    return output_manifest.files[0]
 
 
 @pytest.fixture(scope="module")
@@ -300,11 +305,11 @@ class TestL1bRegressionStatistics:
         """
         rad_data = xr.open_dataset(
             test_integration_data_path
-            / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+            / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc"
         ).load()
         nom_hk_data = xr.open_dataset(
             test_integration_data_path
-            / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+            / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc"
         ).load()
 
         timestamps, calibrated_data_by_channel = calibrate_and_downsample_radiometer_data(rad_data)
@@ -466,10 +471,13 @@ def jpss_only_l1b_product_file_path(tmp_path_factory, test_integration_data_path
     """Run L1B algorithm in jpss_only mode with JPSS kernels only."""
     libera_files = [
         test_integration_data_path
-        / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc",
-        test_integration_data_path / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc",
-        test_integration_data_path / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp",
-        test_integration_data_path / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc",
+        / "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc",
+        test_integration_data_path
+        / "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc",
+        test_integration_data_path
+        / "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bsp",
+        test_integration_data_path
+        / "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bc",
     ]
     tmp_path = tmp_path_factory.mktemp("l1b_jpss_only")
     input_manifest = Manifest(
@@ -495,7 +503,7 @@ def jpss_only_l1b_product_file_path(tmp_path_factory, test_integration_data_path
 
     output_manifest = Manifest.from_file(output_manifest_path)
     assert len(output_manifest.files) == 1
-    return output_manifest.files[0].filename
+    return output_manifest.files[0]
 
 
 @pytest.fixture(scope="module")

@@ -98,19 +98,19 @@ def read_all_cal_input_data(
     spice_files: dict[DataProductIdentifier, str] = {}
     spice_allowlist = set(_REQUIRED_SPICE_CAL_AZEL)
 
-    for i, file_info in enumerate(input_manifest.files):
-        logger.info("Reading file %d/%d: %s", i + 1, len(input_manifest.files), file_info.filename)
+    for i, filename in enumerate(input_manifest.files):
+        logger.info("Reading file %d/%d: %s", i + 1, len(input_manifest.files), filename)
         try:
-            if file_info.filename.endswith((".bc", ".bsp")):
+            if filename.endswith((".bc", ".bsp")):
                 if not require_azel_kernels:
-                    logger.warning("Skipping SPICE kernel %s (not required for this cal family)", file_info.filename)
+                    logger.warning("Skipping SPICE kernel %s (not required for this cal family)", filename)
                     continue
 
-                product_id = LiberaDataProductFilename.from_file_path(file_info.filename).data_product_id
+                product_id = LiberaDataProductFilename.from_file_path(filename).data_product_id
                 if product_id not in spice_allowlist:
                     logger.warning(
                         "Skipping SPICE file %s (%s); not in required AZROT/ELSCAN set",
-                        file_info.filename,
+                        filename,
                         product_id,
                     )
                     continue
@@ -118,19 +118,19 @@ def read_all_cal_input_data(
                 if product_id in spice_files:
                     raise ValueError(
                         f"Duplicate SPICE data product {product_id} in manifest: "
-                        f"{spice_files[product_id]} and {file_info.filename}"
+                        f"{spice_files[product_id]} and {filename}"
                     )
 
-                spice_files[product_id] = file_info.filename
-                logger.info("Recorded SPICE kernel %s (%s)", file_info.filename, product_id)
+                spice_files[product_id] = filename
+                logger.info("Recorded SPICE kernel %s (%s)", filename, product_id)
             else:
-                with smart_open(file_info.filename) as file_handle:
-                    LiberaDataProductFilename.from_file_path(file_info.filename)
+                with smart_open(filename) as file_handle:
+                    LiberaDataProductFilename.from_file_path(filename)
                     dataset = xr.open_dataset(file_handle, decode_times=True).load()
-                    all_data[file_info.filename] = dataset
-                    logger.info("Successfully loaded dataset: %s", file_info.filename)
+                    all_data[filename] = dataset
+                    logger.info("Successfully loaded dataset: %s", filename)
         except Exception:
-            logger.error("Failed to process file %s", file_info.filename, exc_info=True)
+            logger.error("Failed to process file %s", filename, exc_info=True)
             raise
 
     dynamic_kernel_sources: list[str] = []

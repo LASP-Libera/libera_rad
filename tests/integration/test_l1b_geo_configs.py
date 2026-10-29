@@ -16,12 +16,12 @@ _LONGITUDE_FILL = np.float32(-999)
 _ALTITUDE_FILL = np.float32(-9999)
 
 _INTEGRATION_KERNEL_FILENAMES = (
-    "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R26016220328.bc",
-    "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R26016220138.bc",
-    "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bsp",
-    "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R26016205551.bc",
+    "LIBERA_SPICE_ELSCAN-CK_V5-5-1_20251120T175950_20251120T190549_R20260116T220328000000.bc",
+    "LIBERA_SPICE_AZROT-CK_V5-5-1_20251120T175950_20251120T190549_R20260116T220138000000.bc",
+    "LIBERA_SPICE_JPSS-SPK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bsp",
+    "LIBERA_SPICE_JPSS-CK_V5-4-2_20251120T000000_20251120T235900_R20260116T205551000000.bc",
 )
-_RAD_SAMPLE_FILENAME = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R26016183821.nc"
+_RAD_SAMPLE_FILENAME = "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20251120T175950_20251120T190549_R20260116T183821000000.nc"
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +64,7 @@ class TestL1bManifestUseGeoConfiguration:
         for key, value in input_manifest.configuration.items():
             assert output_manifest.configuration[key] == value
 
-        with xr.open_dataset(output_manifest.files[0].filename, mask_and_scale=False) as dataset:
+        with xr.open_dataset(output_manifest.files[0], mask_and_scale=False) as dataset:
             lat = dataset["Latitude"].values
             lon = dataset["Longitude"].values
             alt = dataset["Altitude"].values
@@ -89,7 +89,7 @@ class TestL1bManifestUseGeoConfiguration:
         for key, value in input_manifest.configuration.items():
             assert output_manifest.configuration[key] == value
 
-        with xr.open_dataset(output_manifest.files[0].filename, mask_and_scale=False) as dataset:
+        with xr.open_dataset(output_manifest.files[0], mask_and_scale=False) as dataset:
             lat = dataset["Latitude"].values
             lon = dataset["Longitude"].values
             alt = dataset["Altitude"].values
@@ -109,7 +109,7 @@ class TestL1bManifestUseGeoConfiguration:
         for key, value in input_manifest.configuration.items():
             assert output_manifest.configuration[key] == value
 
-        with xr.open_dataset(output_manifest.files[0].filename, mask_and_scale=False) as dataset:
+        with xr.open_dataset(output_manifest.files[0], mask_and_scale=False) as dataset:
             assert np.all(dataset["Latitude"].values == _LATITUDE_FILL)
             assert np.all(dataset["Longitude"].values == _LONGITUDE_FILL)
             assert np.all(dataset["Altitude"].values == _ALTITUDE_FILL)
@@ -117,7 +117,7 @@ class TestL1bManifestUseGeoConfiguration:
             assert np.all(dataset["Elevation"].values == _LATITUDE_FILL)
             assert np.any(dataset["Filtered_Radiance_SW"].values != np.float32(-999))
 
-        with xr.open_dataset(output_manifest.files[0].filename) as dataset:
+        with xr.open_dataset(output_manifest.files[0]) as dataset:
             assert not np.any(np.isfinite(dataset["Latitude"].values))
             assert not np.any(np.isfinite(dataset["Longitude"].values))
             assert not np.any(np.isfinite(dataset["Altitude"].values))

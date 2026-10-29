@@ -43,7 +43,8 @@ class TestIntegration:
             If the input signal NetCDF file does not exist.
         """
         signal_path = os.path.join(
-            test_data_path, "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-1-0_20280102T000000_20280102T235959_R25353184450.nc"
+            test_data_path,
+            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-1-0_20280102T000000_20280102T235959_R20251219T184450000000.nc",
         )
         input_signal = xr.open_dataset(signal_path)
         rad_ch0 = input_signal["ICIE__RAD_SAMPLE_0"].values  # Channel 0
