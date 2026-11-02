@@ -25,7 +25,7 @@ DEFAULT_INSTRUMENT_OBSERVER = "LIBERA_RAD"
 
 # Angular slack added around the radiometer field of view when deciding whether the Moon's
 # light reaches the detectors. The geometric FOV itself is read from the instrument kernel
-# rather than hardcoded, and the lunar disk's own apparent radius (0.245 - 0.279 deg, from
+# rather than hardcoded, and the lunar disk's own apparent radius (about 0.24 - 0.29 deg seen from orbit, from
 # curryer's ``moon_angular_radius``) is added separately, so this constant carries only the
 # margin beyond "any part of the lunar disk is inside the geometric cone".
 #

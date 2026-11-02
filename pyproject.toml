@@ -1,6 +1,6 @@
 [project]
 name = "libera_rad"
-version = "0.9.0"
+version = "0.9.1"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
     { name = "Stephane Beland" },
@@ -69,6 +69,7 @@ ruff = "*"
 [tool.poetry.group.extras.dependencies]
 ipykernel = "^6.4.1"
 jupyter = "^1.0.0"
+cartopy = "^0.24"
 
 [tool.pytest.ini_options]
 markers = [
