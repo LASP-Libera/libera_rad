@@ -1,6 +1,6 @@
 [project]
 name = "libera_rad"
-version = "0.9.0"
+version = "0.10.0"
 description = "Science data processing algorithm for Libera radiometer L1b product"
 authors = [
     { name = "Stephane Beland" },
@@ -39,7 +39,7 @@ classifiers = [
 ]
 dependencies = [
     "cloudpathlib[s3]>=0.14.0,<1.0",
-    "libera-utils == 5.10.11",
+    "libera-utils >=5.16.0,<6.0.0",
     "lasp-curryer >= 0.5.2, <1.0",
     "xarray >= 2025.10.1",
     "netcdf4 >=1.7.0,<2.0",
