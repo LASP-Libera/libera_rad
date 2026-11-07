@@ -12,54 +12,118 @@ import numpy as np
 import pandas as pd
 from curryer import spicetime
 from curryer import spicierpy as sp
-from curryer.compute import spatial
+from curryer.compute import geometry, spatial
+from curryer.spicierpy.ext import spice_error_message
 from libera_utils.libera_spice.kernel_manager import KernelManager
 from spiceypy.utils.exceptions import SpiceyError
+
+from libera_rad.constants import (
+    DEFAULT_INSTRUMENT_OBSERVER,
+    DEFAULT_SPACECRAFT_OBSERVER,
+    GIMBAL_NADIR_ELEVATION_DEG,
+    INSTRUMENT_OBSERVERS,
+    MOON_FOV_BUFFER_DEG,
+    MOON_IN_FOV_FILL_VALUE,
+    NOMINAL_SAMPLE_PERIOD_S,
+    SAMPLE_PERIOD_TOLERANCE_S,
+    SPACECRAFT_OBSERVERS,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _subsatellite_lla_from_ecef(sc_xyz_df: pd.DataFrame) -> pd.DataFrame:
-    """Derive subsatellite geodetic coordinates from spacecraft ECEF position."""
-    lla = spatial.ecef_to_geodetic(sc_xyz_df[["x", "y", "z"]].to_numpy(), meters=False, degrees=True)
-    return pd.DataFrame({"lat": lla[..., 1], "lon": lla[..., 0], "alt": lla[..., 2]})
+# curryer geometry fields for the L1B product, as GeometryField enum members (interchangeable
+# with their string selectors; ``.columns`` gives the output keys). Split by observer: the
+# spacecraft fields resolve in every mode; the instrument/boresight fields need the motor CK.
+_SPACECRAFT_FIELDS = (
+    geometry.GeometryField.SUBSATELLITE,
+    geometry.GeometryField.SUBSOLAR,
+    geometry.GeometryField.SC_RADIUS,
+    geometry.GeometryField.SC_ALTITUDE,
+    geometry.GeometryField.SC_POSITION_INERTIAL,
+    geometry.GeometryField.SC_VELOCITY_INERTIAL,
+    geometry.GeometryField.SATELLITE_ATTITUDE,
+)
+_INSTRUMENT_FIELDS = (
+    geometry.GeometryField.BORESIGHT_INERTIAL,
+    geometry.GeometryField.VIEWING_ZENITH,
+    geometry.GeometryField.SOLAR_ZENITH,
+    geometry.GeometryField.VIEWING_AZIMUTH,
+    geometry.GeometryField.SOLAR_AZIMUTH,
+    geometry.GeometryField.RELATIVE_AZIMUTH,
+    geometry.GeometryField.CONE_ANGLE,
+    geometry.GeometryField.CLOCK_ANGLE,
+    geometry.GeometryField.ALONG_TRACK_ANGLE,
+    geometry.GeometryField.CROSS_TRACK_ANGLE,
+    geometry.GeometryField.MOON_DIRECTION,
+    geometry.GeometryField.MOON_ANGULAR_RADIUS,
+    geometry.GeometryField.MOON_DISTANCE,
+)
+_GEOMETRY_FIELDS = _SPACECRAFT_FIELDS + _INSTRUMENT_FIELDS
+
+# Boresight-relative lunar offsets, derived here rather than requested from curryer. Ordered
+# to match the columns :func:`curryer.compute.spatial.boresight_offset_angles` returns.
+MOON_AZIMUTH_OFFSET_COLUMN = "moon_azimuth_offset"
+MOON_ELEVATION_OFFSET_COLUMN = "moon_elevation_offset"
+MOON_BORESIGHT_ANGLE_COLUMN = "moon_boresight_angle"
+MOON_OFFSET_COLUMNS = (
+    MOON_AZIMUTH_OFFSET_COLUMN,
+    MOON_ELEVATION_OFFSET_COLUMN,
+    MOON_BORESIGHT_ANGLE_COLUMN,
+)
 
 
-def _spacecraft_ecef_positions(u_gps_times: np.ndarray, spice_body_name: str = "JPSS4_SC") -> pd.DataFrame:
+def _validate_observer(observer: str, allowed: tuple[str, ...], role: str) -> None:
+    """Reject an observer frame that is not a known Libera frame for this role.
+
+    A typo'd frame already fails inside SPICE, but a *valid* frame used in the wrong role
+    (the WFOV camera as the instrument, say) would silently produce correct-looking geometry
+    for the wrong optic. This turns that into an error at the call site.
+
+    Parameters
+    ----------
+    observer : str
+        Requested SPICE frame name.
+    allowed : tuple[str, ...]
+        Frame names valid for this role.
+    role : str
+        Human-readable role name, used in the error message.
+
+    Raises
+    ------
+    ValueError
+        If ``observer`` is not in ``allowed``.
     """
-    Query spacecraft ECEF positions at each time (no instrument kernel or pointing).
-
-    Uses ``SpatialQueries.query_rotation_and_position`` for ``spkezp`` in ITRF93;
-    only the position vector is retained. Gaps or kernel errors leave NaN rows.
-    """
-    instrument = sp.obj.Body(spice_body_name, frame=True)
-    et_times = spicetime.adapt(u_gps_times, to="et")
-    positions = np.full((len(et_times), 3), np.nan)
-
-    for ith, et_time in enumerate(et_times):
-        (_, position), _ = spatial.SpatialQueries.query_rotation_and_position(
-            et_time, instrument, "NONE", allow_nans=True
+    if observer not in allowed:
+        raise ValueError(
+            f"Unsupported {role} observer {observer!r}; expected one of {', '.join(allowed)}. "
+            "Geometry for other frames is not supported by the L1B product definition."
         )
-        if np.isfinite(position).all():
-            positions[ith, :] = position
 
-    index = pd.Index(np.asarray(u_gps_times).ravel(), name="ugps")
-    return pd.DataFrame(positions, columns=["x", "y", "z"], index=index)
+
+def _spice_error_message(err: SpiceyError) -> str:
+    """User-facing description of a SPICE failure.
+
+    Delegates to curryer's SPICE-error classifier, which maps the NAIF short name to a
+    plain-language cause. Short names it does not recognize degrade to a generic
+    ``"SPICE reported an error."`` summary rather than raising, and the short name and
+    failing routine are appended either way -- so every ``SpiceyError`` yields a usable
+    message and no additional exception handling is needed here.
+    """
+    return spice_error_message(err)
 
 
 def calculate_lat_lon_altitude(
     kernel_manager: KernelManager,
     time_range: pd.DatetimeIndex,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+) -> pd.DataFrame:
     """
-    Calculate instrument and subsatellite geolocation (convenience function).
+    Calculate instrument geolocation (latitude/longitude/altitude).
 
-    This function handles all kernel loading and cleanup automatically.
-    For multiple calculations, use KernelManager directly for better performance.
-
-    Instrument lat/lon/alt come from ``LIBERA_SW_RAD`` ellipsoid intersection.
-    Subsatellite lat/lon/alt come from spacecraft ECEF position via
-    ``spatial.ecef_to_geodetic`` (attitude-independent).
+    Instrument lat/lon/alt come from the :data:`DEFAULT_INSTRUMENT_OBSERVER` boresight
+    ellipsoid intersection; the radiometer channels are co-boresighted, so this is the
+    ground point for all four. The subsatellite point and the other geometry fields come
+    from :func:`calculate_geometry`.
 
     Parameters
     ----------
@@ -70,29 +134,28 @@ def calculate_lat_lon_altitude(
 
     Returns
     -------
-    tuple[pd.DataFrame, pd.DataFrame]
-        Instrument geolocation and subsatellite geolocation DataFrames with
-        columns ``lat``, ``lon``, and ``alt``.
+    pd.DataFrame
+        Instrument geolocation with columns ``lat``, ``lon``, and ``alt``.
     """
     kernel_manager.ensure_known_kernels_are_furnished()
 
     u_gps_times = spicetime.adapt(time_range, "iso")
 
-    ellips_lla_df, sc_xyz_df, _ = spatial.compute_ellipsoid_intersection(
-        u_gps_times, sp.obj.Body("LIBERA_SW_RAD", frame=True), give_geodetic_output=True, give_lat_lon_in_degrees=True
+    ellips_lla_df, _, _ = spatial.compute_ellipsoid_intersection(
+        u_gps_times,
+        sp.obj.Body(DEFAULT_INSTRUMENT_OBSERVER, frame=True),
+        give_geodetic_output=True,
+        give_lat_lon_in_degrees=True,
     )
-    subsatellite_lla_df = _subsatellite_lla_from_ecef(sc_xyz_df)
 
-    logger.debug("Calculation complete, generated %d instrument and subsatellite points", len(ellips_lla_df))
+    logger.debug("Instrument geolocation: generated %d points", len(ellips_lla_df))
 
-    return ellips_lla_df, subsatellite_lla_df
+    return ellips_lla_df
 
 
-def calculate_geolocation_for_timestamps(
-    km: KernelManager, timestamps: np.ndarray
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def calculate_geolocation_for_timestamps(km: KernelManager, timestamps: np.ndarray) -> pd.DataFrame:
     """
-    Calculate instrument and subsatellite geolocation for given timestamps.
+    Calculate instrument geolocation for given timestamps.
 
     Parameters
     ----------
@@ -103,10 +166,9 @@ def calculate_geolocation_for_timestamps(
 
     Returns
     -------
-    tuple[pd.DataFrame, pd.DataFrame]
-        Instrument geolocation and subsatellite geolocation DataFrames.
+    pd.DataFrame
+        Instrument geolocation DataFrame with columns ``lat``, ``lon``, ``alt``.
     """
-    # TODO[LIBSDC-739]: Add all geolocation values into the data product
     return calculate_lat_lon_altitude(km, pd.DatetimeIndex(timestamps))
 
 
@@ -133,6 +195,29 @@ def create_placeholder_azimuth_elevation(n_samples: int, fill_value: float = -99
     )
 
 
+def create_placeholder_scan_rates(n_samples: int, fill_value: float = -999.0) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Placeholder scan rates for the ``use_geo: false`` and ``jpss_only`` modes.
+
+    Neither mode has a motor encoder record, so the rates are filled; a zero would claim the
+    gimbal was at rest.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+    fill_value : float
+        Product fill value for ``Cone_Angle_Rate`` and ``Clock_Angle_Rate``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)``, each shape ``(N,)`` float32, all filled.
+    """
+    fill = np.full(n_samples, np.float32(fill_value), dtype=np.float32)
+    return fill, fill.copy()
+
+
 def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarray]:
     """
     Reference motor angles for jpss_only mode (no motor CK).
@@ -154,37 +239,425 @@ def create_jpss_only_motor_angles(n_samples: int) -> tuple[np.ndarray, np.ndarra
     return zeros, zeros
 
 
-def calculate_libera_base_subsatellite_geolocation(
-    kernel_manager: KernelManager,
-    timestamps: np.ndarray,
+def _query_geometry(
+    observer: str,
+    u_gps_times: np.ndarray,
+    fields: tuple,
+    require_coverage: bool,
+    coverage_fields: tuple = (),
+    **data_kwargs,
 ) -> pd.DataFrame:
     """
-    Subsatellite geolocation from LIBERA_BASE spacecraft ECEF position.
+    One curryer ``GeometryData`` query, surfacing SPICE failures as readable errors.
 
-    Uses JPSS dynamic kernels (SPK/CK) plus static FK; does not require motor
-    azimuth/elevation CK or instrument pointing kernels. Spacecraft ECEF position
-    is queried via SPICE ``spkezp``; subsatellite lat/lon come from
-    ``spatial.ecef_to_geodetic``.
+    Extra keyword arguments (e.g. ``attitude_frame``) are forwarded to ``GeometryData``.
 
     Parameters
     ----------
-    kernel_manager : KernelManager
-        Kernel manager with JPSS and static kernels already loaded.
-    timestamps : np.ndarray
-        Radiometer timestamps on the L1B 100 Hz grid.
+    observer : str
+        SPICE body name for the observer.
+    u_gps_times : np.ndarray
+        Query times in uGPS.
+    fields : tuple of GeometryField
+        Fields to compute for this observer.
+    require_coverage : bool
+        If True, raise when the coverage fields are entirely NaN -- the kernels do not cover
+        the granule at all (a misconfiguration). The instrument observer passes False, since
+        its fields are legitimately all-NaN in ``jpss_only`` mode.
+    coverage_fields : tuple of GeometryField, optional
+        Fields whose all-NaN state signals no coverage; defaults to every requested field. The
+        spacecraft observer restricts this to an ephemeris-derived field, since the subsolar
+        point is computed from the Sun ephemeris alone and stays finite even when the
+        spacecraft kernels miss the granule.
 
     Returns
     -------
     pd.DataFrame
-        Columns ``lat``, ``lon``, ``alt`` in degrees / kilometers.
+        The requested fields' columns, indexed by uGPS.
+
+    Raises
+    ------
+    RuntimeError
+        If the curryer SPICE query fails outright (e.g. an unparsable time or a missing
+        kernel), or -- when ``require_coverage`` -- if it returns no coverage at all. Both
+        carry a parsed, user-facing description of the cause.
     """
+    try:
+        result = geometry.GeometryData(observer, **data_kwargs).get_geometry(u_gps_times, fields=list(fields))
+    except SpiceyError as err:
+        raise RuntimeError(f"curryer geometry query failed for {observer!r}: {_spice_error_message(err)}") from err
+    if require_coverage:
+        coverage_columns = [column for field in (coverage_fields or fields) for column in field.columns]
+        if bool(result[coverage_columns].isna().to_numpy().all()):
+            raise RuntimeError(
+                f"curryer geometry returned no coverage for observer {observer!r} over the granule; "
+                "check that the SPICE kernels cover the requested times."
+            )
+    return result
+
+
+def calculate_geometry(
+    kernel_manager: KernelManager,
+    timestamps: np.ndarray,
+    spacecraft_observer: str = DEFAULT_SPACECRAFT_OBSERVER,
+    instrument_observer: str = DEFAULT_INSTRUMENT_OBSERVER,
+) -> pd.DataFrame:
+    """
+    Compute the geometry fields via curryer ``GeometryData``.
+
+    curryer's selective-compute registry queries each SPICE input once, vectorized, with
+    coverage gaps surfaced as NaN. Two calls, joined on the shared uGPS index:
+
+    - the **spacecraft** observer yields the fields needing only its ephemeris and body
+      attitude (subsatellite and subsolar points, satellite radius, altitude, inertial
+      (J2000) position and velocity, and the Earth-fixed attitude quaternion);
+    - the **instrument** observer yields the boresight geometry (viewing and solar zenith /
+      azimuth, relative azimuth, cone and clock angles and their rates, along/cross-track
+      look angles, and the inertial boresight vector).
+
+    The split is by necessity, not preference. The spacecraft observer resolves a valid
+    position in every mode, whereas the boresight fields require the instrument frame. In
+    ``jpss_only`` (no motor CK) the instrument frame does not resolve -- not even its
+    position -- so its fields are NaN, but the spacecraft fields still come through, which
+    is what the ``jpss_only`` geolocation (subsatellite point) depends on. With full
+    pointing the two observers give identical spacecraft-level values (the instrument
+    sits at the spacecraft's SPK position).
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the spacecraft SPK, instrument FK/IK, and (for the boresight
+        fields) the pointing CK furnished.
+    timestamps : np.ndarray
+        Radiometer timestamps on the L1B output time grid.
+    spacecraft_observer : str
+        SPICE frame for the spacecraft, one of :data:`SPACECRAFT_OBSERVERS`. Default
+        ``"JPSS4_SC"``.
+    instrument_observer : str
+        SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
+        ``"LIBERA_RAD"``, the single frame shared by the co-boresighted radiometer
+        channels -- see :data:`INSTRUMENT_OBSERVERS`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Indexed by uGPS; the curryer field columns for both observers, joined.
+
+    Raises
+    ------
+    ValueError
+        If either observer is not a known Libera frame for its role.
+    RuntimeError
+        If a curryer SPICE query fails outright (e.g. an unparsable time or a missing
+        kernel), or if the spacecraft observer returns no coverage at all. Both carry a
+        parsed, user-facing description of the cause.
+    """
+    _validate_observer(spacecraft_observer, SPACECRAFT_OBSERVERS, "spacecraft")
+    _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
     kernel_manager.ensure_known_kernels_are_furnished()
     u_gps_times = spicetime.adapt(pd.DatetimeIndex(timestamps), "iso")
+    # Spacecraft fields resolve in every mode, so all-NaN means the kernels miss the granule. The
+    # attitude quaternion is Earth-fixed (product convention); the inertial fields keep J2000.
+    spacecraft = _query_geometry(
+        spacecraft_observer,
+        u_gps_times,
+        _SPACECRAFT_FIELDS,
+        require_coverage=True,
+        coverage_fields=(geometry.GeometryField.SUBSATELLITE,),
+        attitude_frame=spatial.EARTH_FRAME,
+    )
+    # Instrument fields are legitimately all-NaN in jpss_only (no motor CK).
+    instrument = _query_geometry(instrument_observer, u_gps_times, _INSTRUMENT_FIELDS, require_coverage=False)
+    return spacecraft.join(instrument)
 
-    sc_xyz_df = _spacecraft_ecef_positions(u_gps_times)
-    subsatellite_lla_df = _subsatellite_lla_from_ecef(sc_xyz_df)
-    logger.debug("LIBERA_BASE subsatellite geolocation: %d points", len(subsatellite_lla_df))
-    return subsatellite_lla_df
+
+def add_moon_boresight_offsets(
+    kernel_manager: KernelManager,
+    geometry_data: pd.DataFrame,
+    instrument_observer: str = DEFAULT_INSTRUMENT_OBSERVER,
+) -> pd.DataFrame:
+    """
+    Add the boresight-relative lunar azimuth and elevation offsets to the geometry data.
+
+    curryer reports the Moon as a unit vector in the instrument's FOV frame
+    (``moon_direction_x/y/z``). The azimuth/elevation pair the L1B product carries is one of
+    several ways to name that same direction, and picking one is a product decision rather
+    than a geometry one, so the decomposition happens here. The math is still curryer's
+    :func:`curryer.compute.spatial.boresight_offset_angles`; what Libera supplies is the
+    instrument whose boresight and FOV reference vector fix the origin and the signs.
+
+    The offsets are a signed intrinsic azimuth-then-elevation pair about the boresight, in
+    (-180, 180] and [-90, 90], with the azimuth origin taken from the instrument kernel's
+    ``FOV_REF_VECTOR``. They are not two independent projected angles like
+    ``Along_Track_Angle`` / ``Cross_Track_Angle``, and the sign of the elevation follows the
+    boresight's orientation in its FOV frame. The third column is the total separation, in
+    [0, 180], which :func:`moon_in_field_of_view` thresholds.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the instrument FK/IK furnished; the boresight and the FOV
+        reference vector are kernel-pool reads.
+    geometry_data : pd.DataFrame
+        Output of :func:`calculate_geometry`, carrying the ``moon_direction_x/y/z`` columns.
+    instrument_observer : str
+        SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
+        ``"LIBERA_RAD"``.
+
+    Returns
+    -------
+    pd.DataFrame
+        `geometry_data` with :data:`MOON_OFFSET_COLUMNS` appended, in degrees. Samples
+        without lunar geometry stay NaN across all three.
+
+    Raises
+    ------
+    ValueError
+        If ``instrument_observer`` is not a known Libera instrument frame.
+    RuntimeError
+        If the instrument's field of view cannot be read from the furnished kernels.
+    """
+    _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
+    kernel_manager.ensure_known_kernels_are_furnished()
+
+    try:
+        fov = sp.ext.instrument_fov(instrument_observer)
+    except SpiceyError as err:
+        raise RuntimeError(
+            f"Could not read the field of view for {instrument_observer!r}: {_spice_error_message(err)}"
+        ) from err
+
+    direction_columns = list(geometry.GeometryField.MOON_DIRECTION.columns)
+    direction = geometry_data[direction_columns].to_numpy(dtype=np.float64)
+    offsets = spatial.boresight_offset_angles(direction, fov.boresight, reference_vector=fov.ref_vector, degrees=True)
+    return geometry_data.assign(**dict(zip(MOON_OFFSET_COLUMNS, offsets.T, strict=True)))
+
+
+def moon_in_field_of_view(
+    kernel_manager: KernelManager,
+    geometry_data: pd.DataFrame,
+    buffer_deg: float = MOON_FOV_BUFFER_DEG,
+    instrument_observer: str = DEFAULT_INSTRUMENT_OBSERVER,
+) -> np.ndarray:
+    """
+    Flag the samples where lunar light can reach the radiometer detectors.
+
+    A sample is flagged when any part of the lunar disk falls inside the instrument's
+    geometric field of view widened by :data:`MOON_FOV_BUFFER_DEG`:
+
+        ``moon_boresight_angle <= fov_half_angle + moon_angular_radius + buffer_deg``
+
+    The three terms are deliberately separate. The FOV half angle is read from the
+    instrument kernel rather than hardcoded, so the provisional 1 degree value
+    (``TODO[LIBSDC-601]``) is corrected by a kernel delivery and not a code change. The
+    lunar angular radius is per-sample from curryer, which turns the test into "is any of
+    the disk in view" rather than "is the Moon's center in view" -- a 0.25 degree
+    difference that matters at small buffers. Only the buffer is a science tunable.
+
+    This is a threshold on the boresight angle rather than SPICE's ``fovtrg``: it takes a
+    buffer, it is vectorized over the whole 100 Hz granule, and it needs no lunar
+    body-fixed frame kernels. Consumers wanting their own tolerance should threshold
+    ``moon_boresight_angle`` directly instead of reinterpreting this flag.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the instrument FK/IK furnished; the FOV half angle is a
+        kernel-pool read.
+    geometry_data : pd.DataFrame
+        Geometry carrying the ``moon_angular_radius`` column from :func:`calculate_geometry`
+        and the ``moon_boresight_angle`` column that :func:`add_moon_boresight_offsets`
+        derives, so it must have been through both.
+    buffer_deg : float
+        Angular margin beyond the lunar disk and the geometric FOV, in degrees.
+    instrument_observer : str
+        SPICE frame for the instrument, one of :data:`INSTRUMENT_OBSERVERS`. Default
+        ``"LIBERA_RAD"``.
+
+    Returns
+    -------
+    np.ndarray
+        `int8` array, shape `(N,)`: 1 in view, 0 not in view, and
+        :data:`MOON_IN_FOV_FILL_VALUE` where the lunar geometry is unavailable (no
+        pointing coverage), which keeps "unknown" distinct from "not in view".
+
+    Raises
+    ------
+    ValueError
+        If ``instrument_observer`` is not a known Libera instrument frame, or if
+        ``geometry_data`` has not been through :func:`add_moon_boresight_offsets`.
+    RuntimeError
+        If the instrument's field of view cannot be read from the furnished kernels.
+    """
+    _validate_observer(instrument_observer, INSTRUMENT_OBSERVERS, "instrument")
+    if MOON_BORESIGHT_ANGLE_COLUMN not in geometry_data:
+        raise ValueError(
+            f"Geometry data has no {MOON_BORESIGHT_ANGLE_COLUMN!r} column;"
+            " run `add_moon_boresight_offsets` on it first!"
+        )
+    kernel_manager.ensure_known_kernels_are_furnished()
+
+    try:
+        fov_half_angle = sp.ext.instrument_fov(instrument_observer).half_angle(degrees=True)
+    except SpiceyError as err:
+        raise RuntimeError(
+            f"Could not read the field of view for {instrument_observer!r}: {_spice_error_message(err)}"
+        ) from err
+
+    (angular_radius_column,) = geometry.GeometryField.MOON_ANGULAR_RADIUS.columns
+    boresight_angle = geometry_data[MOON_BORESIGHT_ANGLE_COLUMN].to_numpy(dtype=np.float64)
+    angular_radius = geometry_data[angular_radius_column].to_numpy(dtype=np.float64)
+
+    threshold = fov_half_angle + angular_radius + float(buffer_deg)
+    unavailable = np.isnan(boresight_angle) | np.isnan(angular_radius)
+    in_view = np.where(unavailable, MOON_IN_FOV_FILL_VALUE, (boresight_angle <= threshold).astype(np.int8))
+
+    logger.debug(
+        "Moon in FOV: %d of %d samples within %.3f deg of boresight (%d without lunar geometry)",
+        int((in_view == 1).sum()),
+        in_view.size,
+        fov_half_angle + float(buffer_deg),
+        int(unavailable.sum()),
+    )
+    return in_view.astype(np.int8)
+
+
+def calculate_start_of_hour_state(
+    kernel_manager: KernelManager,
+    timestamps: np.ndarray,
+    observer: str = DEFAULT_SPACECRAFT_OBSERVER,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Spacecraft inertial (J2000) position and velocity at each top-of-hour of the granule's UTC day.
+
+    The product carries the spacecraft state on a fixed 24-hour grid (``N_HOURS``), not on
+    the radiometer time grid. "Start of hour" is a mission timetag convention, so the
+    hour-boundary epochs are built here and curryer is queried at exactly those times --
+    curryer's ``GeometryData`` has no notion of an hour boundary.
+
+    The 24 epochs are the top of each hour (00:00 .. 23:00 UTC) of the day the granule
+    *starts* in; a granule spanning midnight still reports its start day. Hours outside
+    SPK coverage come back NaN, per the curryer fill contract.
+
+    Parameters
+    ----------
+    kernel_manager : KernelManager
+        Kernel manager with the spacecraft SPK furnished.
+    timestamps : np.ndarray
+        Radiometer timestamps; only the first is used, to pick the UTC day.
+    observer : str
+        SPICE frame for the spacecraft, one of :data:`SPACECRAFT_OBSERVERS`. Default
+        ``"JPSS4_SC"``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        `(position, velocity)`, each shape `(24, 3)` in the J2000 inertial frame, km and km/s.
+
+    Raises
+    ------
+    ValueError
+        If ``observer`` is not a known Libera spacecraft frame.
+    """
+    _validate_observer(observer, SPACECRAFT_OBSERVERS, "spacecraft")
+    kernel_manager.ensure_known_kernels_are_furnished()
+    day_start = pd.Timestamp(np.asarray(timestamps, dtype="datetime64[ns]")[0]).normalize()
+    hour_epochs = pd.date_range(day_start, periods=24, freq="h")
+    u_gps_times = spicetime.adapt(pd.DatetimeIndex(hour_epochs), "iso")
+
+    fields = (geometry.GeometryField.SC_POSITION_INERTIAL, geometry.GeometryField.SC_VELOCITY_INERTIAL)
+    hourly = geometry.GeometryData(observer).get_geometry(u_gps_times, fields=list(fields))
+    position = hourly[list(geometry.GeometryField.SC_POSITION_INERTIAL.columns)].to_numpy()
+    velocity = hourly[list(geometry.GeometryField.SC_VELOCITY_INERTIAL.columns)].to_numpy()
+    logger.debug("Start-of-hour state: %d hourly epochs from %s", len(hour_epochs), day_start)
+    return position, velocity
+
+
+def subsatellite_lat_lon_alt(geometry_data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extract subsatellite ``lat``/``lon``/``alt`` from the geometry fields.
+
+    The subsatellite ground point's latitude/longitude plus the spacecraft geodetic
+    altitude, in the columns the product packager consumes. Used as the geolocation in
+    ``jpss_only`` mode, where no instrument pointing is available.
+
+    Parameters
+    ----------
+    geometry_data : pd.DataFrame
+        Output of :func:`calculate_geometry`.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns ``lat``, ``lon``, ``alt``, on the input's uGPS index.
+    """
+    subsatellite_lat, subsatellite_lon, _ = geometry.GeometryField.SUBSATELLITE.columns
+    (spacecraft_altitude,) = geometry.GeometryField.SC_ALTITUDE.columns
+    return pd.DataFrame(
+        {
+            "lat": geometry_data[subsatellite_lat].to_numpy(),
+            "lon": geometry_data[subsatellite_lon].to_numpy(),
+            "alt": geometry_data[spacecraft_altitude].to_numpy(),
+        },
+        index=geometry_data.index,
+    )
+
+
+def create_placeholder_geometry(n_samples: int) -> pd.DataFrame:
+    """
+    Placeholder geometry fields for ``use_geo`` false mode.
+
+    Mirrors :func:`calculate_geometry`'s columns filled with the product fill values, so the
+    packager always reads a geometry DataFrame and never branches on ``None``. Angular fields
+    (subsatellite / subsolar points) use -999; distance fields (radius, altitude) use -9999.
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+
+    Returns
+    -------
+    pd.DataFrame
+        One column per :data:`_GEOMETRY_FIELDS` output column plus
+        :data:`MOON_OFFSET_COLUMNS`, filled with the fill value.
+    """
+    angle_fill = np.full(n_samples, -999.0, dtype=np.float32)
+    distance_fill = np.full(n_samples, -9999.0, dtype=np.float64)
+    distance_columns = {
+        geometry.GeometryField.SC_RADIUS.columns[0],
+        geometry.GeometryField.SC_ALTITUDE.columns[0],
+        geometry.GeometryField.MOON_DISTANCE.columns[0],
+        *geometry.GeometryField.SC_POSITION_INERTIAL.columns,
+    }
+    data = {
+        column: (distance_fill if column in distance_columns else angle_fill)
+        for field in _GEOMETRY_FIELDS
+        for column in field.columns
+    }
+    # Derived downstream of curryer, so absent from ``_GEOMETRY_FIELDS``.
+    data.update({column: angle_fill for column in MOON_OFFSET_COLUMNS})
+    return pd.DataFrame(data)
+
+
+def create_placeholder_moon_in_fov(n_samples: int) -> np.ndarray:
+    """
+    Placeholder Moon-in-view flag for ``use_geo`` false mode.
+
+    Filled rather than 0: with geolocation bypassed the Moon's position is unknown, which
+    is not the same claim as "the Moon was not in view".
+
+    Parameters
+    ----------
+    n_samples : int
+        Number of samples on the L1B output time grid.
+
+    Returns
+    -------
+    np.ndarray
+        `int8` array filled with :data:`MOON_IN_FOV_FILL_VALUE`.
+    """
+    return np.full(n_samples, MOON_IN_FOV_FILL_VALUE, dtype=np.int8)
 
 
 def create_placeholder_geolocation_dataframe(n_samples: int) -> pd.DataFrame:
@@ -243,14 +716,13 @@ def _az_el_from_et(et: float) -> tuple[float, float] | None:
 
 def _az_el_on_et_times(et_times: np.ndarray, fill_value: float) -> tuple[np.ndarray, np.ndarray]:
     """Compute az/el at every ET sample (full-resolution SPICE path)."""
-    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
-    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float32)
+    az = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
+    el = np.full(shape=len(et_times), fill_value=fill_value, dtype=np.float64)
 
     for i, et in enumerate(np.asarray(et_times, dtype=np.float64)):
         result = _az_el_from_et(float(et))
         if result is not None:
-            az[i] = np.float32(result[0])
-            el[i] = np.float32(result[1])
+            az[i], el[i] = result
 
     return az, el
 
@@ -281,7 +753,8 @@ def calculate_azimuth_elevation_for_timestamps(
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
-        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float32.
+        `(azimuth_deg, elevation_deg)` arrays, each shape `(N,)`, dtype float64 so the scan
+        rates difference unrounded angles; writers cast to float32.
     """
     km.ensure_known_kernels_are_furnished()
 
@@ -290,3 +763,103 @@ def calculate_azimuth_elevation_for_timestamps(
     dt64_times = np.asarray(timestamps, dtype="datetime64[ns]")
     et_times = spicetime.adapt(dt64_times, "dt64", "et")
     return _az_el_on_et_times(et_times, fill_value)
+
+
+def calculate_scan_rates(
+    azimuth: np.ndarray,
+    elevation: np.ndarray,
+    timestamps: np.ndarray,
+    fill_value: float = -999.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Cone- and clock-angle rates from the motor encoder angles.
+
+    Follows the CERES heritage scan-rate algorithm, a backward two-point difference over the
+    measured sample interval:
+
+        clock rate = d(azimuth) / dt
+        cone rate = d(elevation) / dt, negative toward nadir and positive away
+
+    ``Clock_Angle_Rate`` is therefore the azimuth encoder rate, not the derivative of
+    ``Clock_Angle``, which is singular at nadir. Both differences take the shorter arc, so a
+    step across an encoder's wrap reads as the small motion it is.
+
+    An interval that crosses nadir, or anti-nadir on a calibration slew, has no single
+    direction and reports the positive magnitude, as heritage does. No range editing is
+    applied (CERES BDS quality flag QA-7): a rate is filled only where it cannot be formed.
+
+    Parameters
+    ----------
+    azimuth : np.ndarray
+        Motor azimuth on the L1B time grid, degrees in ``[0, 360)``, ``fill_value`` where
+        unavailable.
+    elevation : np.ndarray
+        Motor elevation on the same grid, degrees in ``(-180, 180]``, nadir at
+        :data:`GIMBAL_NADIR_ELEVATION_DEG`, ``fill_value`` where unavailable.
+    timestamps : np.ndarray
+        L1B output time grid as ``datetime64[ns]``.
+    fill_value : float
+        Product fill value, honoured on input and emitted on output.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)``, each shape ``(N,)`` float32, degrees per
+        second. Filled for the first sample, where either encoder angle is fill or NaN, and
+        where the spacing is more than :data:`SAMPLE_PERIOD_TOLERANCE_S` from
+        :data:`NOMINAL_SAMPLE_PERIOD_S`.
+
+    Raises
+    ------
+    ValueError
+        If the inputs differ in length, or if the angles are known across some interval but
+        no interval is on the L1B cadence.
+    """
+    azimuth = np.asarray(azimuth, dtype=np.float64)
+    elevation = np.asarray(elevation, dtype=np.float64)
+    times = np.asarray(timestamps, dtype="datetime64[ns]")
+    if not azimuth.shape == elevation.shape == times.shape:
+        raise ValueError(
+            "Encoder angles and timestamps must share one length; got azimuth "
+            f"{azimuth.shape}, elevation {elevation.shape}, timestamps {times.shape}"
+        )
+
+    fill = np.float32(fill_value)
+    cone_rate = np.full(azimuth.size, fill, dtype=np.float32)
+    clock_rate = np.full(azimuth.size, fill, dtype=np.float32)
+    if azimuth.size < 2:
+        return cone_rate, clock_rate
+
+    delta_t = np.diff(times).astype("timedelta64[ns]").astype(np.float64) / 1e9
+    known = (azimuth != fill_value) & (elevation != fill_value) & np.isfinite(azimuth) & np.isfinite(elevation)
+    known_pairs = known[:-1] & known[1:]
+    usable = (np.abs(delta_t - NOMINAL_SAMPLE_PERIOD_S) <= SAMPLE_PERIOD_TOLERANCE_S) & known_pairs
+    if known_pairs.any() and not usable.any():
+        raise ValueError(
+            f"No sample interval is within {SAMPLE_PERIOD_TOLERANCE_S} s of the {NOMINAL_SAMPLE_PERIOD_S} s "
+            f"L1B cadence (median spacing {np.median(delta_t):.6f} s); the scan rates cannot be formed"
+        )
+
+    # Offsets from nadir, wrapped so the sign flips at both nadir and anti-nadir.
+    previous_offset = (elevation[:-1] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
+    current_offset = (elevation[1:] - float(GIMBAL_NADIR_ELEVATION_DEG) + 180.0) % 360.0 - 180.0
+    with np.errstate(invalid="ignore", divide="ignore"):
+        elevation_rate = ((np.diff(elevation) + 180.0) % 360.0 - 180.0) / delta_t
+        azimuth_rate = ((np.diff(azimuth) + 180.0) % 360.0 - 180.0) / delta_t
+    # Non-strict, so an endpoint exactly at nadir keeps its interval's sign.
+    signed_cone_rate = np.where(
+        (previous_offset <= 0.0) & (current_offset <= 0.0),
+        -elevation_rate,
+        np.where((previous_offset >= 0.0) & (current_offset >= 0.0), elevation_rate, np.abs(elevation_rate)),
+    )
+
+    cone_rate[1:] = np.where(usable, signed_cone_rate, fill).astype(np.float32)
+    clock_rate[1:] = np.where(usable, azimuth_rate, fill).astype(np.float32)
+    logger.debug(
+        "Scan rates: %d of %d samples usable; |cone| max %.3f deg/s, |clock| max %.3f deg/s",
+        int(usable.sum()),
+        azimuth.size,
+        float(np.max(np.abs(cone_rate[cone_rate != fill]), initial=0.0)),
+        float(np.max(np.abs(clock_rate[clock_rate != fill]), initial=0.0)),
+    )
+    return cone_rate, clock_rate

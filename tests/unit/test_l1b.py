@@ -8,9 +8,11 @@ import pandas as pd
 import pytest
 import spiceypy as sp
 import xarray as xr
+from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.manifest import Manifest
 
 from libera_rad import l1b
+from libera_rad.constants import MOON_IN_FOV_FILL_VALUE
 
 
 class TestRequireSpiceInputs:
@@ -238,10 +240,10 @@ class TestReadAllInputData:
         assert "jpss_only mode: skipping SPICE file" in caplog.text
 
 
-class TestExtractRadiometerDatasets:
-    """Tests for _extract_radiometer_datasets function."""
+class TestExtractInputDataset:
+    """Tests for extract_input_dataset function."""
 
-    def test_extract_radiometer_datasets_success(self):
+    def test_extract_input_dataset_success(self):
         """Test successful extraction of radiometer and housekeeping datasets."""
         rad_dataset = xr.Dataset({"rad_var": (["time"], np.array([1, 2, 3]))})
         hk_dataset = xr.Dataset({"hk_var": (["time"], np.array([4, 5, 6]))})
@@ -251,30 +253,20 @@ class TestExtractRadiometerDatasets:
             "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": hk_dataset,
         }
 
-        rad_data, nom_hk_data = l1b._extract_radiometer_datasets(all_input_data)
+        rad_data = l1b.extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_rad_sample_decoded)
+        nom_hk_data = l1b.extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_nom_hk_decoded)
 
         assert "rad_var" in rad_data
         assert "hk_var" in nom_hk_data
 
-    def test_extract_radiometer_datasets_missing_rad_data(self):
-        """Test error when radiometer data is missing."""
+    def test_extract_input_dataset_missing_data(self):
+        """Test error raised when the requested dataset is missing."""
         all_input_data = {
             "LIBERA_L1A_NOM-HK-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183621.nc": xr.Dataset()
         }
 
-        with pytest.raises(ValueError, match="No radiometer sample data found"):
-            l1b._extract_radiometer_datasets(all_input_data)
-
-    def test_extract_radiometer_datasets_missing_hk_data(self):
-        """Test error when housekeeping data is missing."""
-        all_input_data = {
-            "LIBERA_L1A_RAD-SAMPLE-DECODED_V5-4-2_20201120T175950_20201120T190549_R26016183821.nc": xr.Dataset(
-                {"var": (["time"], [1, 2, 3])}
-            )
-        }
-
-        with pytest.raises(ValueError, match="No nominal housekeeping data found"):
-            l1b._extract_radiometer_datasets(all_input_data)
+        with pytest.raises(ValueError, match="No dataset found in input files: RAD-SAMPLE-DECODED"):
+            l1b.extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_rad_sample_decoded)
 
 
 class TestCalculateDataQualityFlags:
@@ -302,7 +294,9 @@ class TestProcessL1aToL1b:
     @pytest.fixture
     def mock_input_data(self):
         """Create mock input data."""
-        rad_times = pd.date_range("2025-01-01", periods=1000, freq="ms").values
+        # 5 ms raw samples decimate 2:1 onto the 10 ms output grid. The 100-sample length comes
+        # separately from the 10:1 downsample_libera_signal mock below.
+        rad_times = pd.date_range("2025-01-01", periods=1000, freq="5ms").values
         rad_data = xr.Dataset(
             {
                 "RAD_SAMPLE_FPE_TIME": (["time"], rad_times),
@@ -335,7 +329,11 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
+            patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
+            patch("libera_rad.geolocation.add_moon_boresight_offsets", side_effect=lambda _km, df: df),
+            patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
+            patch("libera_rad.geolocation.moon_in_field_of_view") as mock_moon_fov,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             # Setup mocks
@@ -355,14 +353,50 @@ class TestProcessL1aToL1b:
                     "alt": np.zeros(100, dtype=np.float32),
                 }
             )
-            subsatellite_lla = pd.DataFrame(
+            mock_geoloc.return_value = instrument_lla
+            subsat_lat = np.linspace(29, 30, 100, dtype=np.float32)
+            mock_geometry.return_value = pd.DataFrame(
                 {
-                    "lat": np.linspace(29, 30, 100, dtype=np.float32),
-                    "lon": np.linspace(-101, -100, 100, dtype=np.float32),
-                    "alt": np.zeros(100, dtype=np.float32),
+                    "subsatellite_latitude": subsat_lat,
+                    "subsatellite_longitude": np.linspace(-101, -100, 100, dtype=np.float32),
+                    "subsatellite_colatitude": (90.0 - subsat_lat).astype(np.float32),
+                    "subsolar_latitude": np.linspace(-23, -22, 100, dtype=np.float32),
+                    "subsolar_longitude": np.linspace(40, 41, 100, dtype=np.float32),
+                    "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
+                    "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
+                    "spacecraft_altitude": np.zeros(100, dtype=np.float32),
+                    "spacecraft_position_inertial_x": np.full(100, 5000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_y": np.full(100, 4000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_z": np.full(100, 3000.0, dtype=np.float64),
+                    "boresight_inertial_x": np.full(100, -1.0, dtype=np.float64),
+                    "boresight_inertial_y": np.zeros(100, dtype=np.float64),
+                    "boresight_inertial_z": np.zeros(100, dtype=np.float64),
+                    "viewing_zenith": np.linspace(10, 20, 100, dtype=np.float64),
+                    "solar_zenith": np.linspace(40, 50, 100, dtype=np.float64),
+                    "viewing_azimuth": np.linspace(100, 110, 100, dtype=np.float64),
+                    "solar_azimuth": np.linspace(120, 130, 100, dtype=np.float64),
+                    "relative_azimuth": np.linspace(150, 160, 100, dtype=np.float64),
+                    "cone_angle": np.linspace(5, 15, 100, dtype=np.float64),
+                    "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
+                    "spacecraft_velocity_inertial_y": np.full(100, 3.5, dtype=np.float64),
+                    "spacecraft_velocity_inertial_z": np.full(100, 6.0, dtype=np.float64),
+                    "attitude_q0": np.full(100, 1.0, dtype=np.float64),
+                    "attitude_q1": np.zeros(100, dtype=np.float64),
+                    "attitude_q2": np.zeros(100, dtype=np.float64),
+                    "attitude_q3": np.zeros(100, dtype=np.float64),
+                    "clock_angle": np.linspace(90, 270, 100, dtype=np.float64),
+                    "along_track_angle": np.full(100, -0.16, dtype=np.float64),
+                    "cross_track_angle": np.linspace(-60, 60, 100, dtype=np.float64),
+                    "moon_boresight_angle": np.linspace(2, 40, 100, dtype=np.float64),
+                    "moon_azimuth_offset": np.linspace(-30, 30, 100, dtype=np.float64),
+                    "moon_elevation_offset": np.linspace(5, -5, 100, dtype=np.float64),
+                    "moon_angular_radius": np.full(100, 0.26, dtype=np.float64),
+                    "moon_distance": np.full(100, 3.8e5, dtype=np.float64),
                 }
             )
-            mock_geoloc.return_value = (instrument_lla, subsatellite_lla)
+            mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
+            moon_flags = (np.linspace(2, 40, 100) <= 6.26).astype(np.int8)
+            mock_moon_fov.return_value = moon_flags
             mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
@@ -381,9 +415,46 @@ class TestProcessL1aToL1b:
             assert np.all(result["Subsatellite_Latitude"] != np.float32(-999))
             assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
             assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
+            assert not np.any(result["Subsolar_Longitude"] == np.float32(-999))
+            assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
             assert np.all(result["Azimuth"] == np.float32(0))
             assert np.all(result["Elevation"] == np.float32(0))
-            assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+            # Boresight surface geometry is populated from curryer. Assert the mocked values
+            # themselves: a not-equal-to-fill check would also pass on an all-NaN array.
+            assert np.allclose(result["Solar_Zenith_Surface"], np.linspace(40, 50, 100), atol=1e-4)
+            assert np.allclose(result["Viewing_Zenith_Surface"], np.linspace(10, 20, 100), atol=1e-4)
+            assert np.allclose(result["Viewing_Azimuth_Surface_WRT_North"], np.linspace(100, 110, 100), atol=1e-4)
+            assert np.allclose(result["Relative_Azimuth_Surface"], np.linspace(150, 160, 100), atol=1e-4)
+            assert np.allclose(result["Cone_Angle"], np.linspace(5, 15, 100), atol=1e-4)
+            assert result["Satellite_Position"].shape == (len(result["Latitude"]), 3)
+            assert result["Line_Of_Sight"].shape == (len(result["Latitude"]), 3)
+            assert not np.any(result["Satellite_Position"] == np.float64(-9999))
+            # Motion / attitude / orbital-frame fields from curryer.
+            assert result["Satellite_Velocity"].shape == (len(result["Latitude"]), 3)
+            assert np.allclose(result["Satellite_Attitude_Q0"], 1.0)
+            assert not np.any(result["Clock_Angle"] == np.float32(-999))
+            assert np.allclose(result["Along_Track_Angle"], -0.16, atol=1e-4)
+            assert np.allclose(result["Cross_Track_Angle"], np.linspace(-60, 60, 100), atol=1e-3)
+            # The mock parks the gimbal at zero, so only the first sample, with no predecessor, fills.
+            for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+                assert result[name][0] == np.float32(-999), f"{name} first sample should be filled"
+                assert np.all(result[name][1:] == np.float32(0)), f"{name} should be zero for a parked gimbal"
+            # Start-of-hour state on the fixed 24-hour grid.
+            assert result["Satellite_Position_Start_Of_Hour"].shape == (24, 3)
+            assert result["Satellite_Velocity_Start_Of_Hour"].shape == (24, 3)
+            assert np.allclose(result["Satellite_Position_Start_Of_Hour"], 7000.0)
+            assert np.allclose(result["Satellite_Velocity_Start_Of_Hour"], 7.5)
+            # Lunar geometry: the offsets pass through curryer unchanged and the flag is
+            # the predicate's, evaluated inside the kernel context alongside the geometry.
+            mock_moon_fov.assert_called_once()
+            assert np.allclose(result["Moon_Boresight_Angle"], np.linspace(2, 40, 100), atol=1e-3)
+            assert np.allclose(result["Moon_Azimuth_Offset"], np.linspace(-30, 30, 100), atol=1e-3)
+            assert np.allclose(result["Moon_Elevation_Offset"], np.linspace(5, -5, 100), atol=1e-3)
+            np.testing.assert_array_equal(result["Moon_In_Field_Of_View"], moon_flags)
+            assert result["Moon_In_Field_Of_View"].dtype == np.int8
+            # Guard: the mocked sweep must cross the threshold so both states are exercised.
+            assert moon_flags.any()
+            assert not moon_flags.all()
 
     def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
         """use_geo false should bypass KernelManager and SPICE geolocation."""
@@ -433,6 +504,15 @@ class TestProcessL1aToL1b:
         assert np.all(result["Subsatellite_Colatitude"] == np.float32(-999))
         assert np.all(result["Azimuth"] == np.float32(-999))
         assert np.all(result["Elevation"] == np.float32(-999))
+        # Geolocation is bypassed, so the Moon's position is unknown: the offsets take the
+        # angle fill and the flag its own fill, never 0 (which would assert the Moon was out).
+        assert np.all(result["Moon_Boresight_Angle"] == np.float32(-999))
+        assert np.all(result["Moon_Azimuth_Offset"] == np.float32(-999))
+        assert np.all(result["Moon_Elevation_Offset"] == np.float32(-999))
+        assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
+        for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+            assert np.all(result[name] == np.float32(-999)), f"{name} should be filled when use_geo is False"
+
         assert isinstance(dynamic_attributes, dict)
 
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
@@ -447,8 +527,11 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.radiance.downsample_libera_signal") as mock_downsample,
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
-            patch("libera_rad.geolocation.calculate_libera_base_subsatellite_geolocation") as mock_jpss_geo,
+            patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
+            patch("libera_rad.geolocation.add_moon_boresight_offsets", side_effect=lambda _km, df: df),
+            patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
+            patch("libera_rad.geolocation.moon_in_field_of_view") as mock_moon_fov,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             mock_cal = Mock()
@@ -459,26 +542,93 @@ class TestProcessL1aToL1b:
             mock_downsample.side_effect = lambda x, **kwargs: x[::10]
             mock_calibrate.return_value = np.random.rand(1000)
             mock_response.return_value = np.ones(501)
-            mock_jpss_geo.return_value = pd.DataFrame(
+            subsat_lat = np.linspace(10, 11, 100, dtype=np.float32)
+            mock_geometry.return_value = pd.DataFrame(
                 {
-                    "lat": np.linspace(10, 11, 100, dtype=np.float32),
-                    "lon": np.linspace(-80, -79, 100, dtype=np.float32),
-                    "alt": np.zeros(100, dtype=np.float32),
+                    "subsatellite_latitude": subsat_lat,
+                    "subsatellite_longitude": np.linspace(-80, -79, 100, dtype=np.float32),
+                    "subsatellite_colatitude": (90.0 - subsat_lat).astype(np.float32),
+                    "subsolar_latitude": np.linspace(-23, -22, 100, dtype=np.float32),
+                    "subsolar_longitude": np.linspace(40, 41, 100, dtype=np.float32),
+                    "subsolar_colatitude": np.linspace(113, 112, 100, dtype=np.float32),
+                    "spacecraft_radius": np.full(100, 7000.0, dtype=np.float64),
+                    "spacecraft_altitude": np.zeros(100, dtype=np.float32),
+                    "spacecraft_position_inertial_x": np.full(100, 5000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_y": np.full(100, 4000.0, dtype=np.float64),
+                    "spacecraft_position_inertial_z": np.full(100, 3000.0, dtype=np.float64),
+                    # No motor CK in jpss_only, so the boresight-derived fields are NaN.
+                    "boresight_inertial_x": np.full(100, np.nan),
+                    "boresight_inertial_y": np.full(100, np.nan),
+                    "boresight_inertial_z": np.full(100, np.nan),
+                    "viewing_zenith": np.full(100, np.nan),
+                    "solar_zenith": np.full(100, np.nan),
+                    "viewing_azimuth": np.full(100, np.nan),
+                    "solar_azimuth": np.full(100, np.nan),
+                    "relative_azimuth": np.full(100, np.nan),
+                    "cone_angle": np.full(100, np.nan),
+                    "clock_angle": np.full(100, np.nan),
+                    "along_track_angle": np.full(100, np.nan),
+                    "cross_track_angle": np.full(100, np.nan),
+                    "moon_boresight_angle": np.full(100, np.nan),
+                    "moon_azimuth_offset": np.full(100, np.nan),
+                    "moon_elevation_offset": np.full(100, np.nan),
+                    "moon_angular_radius": np.full(100, np.nan),
+                    "moon_distance": np.full(100, np.nan),
+                    # Velocity and body attitude come from the spacecraft observer, so they
+                    # resolve in jpss_only (SPK + JPSS CK) even without the motor CK.
+                    "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
+                    "spacecraft_velocity_inertial_y": np.full(100, 3.5, dtype=np.float64),
+                    "spacecraft_velocity_inertial_z": np.full(100, 6.0, dtype=np.float64),
+                    "attitude_q0": np.full(100, 1.0, dtype=np.float64),
+                    "attitude_q1": np.zeros(100, dtype=np.float64),
+                    "attitude_q2": np.zeros(100, dtype=np.float64),
+                    "attitude_q3": np.zeros(100, dtype=np.float64),
                 }
             )
+            mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
+            mock_moon_fov.return_value = np.full(100, MOON_IN_FOV_FILL_VALUE, dtype=np.int8)
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
 
         mock_prod_geo.assert_not_called()
-        mock_jpss_geo.assert_called_once()
+        mock_geometry.assert_called_once()
         assert np.all(result["Azimuth"] == 0)
         assert np.all(result["Elevation"] == 0)
         assert np.allclose(result["Subsatellite_Latitude"], result["Latitude"])
         assert np.allclose(result["Subsatellite_Longitude"], result["Longitude"])
         assert np.allclose(result["Colatitude"], 90.0 - result["Latitude"])
         assert np.allclose(result["Subsatellite_Colatitude"], 90.0 - result["Subsatellite_Latitude"])
-        assert np.all(result["Solar_Zenith_Surface"] == np.float32(-999))
+        # Subsolar point and satellite radius are populated from curryer.
+        assert not np.any(result["Subsolar_Latitude"] == np.float32(-999))
+        assert np.allclose(result["Radius_of_Satellite_from_Center_of_Earth"], 7000.0, rtol=0.0, atol=1e-6)
+        # Every boresight-derived field is NaN in jpss_only (no motor CK), not just some.
+        for name in (
+            "Solar_Zenith_Surface",
+            "Viewing_Zenith_Surface",
+            "Viewing_Azimuth_Surface_WRT_North",
+            "Solar_Azimuth_Surface_WRT_North",
+            "Relative_Azimuth_Surface",
+            "Cone_Angle",
+            "Clock_Angle",
+            "Along_Track_Angle",
+            "Cross_Track_Angle",
+            "Moon_Boresight_Angle",
+            "Moon_Azimuth_Offset",
+            "Moon_Elevation_Offset",
+        ):
+            assert np.all(np.isnan(result[name])), f"{name} should be NaN in jpss_only mode"
+        # With no boresight there is no Moon-in-view answer, so the flag fills rather
+        # than claiming the Moon was absent.
+        mock_moon_fov.assert_called_once()
+        assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
+        for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+            assert np.all(result[name] == np.float32(-999)), f"{name} should be filled in jpss_only mode"
+        # Spacecraft-observer fields still resolve without the motor CK.
+        assert not np.any(result["Satellite_Position"] == np.float64(-9999))
+        assert not np.any(result["Satellite_Velocity"] == np.float64(-999))
+        assert np.allclose(result["Satellite_Attitude_Q0"], 1.0)
+        assert np.allclose(result["Satellite_Position_Start_Of_Hour"], 7000.0)
 
     @pytest.mark.parametrize("dynamic_kernel_sources", [None, []])
     def test_process_l1a_to_l1b_requires_kernel_sources_when_use_geo_true(

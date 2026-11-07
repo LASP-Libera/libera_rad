@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import xarray as xr
 import yaml
-from libera_utils.io.filenaming import LiberaDataProductFilename
+from libera_utils.io.filenaming import LiberaDataProductFilename, format_from_semantic_version
 from libera_utils.io.manifest import Manifest, ManifestType
 
 from libera_rad import l1b
@@ -19,6 +19,55 @@ from libera_rad.radiometer.radiance import (
     interpolate_temperatures,
 )
 from libera_rad.version import version as libera_rad_version
+
+# Every geometry field the L1B product carries from curryer ``GeometryData``. All 27 shipped as
+# -999 / -9999 fill before this work; each one is now computed. Kept as a single explicit list
+# rather than derived from the product definition, so the set of fields we claim to populate is
+# reviewable at a glance and adding a field to the algorithm without covering it here is a
+# visible omission.
+#
+# Grouped by what has to resolve for the field to exist, which is also what the tests below
+# assert: the spacecraft-observer fields ride the JPSS SPK and resolve in every mode, while the
+# boresight fields need the motor CK and are therefore fill in ``jpss_only``.
+_SCAN_RATE_VARS: tuple[str, ...] = ("Cone_Angle_Rate", "Clock_Angle_Rate")
+
+_CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
+    # Position-derived, spacecraft observer -- available in every geolocation mode.
+    "Subsatellite_Latitude",
+    "Subsatellite_Longitude",
+    "Subsatellite_Colatitude",
+    "Subsolar_Latitude",
+    "Subsolar_Longitude",
+    "Subsolar_Colatitude",
+    "Radius_of_Satellite_from_Center_of_Earth",
+    # Boresight surface geometry -- requires the motor CK, so these are populated in the
+    # full-pointing fixture only (see TestL1bJpssOnlyIntegration for the jpss_only contract).
+    "Viewing_Zenith_Surface",
+    "Solar_Zenith_Surface",
+    "Viewing_Azimuth_Surface_WRT_North",
+    "Solar_Azimuth_Surface_WRT_North",
+    "Relative_Azimuth_Surface",
+    "Cone_Angle",
+    # Differenced from the motor encoders rather than derived by curryer, but they also need
+    # the motor CK.
+    *_SCAN_RATE_VARS,
+    # Orbital-frame look angles and the boresight vector -- also instrument observer, so these
+    # are fill in jpss_only for the same reason as the surface geometry above.
+    "Clock_Angle",
+    "Along_Track_Angle",
+    "Cross_Track_Angle",
+    "Line_Of_Sight",
+    # Motion and attitude -- spacecraft observer, so unlike the boresight fields these still
+    # resolve in jpss_only. The start-of-hour pair comes from a second, hour-boundary query.
+    "Satellite_Position",
+    "Satellite_Velocity",
+    "Satellite_Position_Start_Of_Hour",
+    "Satellite_Velocity_Start_Of_Hour",
+    "Satellite_Attitude_Q0",
+    "Satellite_Attitude_Q1",
+    "Satellite_Attitude_Q2",
+    "Satellite_Attitude_Q3",
+)
 
 # Mapping from ChannelName enum values to L1B product variable names
 _CHANNEL_TO_RADIANCE_VAR: dict[str, str] = {
@@ -136,9 +185,11 @@ class TestL1bProductDefinitionCompliance:
                 f"Required global attribute '{attr_name}' not found in output dataset"
             )
 
-    def test_algorithm_version_matches_package(self, l1b_product_dataset):
-        """The algorithm_version global attribute must match the installed package version."""
+    def test_algorithm_version_matches_package(self, l1b_product_dataset, l1b_product_file_path):
+        """The algorithm_version global attribute and filename version must match the installed package version."""
         assert l1b_product_dataset.attrs["algorithm_version"] == libera_rad_version()
+        filename = LiberaDataProductFilename.from_file_path(l1b_product_file_path)
+        assert filename.filename_parts.version == format_from_semantic_version(libera_rad_version())
 
 
 class TestL1bScienceValues:
@@ -182,6 +233,19 @@ class TestL1bScienceValues:
         fill_value = product_definition["variables"][var_name]["attributes"]["_FillValue"]
         vals = l1b_product_dataset[var_name].values
         assert np.any(vals != fill_value), f"{var_name} contains only fill-value sentinels"
+
+    @pytest.mark.parametrize("var_name", _CURRYER_GEOMETRY_VARS)
+    def test_curryer_geometry_fields_written_to_product(self, l1b_product_dataset, product_definition, var_name):
+        """Each curryer-derived geometry field must reach the written product as real values.
+
+        Guards the full path from ``calculate_geometry`` through packaging to NetCDF: a field
+        that silently reverted to its fill sentinel, or came back all-NaN because the kernels
+        did not cover the granule, fails here rather than shipping in the product.
+        """
+        fill_value = product_definition["variables"][var_name]["attributes"]["_FillValue"]
+        vals = l1b_product_dataset[var_name].values
+        computed = vals[(vals != fill_value) & np.isfinite(vals)]
+        assert len(computed) > 0, f"{var_name} reached the product with no computed values (all fill or NaN)"
 
     def test_operational_mode_matches_fixture_obsid(self, l1b_product_dataset, product_definition):
         """Operational_Mode should reflect the fixture L1A OBSID (currently constant 128 in test data)."""
@@ -335,6 +399,60 @@ class TestL1bPhysicalInvariants:
             non_fill = vals[vals != fill_value]
             assert np.all(non_fill >= 0), f"{var_name}: non-fill radiance values must be non-negative"
 
+    @pytest.mark.parametrize("var_name", [v for v in _CURRYER_GEOMETRY_VARS if v not in _SCAN_RATE_VARS])
+    def test_curryer_geometry_fields_within_valid_range(self, l1b_product_dataset, var_name):
+        """Computed geometry values must respect the valid_range the product definition declares."""
+        definition = yaml.safe_load(product_config_path.read_text())["variables"][var_name]["attributes"]
+        low, high = definition["valid_range"]
+        fill_value = definition["_FillValue"]
+
+        vals = l1b_product_dataset[var_name].values
+        computed = vals[(vals != fill_value) & np.isfinite(vals)]
+
+        assert len(computed) > 0, f"No computed {var_name} values available for range checks"
+        assert np.all((computed >= low) & (computed <= high)), (
+            f"{var_name} has computed values outside its declared valid_range [{low}, {high}]: "
+            f"min={computed.min()}, max={computed.max()}"
+        )
+
+    def test_scan_rates_match_the_reference_scan(self, l1b_product_dataset):
+        """The reference granule is a fixed-azimuth cross-track scan.
+
+        The clock rate reads zero throughout. Away from nadir the cone rate has the sign of the
+        change in Cone_Angle, which also checks the elevation encoder's nadir reading, and it
+        stays under the 62.5 deg/s elevation scan ceiling plus servo jitter.
+        """
+        fill = -999.0
+        clock_rate = l1b_product_dataset["Clock_Angle_Rate"].values
+        computed = (clock_rate != fill) & np.isfinite(clock_rate)
+        assert computed.sum() > 0.99 * clock_rate.size
+        assert np.max(np.abs(clock_rate[computed])) < 1e-3
+
+        cone_rate = l1b_product_dataset["Cone_Angle_Rate"].values[1:]
+        cone_angle = l1b_product_dataset["Cone_Angle"].values
+        off_nadir = (cone_rate != fill) & np.isfinite(cone_rate) & (np.minimum(cone_angle[:-1], cone_angle[1:]) > 1.0)
+        assert off_nadir.sum() > 0.9 * cone_rate.size
+        np.testing.assert_array_equal(np.sign(cone_rate[off_nadir]), np.sign(np.diff(cone_angle)[off_nadir]))
+        computed_cone = (cone_rate != fill) & np.isfinite(cone_rate)
+        assert np.max(np.abs(cone_rate[computed_cone])) < 100.0
+
+    def test_subsatellite_point_tracks_instrument_ground_point(self, l1b_product_dataset):
+        """The subsatellite point must stay near the instrument ground point.
+
+        Both describe the same overpass, so a swap, a frame error, or a stale index would show
+        up as a gross separation. The bound is loose on purpose -- the boresight scans
+        cross-track away from nadir, so real separation of several degrees is expected.
+        """
+        lat_fill = -999.0
+        lat = l1b_product_dataset["Latitude"].values
+        subsat_lat = l1b_product_dataset["Subsatellite_Latitude"].values
+
+        non_fill = (lat != lat_fill) & np.isfinite(lat) & (subsat_lat != lat_fill) & np.isfinite(subsat_lat)
+        assert np.any(non_fill), "No overlapping computed Latitude/Subsatellite_Latitude samples"
+        assert np.max(np.abs(lat[non_fill] - subsat_lat[non_fill])) < 30.0, (
+            "Subsatellite_Latitude is implausibly far from the instrument Latitude"
+        )
+
     def test_earth_sun_distance_plausible(self, l1b_product_dataset):
         """Earth-Sun distance must be within the nominal orbital range of 0.95 to 1.05 AU."""
         distance_au = float(l1b_product_dataset.attrs["Earth_Sun_Distance_AU"])
@@ -429,3 +547,34 @@ class TestL1bJpssOnlyIntegration:
 
         assert np.all(jpss_only_l1b_product_dataset["Azimuth"].values == 0)
         assert np.all(jpss_only_l1b_product_dataset["Elevation"].values == 0)
+
+    def test_jpss_only_spacecraft_geometry_still_populated(self, jpss_only_l1b_product_dataset):
+        """Spacecraft-observer fields ride the JPSS SPK, so they resolve without the motor CK."""
+        for var_name in ("Subsolar_Latitude", "Subsolar_Longitude", "Radius_of_Satellite_from_Center_of_Earth"):
+            vals = jpss_only_l1b_product_dataset[var_name].values
+            computed = vals[(vals != -999.0) & (vals != -9999.0) & np.isfinite(vals)]
+            assert len(computed) > 0, f"{var_name} should still be computed in jpss_only mode"
+
+    @pytest.mark.parametrize(
+        "var_name",
+        [
+            "Viewing_Zenith_Surface",
+            "Solar_Zenith_Surface",
+            "Viewing_Azimuth_Surface_WRT_North",
+            "Solar_Azimuth_Surface_WRT_North",
+            "Relative_Azimuth_Surface",
+            "Cone_Angle",
+            "Cone_Angle_Rate",
+            "Clock_Angle_Rate",
+        ],
+    )
+    def test_jpss_only_boresight_geometry_is_fill(self, jpss_only_l1b_product_dataset, var_name):
+        """Boresight fields need the instrument frame, which does not resolve without the motor CK.
+
+        They must ship as fill rather than as plausible-looking numbers computed from a
+        fallback frame -- silently wrong geometry is worse than declared-absent geometry.
+        """
+        vals = jpss_only_l1b_product_dataset[var_name].values
+        assert np.all((vals == -999.0) | np.isnan(vals)), (
+            f"{var_name} should be fill/NaN in jpss_only mode, but has computed values"
+        )

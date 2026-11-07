@@ -28,6 +28,7 @@ from libera_rad.calibration.constants import (
     HousekeepingTemperatureCoefficient as TemperatureCoefficient,
 )
 from libera_rad.config import l1b_ground_calibration_path
+from libera_rad.constants import L1B_OUTPUT_HZ
 from libera_rad.radiometer.gain_calibration import (
     apply_gain_calibration,
     decimation_factor,
@@ -36,7 +37,6 @@ from libera_rad.radiometer.gain_calibration import (
 )
 
 _RAD_SAMPLE_HZ = 200
-_L1B_OUTPUT_HZ = 100
 
 logger = logging.getLogger(__name__)
 
@@ -780,7 +780,7 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
 
         # Downsample to 100Hz
         calibrated_100hz_rad_data = downsample_libera_signal(
-            channel_calibrated_rad_data, from_rate=_RAD_SAMPLE_HZ, to_rate=_L1B_OUTPUT_HZ
+            channel_calibrated_rad_data, from_rate=_RAD_SAMPLE_HZ, to_rate=L1B_OUTPUT_HZ
         )
         calibrated_data_by_channel[channel_name] = calibrated_100hz_rad_data
         if not calibrated_data_points:
@@ -789,7 +789,7 @@ def calibrate_and_downsample_radiometer_data(rad_data: xr.Dataset) -> tuple[np.n
     # TODO[LIBSDC-720]: double check with Dave on timestamp downsampling
     if not np.issubdtype(raw_times.dtype, np.datetime64):
         raise ValueError("RAD_SAMPLE_FPE_TIME must be datetime64[ns]; open L1A NetCDF inputs with decode_times=True.")
-    factor = decimation_factor(_RAD_SAMPLE_HZ, _L1B_OUTPUT_HZ)
+    factor = decimation_factor(_RAD_SAMPLE_HZ, L1B_OUTPUT_HZ)
     timestamps = raw_times[::factor][:calibrated_data_points]
     return timestamps, calibrated_data_by_channel
 

@@ -7,6 +7,7 @@ import pytest
 
 # Local
 from libera_rad import cli, l1b
+from libera_rad.calibration import cal_algorithm
 
 
 @pytest.mark.parametrize(
@@ -14,9 +15,13 @@ from libera_rad import cli, l1b
     [
         (
             ["-v", "input_manifest.json"],
-            argparse.Namespace(func=l1b.algorithm, manifest="input_manifest.json", verbose=True),
+            argparse.Namespace(func=l1b.algorithm, manifest="input_manifest.json", verbose=True, version=False),
         ),
-        (["--version"], argparse.Namespace(func=cli.print_version_info, manifest=None, verbose=False)),
+        (["--version"], argparse.Namespace(func=cli.print_version_info, manifest=None, verbose=False, version=True)),
+        (
+            ["cal-combine", "cal_manifest.json"],
+            argparse.Namespace(func=cal_algorithm.algorithm, manifest="cal_manifest.json", verbose=False),
+        ),
     ],
 )
 def test_parse_cli_args(cli_args, parsed):

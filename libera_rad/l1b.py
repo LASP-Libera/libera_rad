@@ -15,6 +15,7 @@ import xarray as xr
 from astropy.coordinates import get_sun
 from astropy.time import Time
 from cloudpathlib import AnyPath, S3Path
+from curryer.compute import geometry
 from libera_utils import Manifest, smart_open
 from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.filenaming import LiberaDataProductFilename
@@ -313,31 +314,44 @@ def process_l1a_to_l1b(
     """
 
     # Extract input datasets
-    rad_data, nom_hk_data = _extract_radiometer_datasets(all_input_data)
+    rad_data = extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_rad_sample_decoded)
+    nom_hk_data = extract_input_dataset(all_input_data, DataProductIdentifier.l1a_icie_nom_hk_decoded)
 
     # Process radiometer data: timestamps are datetime64[ns] from decoded L1A FPE time
     timestamps, calibrated_data_by_channel = radiance.calibrate_and_downsample_radiometer_data(rad_data)
     n_samples = len(timestamps)
-    subsatellite_lat_lon: pd.DataFrame | None = None
+    start_of_hour_state: tuple[np.ndarray, np.ndarray] | None = None
 
     if not use_geo:
         lat_lon_alt = geolocation.create_placeholder_geolocation_dataframe(n_samples)
         azimuth, elevation = geolocation.create_placeholder_azimuth_elevation(n_samples)
+        geometry_data = geolocation.create_placeholder_geometry(n_samples)
+        moon_in_fov = geolocation.create_placeholder_moon_in_fov(n_samples)
+        scan_rates = geolocation.create_placeholder_scan_rates(n_samples)
     elif jpss_only_mode:
         if not dynamic_kernel_sources:
             raise ValueError("SPICE kernel sources are required for geolocation when jpss_only_mode is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-            lat_lon_alt = geolocation.calculate_libera_base_subsatellite_geolocation(km, timestamps)
-        subsatellite_lat_lon = lat_lon_alt
+            geometry_data = geolocation.calculate_geometry(km, timestamps)
+            geometry_data = geolocation.add_moon_boresight_offsets(km, geometry_data)
+            start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
+            moon_in_fov = geolocation.moon_in_field_of_view(km, geometry_data)
+        lat_lon_alt = geolocation.subsatellite_lat_lon_alt(geometry_data)
         azimuth, elevation = geolocation.create_jpss_only_motor_angles(n_samples)
+        scan_rates = geolocation.create_placeholder_scan_rates(n_samples)
     else:
         if not dynamic_kernel_sources:
             raise ValueError("SPICE kernel sources are required for geolocation when use_geo is True")
         with KernelManager() as km:
             km.load_libera_dynamic_kernels(dynamic_kernel_sources, needs_naif_kernels=True, needs_static_kernels=True)
-            lat_lon_alt, subsatellite_lat_lon = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            lat_lon_alt = geolocation.calculate_geolocation_for_timestamps(km, timestamps)
+            geometry_data = geolocation.calculate_geometry(km, timestamps)
+            geometry_data = geolocation.add_moon_boresight_offsets(km, geometry_data)
+            start_of_hour_state = geolocation.calculate_start_of_hour_state(km, timestamps)
             azimuth, elevation = geolocation.calculate_azimuth_elevation_for_timestamps(km, timestamps)
+            moon_in_fov = geolocation.moon_in_field_of_view(km, geometry_data)
+        scan_rates = geolocation.calculate_scan_rates(azimuth, elevation, timestamps)
 
     # Interpolate temperatures
     interpolated_temperatures = radiance.interpolate_temperatures(timestamps, nom_hk_data)
@@ -355,64 +369,57 @@ def process_l1a_to_l1b(
         operational_mode=operational_mode,
         azimuth=azimuth,
         elevation=elevation,
-        subsatellite_lat_lon=subsatellite_lat_lon,
+        geometry_data=geometry_data,
+        moon_in_fov=moon_in_fov,
+        scan_rates=scan_rates,
+        start_of_hour_state=start_of_hour_state,
     )
 
     return l1b_product, attributes
 
 
-def _extract_radiometer_datasets(all_input_data: dict[str, xr.Dataset]) -> tuple[xr.Dataset, xr.Dataset]:
+def extract_input_dataset(
+    all_input_data: dict[str, xr.Dataset], data_product_identifier: DataProductIdentifier
+) -> xr.Dataset:
     """
-    Extract radiometer and housekeeping datasets from input data.
-
-    Searches through the input data dictionary to identify and extract the radiometer sample data and nominal
-    housekeeping data based on filename patterns.
+    Searches through the input data dictionary to identify and extract the dataset for a given data product identifier.
 
     Parameters
     ----------
     all_input_data : dict[str, xr.Dataset]
         Dictionary of input datasets keyed by filename.
+    data_product_identifier : DataProductIdentifier
+        DataProduct identifier matching the dataset to be selected.
 
     Returns
     -------
     xr.Dataset
-        Radiometer sample dataset containing raw radiometer measurements.
-    xr.Dataset
-        Nominal housekeeping dataset containing temperature and other ancillary measurements.
+        Dataset matching the requested data product identifier.
 
     Raises
     ------
     ValueError
-        If radiometer sample data (filename containing 'rad_sample') is not found.
-    ValueError
-        If nominal housekeeping data (filename containing 'nom_hk') is not found.
+        If no input dataset matches the requested data product identifier.
 
     Notes
     -----
-    Files are identified by searching for 'rad_sample' and 'nom_hk' substrings in the filename keys.
+    Files are identified by parsing each filename and comparing its
+    ``data_product_id`` to ``data_product_identifier``.
     """
-    rad_data = xr.Dataset()
-    nom_hk_data = xr.Dataset()
 
     for file_name, dataset in all_input_data.items():
         libera_filename = LiberaDataProductFilename.from_file_path(file_name)
-        if libera_filename.data_product_id == DataProductIdentifier.l1a_icie_rad_sample_decoded.value:
-            rad_data = dataset
-        elif libera_filename.data_product_id == DataProductIdentifier.l1a_icie_nom_hk_decoded.value:
-            nom_hk_data = dataset
+        if libera_filename.data_product_id == data_product_identifier.value:
+            return dataset
 
-    if not rad_data:
-        raise ValueError("No radiometer sample data found in input files")
-    if not nom_hk_data:
-        raise ValueError("No nominal housekeeping data found in input files")
-
-    return rad_data, nom_hk_data
+    raise ValueError("No dataset found in input files: " + data_product_identifier.value)
 
 
 def _colatitude_from_latitude(lat: np.ndarray, fill: float = -999.0) -> np.ndarray:
-    """Geodetic colatitude (degrees) from latitude, preserving product fill values."""
+    """Geodetic colatitude (degrees) from latitude via curryer, preserving product fills."""
     fill_val = np.float32(fill)
-    return np.where(lat == fill_val, fill_val, (90.0 - lat).astype(np.float32))
+    colat = geometry.colatitude(lat, degrees=True).astype(np.float32)
+    return np.where(lat == fill_val, fill_val, colat)
 
 
 def _package_l1b_product(
@@ -422,7 +429,10 @@ def _package_l1b_product(
     operational_mode: np.ndarray,
     azimuth: np.ndarray,
     elevation: np.ndarray,
-    subsatellite_lat_lon: pd.DataFrame | None = None,
+    geometry_data: pd.DataFrame,
+    moon_in_fov: np.ndarray,
+    scan_rates: tuple[np.ndarray, np.ndarray],
+    start_of_hour_state: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> tuple[dict[str, ndarray], dict[str, Any]]:
     """
     Package L1B product according to product definition.
@@ -433,10 +443,21 @@ def _package_l1b_product(
         Radiometer measurement timestamps at 100Hz.
     lat_lon_alt : pd.DataFrame
         Instrument geolocation (latitude, longitude, altitude) on the L1B time grid.
-    subsatellite_lat_lon : pd.DataFrame, optional
-        Subsatellite point geolocation. When omitted, ``Subsatellite_*`` fields are
-        filled with product placeholders. In ``jpss_only`` mode this matches
-        ``lat_lon_alt``.
+    geometry_data : pd.DataFrame
+        Curryer ``GeometryData`` fields (subsatellite / subsolar points, satellite radius,
+        position, velocity and attitude, and the boresight surface and orbital-frame angles)
+        for the granule; always provided -- real values, or fill values in ``use_geo`` false
+        mode, where geolocation is intentionally bypassed and no data is forthcoming.
+    moon_in_fov : np.ndarray
+        `int8` Moon-in-view flag on the L1B time grid, from
+        :func:`libera_rad.geolocation.moon_in_field_of_view`.
+    scan_rates : tuple[np.ndarray, np.ndarray]
+        ``(cone_angle_rate, clock_angle_rate)`` on the L1B time grid, from
+        :func:`libera_rad.geolocation.calculate_scan_rates`; filled in the modes with no
+        motor encoder record.
+    start_of_hour_state : tuple[np.ndarray, np.ndarray], optional
+        `(position, velocity)` on the 24-hour ``N_HOURS`` grid, each `(24, 3)` in ECEF.
+        When omitted, the ``*_Start_Of_Hour`` fields are filled with the product fill value.
     calculated_radiance_by_channel : dict[str, np.ndarray]
         Calculated radiance values for each channel.
 
@@ -454,10 +475,6 @@ def _package_l1b_product(
     placeholder_zeros = calculate_data_quality_flags(data_length)
     placeholder_neg999 = np.full(shape=data_length, fill_value=-999, dtype=np.float32)
     placeholder_neg9999 = np.full(shape=data_length, fill_value=-9999, dtype=np.float32)
-    placeholder_neg9999_f64 = np.full(shape=data_length, fill_value=-9999, dtype=np.float64)
-    placeholder_3d_neg999 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float64)
-    placeholder_3d_neg9999 = np.full(shape=[data_length, 3], fill_value=-9999, dtype=np.float64)
-    placeholder_3d_neg999_f32 = np.full(shape=[data_length, 3], fill_value=-999, dtype=np.float32)
     placeholder_hourly_3d_neg999 = np.full(shape=[24, 3], fill_value=-999, dtype=np.float64)  # 24 hours per day
     placeholder_hourly_3d_neg9999 = np.full(shape=[24, 3], fill_value=-9999, dtype=np.float64)  # 24 hours per day
     radiometer_time = np.asarray(timestamps, dtype="datetime64[ns]")
@@ -466,14 +483,57 @@ def _package_l1b_product(
     lon = lat_lon_alt["lon"].to_numpy().astype(np.float32)
     alt = lat_lon_alt["alt"].to_numpy().astype(np.float32)
     colat = _colatitude_from_latitude(lat)
-    if subsatellite_lat_lon is not None:
-        subsatellite_lat = subsatellite_lat_lon["lat"].to_numpy().astype(np.float32)
-        subsatellite_lon = subsatellite_lat_lon["lon"].to_numpy().astype(np.float32)
-        subsatellite_colat = _colatitude_from_latitude(subsatellite_lat)
+    subsatellite_lat = geometry_data["subsatellite_latitude"].to_numpy().astype(np.float32)
+    subsatellite_lon = geometry_data["subsatellite_longitude"].to_numpy().astype(np.float32)
+    subsatellite_colat = geometry_data["subsatellite_colatitude"].to_numpy().astype(np.float32)
+    subsolar_lat = geometry_data["subsolar_latitude"].to_numpy().astype(np.float32)
+    subsolar_lon = geometry_data["subsolar_longitude"].to_numpy().astype(np.float32)
+    subsolar_colat = geometry_data["subsolar_colatitude"].to_numpy().astype(np.float32)
+    satellite_radius = geometry_data["spacecraft_radius"].to_numpy().astype(np.float64)
+    satellite_position = np.stack(
+        [
+            geometry_data["spacecraft_position_inertial_x"].to_numpy(),
+            geometry_data["spacecraft_position_inertial_y"].to_numpy(),
+            geometry_data["spacecraft_position_inertial_z"].to_numpy(),
+        ],
+        axis=1,
+    ).astype(np.float64)
+    line_of_sight = np.stack(
+        [
+            geometry_data["boresight_inertial_x"].to_numpy(),
+            geometry_data["boresight_inertial_y"].to_numpy(),
+            geometry_data["boresight_inertial_z"].to_numpy(),
+        ],
+        axis=1,
+    ).astype(np.float32)
+    viewing_zenith = geometry_data["viewing_zenith"].to_numpy().astype(np.float32)
+    solar_zenith = geometry_data["solar_zenith"].to_numpy().astype(np.float32)
+    viewing_azimuth = geometry_data["viewing_azimuth"].to_numpy().astype(np.float32)
+    solar_azimuth = geometry_data["solar_azimuth"].to_numpy().astype(np.float32)
+    relative_azimuth = geometry_data["relative_azimuth"].to_numpy().astype(np.float32)
+    cone_angle = geometry_data["cone_angle"].to_numpy().astype(np.float32)
+    satellite_velocity = np.stack(
+        [
+            geometry_data["spacecraft_velocity_inertial_x"].to_numpy(),
+            geometry_data["spacecraft_velocity_inertial_y"].to_numpy(),
+            geometry_data["spacecraft_velocity_inertial_z"].to_numpy(),
+        ],
+        axis=1,
+    ).astype(np.float64)
+    attitude_q = [geometry_data[f"attitude_q{i}"].to_numpy().astype(np.float32) for i in range(4)]
+    clock_angle = geometry_data["clock_angle"].to_numpy().astype(np.float32)
+    cone_angle_rate, clock_angle_rate = scan_rates
+    along_track_angle = geometry_data["along_track_angle"].to_numpy().astype(np.float32)
+    cross_track_angle = geometry_data["cross_track_angle"].to_numpy().astype(np.float32)
+    moon_boresight_angle = geometry_data["moon_boresight_angle"].to_numpy().astype(np.float32)
+    moon_azimuth_offset = geometry_data["moon_azimuth_offset"].to_numpy().astype(np.float32)
+    moon_elevation_offset = geometry_data["moon_elevation_offset"].to_numpy().astype(np.float32)
+
+    if start_of_hour_state is not None:
+        hourly_position, hourly_velocity = (arr.astype(np.float64) for arr in start_of_hour_state)
     else:
-        subsatellite_lat = placeholder_neg999
-        subsatellite_lon = placeholder_neg999
-        subsatellite_colat = placeholder_neg999
+        hourly_position = placeholder_hourly_3d_neg9999
+        hourly_velocity = placeholder_hourly_3d_neg999
 
     l1b_dataset = {
         "radiometer_time": radiometer_time,
@@ -486,34 +546,39 @@ def _package_l1b_product(
         "Altitude": alt,
         "Terrain_Corrected_Altitude": placeholder_neg9999,
         "Subsatellite_Latitude": subsatellite_lat,
-        "Subsolar_Latitude": placeholder_neg999,
+        "Subsolar_Latitude": subsolar_lat,
         "Subsatellite_Colatitude": subsatellite_colat,
-        "Subsolar_Colatitude": placeholder_neg999,
+        "Subsolar_Colatitude": subsolar_colat,
         "Subsatellite_Longitude": subsatellite_lon,
-        "Subsolar_Longitude": placeholder_neg999,
+        "Subsolar_Longitude": subsolar_lon,
         # Geometry
-        "Along_Track_Angle": placeholder_neg999,
-        "Cross_Track_Angle": placeholder_neg999,
-        "Solar_Zenith_Surface": placeholder_neg999,
-        "Relative_Azimuth_Surface": placeholder_neg999,
-        "Viewing_Zenith_Surface": placeholder_neg999,
-        "Viewing_Azimuth_Surface_WRT_North": placeholder_neg999,
-        "Satellite_Position": placeholder_3d_neg9999,
-        "Satellite_Position_Start_Of_Hour": placeholder_hourly_3d_neg9999,
-        "Satellite_Velocity": placeholder_3d_neg999,
-        "Satellite_Velocity_Start_Of_Hour": placeholder_hourly_3d_neg999,
-        "Satellite_Attitude_Q0": placeholder_neg999,
-        "Satellite_Attitude_Q1": placeholder_neg999,
-        "Satellite_Attitude_Q2": placeholder_neg999,
-        "Satellite_Attitude_Q3": placeholder_neg999,
+        "Along_Track_Angle": along_track_angle,
+        "Cross_Track_Angle": cross_track_angle,
+        "Solar_Zenith_Surface": solar_zenith,
+        "Relative_Azimuth_Surface": relative_azimuth,
+        "Viewing_Zenith_Surface": viewing_zenith,
+        "Viewing_Azimuth_Surface_WRT_North": viewing_azimuth,
+        "Solar_Azimuth_Surface_WRT_North": solar_azimuth,
+        "Satellite_Position": satellite_position,
+        "Satellite_Position_Start_Of_Hour": hourly_position,
+        "Satellite_Velocity": satellite_velocity,
+        "Satellite_Velocity_Start_Of_Hour": hourly_velocity,
+        "Satellite_Attitude_Q0": attitude_q[0],
+        "Satellite_Attitude_Q1": attitude_q[1],
+        "Satellite_Attitude_Q2": attitude_q[2],
+        "Satellite_Attitude_Q3": attitude_q[3],
         "Azimuth": azimuth.astype(np.float32),
         "Elevation": elevation.astype(np.float32),
-        "Line_Of_Sight": placeholder_3d_neg999_f32,
-        "Radius_of_Satellite_from_Center_of_Earth": placeholder_neg9999_f64,
-        "Cone_Angle": placeholder_neg999,
-        "Cone_Angle_Rate": placeholder_neg999,
-        "Clock_Angle": placeholder_neg999,
-        "Clock_Angle_Rate": placeholder_neg999,
+        "Line_Of_Sight": line_of_sight,
+        "Radius_of_Satellite_from_Center_of_Earth": satellite_radius,
+        "Cone_Angle": cone_angle,
+        "Cone_Angle_Rate": cone_angle_rate,
+        "Clock_Angle": clock_angle,
+        "Clock_Angle_Rate": clock_angle_rate,
+        "Moon_Boresight_Angle": moon_boresight_angle,
+        "Moon_Azimuth_Offset": moon_azimuth_offset,
+        "Moon_Elevation_Offset": moon_elevation_offset,
+        "Moon_In_Field_Of_View": moon_in_fov.astype(np.int8),
         # Instrument
         "Operational_Mode": operational_mode.astype(np.uint16),
         "Filtered_Radiance_SW": calculated_radiance_by_channel.get(
@@ -649,13 +714,14 @@ def create_and_write_data_product(
     # Step 5: Write the data product file
     logger.info("Step 5: Writing data product to environment specified file")
 
+    product_attributes = {**dynamic_attributes, "algorithm_version": libera_rad_version()}
     output_file_path = write_libera_data_product(
         data_product_definition=product_config_path,
         data=processed_data,
         output_path=output_path,
         time_variable="radiometer_time",
         strict=True,
-        dynamic_product_attributes=dynamic_attributes,
+        dynamic_product_attributes=product_attributes,
     )
     logger.info(f"Saving to {output_file_path}")
     return output_file_path

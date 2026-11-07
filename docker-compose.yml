@@ -7,6 +7,16 @@ services:
       context: .
       target: libera-rad
 
+  # ObsID-dispatched calibration combine (same image as rad; requires LIBERA_CAL_OBSID).
+  # Example: LIBERA_CAL_OBSID=512 PROCESSING_PATH=./out docker compose run cal-combine /path/to/manifest.json
+  cal-combine:
+    platform: linux/amd64
+    image: libera-radiometer:latest
+    build:
+      context: .
+      target: libera-rad
+    entrypoint: ["libera-rad", "cal-combine"]
+
   # Runs tests inside a docker container.
   tests:
     platform: linux/amd64

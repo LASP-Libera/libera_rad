@@ -1,0 +1,141 @@
+"""ObsID-dispatched calibration product algorithm.
+
+Selected by the ``LIBERA_CAL_OBSID`` environment variable and invoked via
+``libera-rad cal-combine <manifest>``.
+
+SWC/LWC/SOLAR events always attach SPICE-derived Azimuth/Elevation from
+AZROT-CK and ELSCAN-CK on the input manifest. Unlike L1B, cal-combine does
+not honor ``configuration.use_geo``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+
+from cloudpathlib import AnyPath, S3Path
+from libera_utils import Manifest
+from libera_utils.io.netcdf import write_libera_data_product
+from libera_utils.logutil import configure_task_logging
+
+from libera_rad.calibration.combiners.l1a_cal_event_utils import (
+    add_input_files,
+    attach_azimuth_elevation_positions,
+    build_event_dataset,
+    confirm_obsid_matches_hk,
+    extract_nom_hk_dataset,
+    family_needs_azimuth_elevation_positions,
+    read_all_cal_input_data,
+)
+from libera_rad.calibration.constants import LIBERA_CAL_OBSID_ENV, get_cal_event_spec
+from libera_rad.config import get_cal_product_definition
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_cal_obsid_from_env() -> int:
+    """Read the ``LIBERA_CAL_OBSID`` ObsID from the environment.
+
+    Returns the number only; :func:`~libera_rad.calibration.constants.get_cal_event_spec`
+    decides whether cal-combine can dispatch it, and
+    :func:`~libera_rad.calibration.combiners.l1a_cal_event_utils.confirm_obsid_matches_hk`
+    checks it against the ObsID the NOM-HK data actually carries.
+
+    Returns
+    -------
+    int
+        Calibration ObsID.
+
+    Raises
+    ------
+    ValueError
+        If the variable is missing or is not an integer.
+    """
+    raw = os.getenv(LIBERA_CAL_OBSID_ENV)
+    if raw is None or raw.strip() == "":
+        raise ValueError(f"{LIBERA_CAL_OBSID_ENV} environment variable is not set")
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{LIBERA_CAL_OBSID_ENV} must be an integer ObsID, got {raw!r}") from exc
+
+
+def algorithm(manifest_path: Path | S3Path | argparse.Namespace) -> Path | S3Path:
+    """Run ObsID-dispatched calibration combine from an input manifest.
+
+    Parameters
+    ----------
+    manifest_path : Path or S3Path or argparse.Namespace
+        Path to the input manifest, or a Namespace with a ``.manifest`` attribute.
+
+    Returns
+    -------
+    Path or S3Path
+        Path to the written output manifest.
+    """
+    now = datetime.now(UTC)
+    configure_task_logging(f"cal_combine_{now}")
+
+    obsid = resolve_cal_obsid_from_env()
+    event_spec = get_cal_event_spec(obsid)
+    logger.info(
+        "Resolved %s=%d → product=%s family=%s",
+        LIBERA_CAL_OBSID_ENV,
+        obsid,
+        event_spec.cal_product.value,
+        event_spec.trimmed_product.value,
+    )
+
+    logger.info("Step 1: Reading the input manifest file")
+    if isinstance(manifest_path, argparse.Namespace):
+        manifest = AnyPath(manifest_path.manifest)
+    else:
+        manifest = AnyPath(manifest_path)
+    input_manifest = Manifest.from_file(manifest)
+    logger.info("Loaded manifest with %d files", len(input_manifest.files))
+
+    dropbox_path = os.getenv("PROCESSING_PATH")
+    if not dropbox_path:
+        raise ValueError("PROCESSING_PATH environment variable is not set")
+
+    logger.info("Step 2: Reading all input data from manifest files")
+    needs_azel = family_needs_azimuth_elevation_positions(event_spec.trimmed_product)
+    all_data, dynamic_kernel_sources = read_all_cal_input_data(input_manifest, require_azel_kernels=needs_azel)
+
+    logger.info("Step 3: Confirming NOM-HK ObsID matches environment")
+    nom_hk = extract_nom_hk_dataset(all_data, event_spec)
+    confirm_obsid_matches_hk(nom_hk, obsid)
+
+    logger.info("Step 4: Building %s calibration event dataset", event_spec.trimmed_product.value)
+    cal_event = build_event_dataset(all_data, event_spec)
+    # NOM-HK inputs carry their own ProductID; overwrite before product write.
+    cal_event.attrs["ProductID"] = event_spec.cal_product.value
+
+    if needs_azel:
+        logger.info("Step 4b: Attaching Azimuth_Position / Elevation_Position")
+        cal_event = attach_azimuth_elevation_positions(cal_event, dynamic_kernel_sources)
+        # The kernels are real inputs to this product, so record them alongside the L1A granules
+        cal_event = add_input_files(cal_event, dynamic_kernel_sources)
+
+    logger.info("Step 5: Writing data product %s", event_spec.cal_product.value)
+    product_definition = get_cal_product_definition(event_spec)
+    output_file_path = write_libera_data_product(
+        data_product_definition=product_definition,
+        data=cal_event,
+        output_path=dropbox_path,
+        time_variable=event_spec.time_variable,
+        strict=True,
+    )
+
+    logger.info("Step 6: Creating output manifest")
+    output_manifest = Manifest.output_manifest_from_input_manifest(input_manifest)
+    output_manifest.add_files(output_file_path.path)
+
+    logger.info("Step 7: Writing the output manifest")
+    output_manifest_filepath = output_manifest.write(dropbox_path)
+    logger.info("Output manifest written to: %s", output_manifest_filepath)
+
+    return output_manifest_filepath
