@@ -79,8 +79,17 @@ runs:
       shell: bash
       run: echo "$HOME/cspice/cspice/exe" >> $GITHUB_PATH
 
+    - name: Get test data cache key
+      # Hashes the path and LFS pointer of every tracked file under test_data. hashFiles reads
+      # only file contents, and a renamed LFS file keeps its pointer, so a rename would hit the
+      # old cache and restore the files under their old names.
+      if: inputs.lfs == 'true'
+      id: test-data
+      shell: bash
+      run: echo "key=$(git ls-tree -r HEAD -- tests/test_data | sha256sum | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+
     - name: Restore LFS cache
-      # Cache key is derived from hash of the test_data directory.
+      # Cache key is derived from the tracked paths and pointers in the test_data directory.
       # On a cache miss, the Pull LFS objects step below downloads the actual binary objects.
       # On a hit (i.e. nothing in test_data changed), we still run git lfs pull but there should be
       # nothing to update unless there are LFS files outside of test_data.
@@ -90,7 +99,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: tests/test_data
-        key: lfs-${{ runner.os }}-${{ hashFiles('tests/test_data/**') }}
+        key: lfs-${{ runner.os }}-${{ steps.test-data.outputs.key }}
 
     - name: Pull LFS objects
       # git lfs pull skips files whose local content already matches the pointer,

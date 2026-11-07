@@ -1,5 +1,10 @@
 # Version Changes
 
+## 0.10.0
+
+- Require `libera-utils >=5.16.0,<6.0.0` in place of the exact `== 5.10.11` pin. In 5.16.0 a manifest lists its files as path strings without checksums (LASP-Libera/libera_utils#106), so `l1b.read_all_input_data` and `read_all_cal_input_data` read each entry as a path. A manifest in the earlier `{"filename": ..., "checksum": ...}` record format raises `ValidationError` when read.
+- Since 5.14.0 libera-utils names data products with a microsecond timestamp revision (`R20260116T183821000000`) and rejects the earlier `R` + `YYDDDHHMMSS` form, so the test fixtures are renamed to match, each keeping its original revision time.
+
 ## 0.9.0
 
 - Derive `Cone_Angle_Rate` and `Clock_Angle_Rate` from the motor encoder angles, following the CERES heritage scan-rate algorithm, instead of from curryer's orbital-frame angles. `Clock_Angle_Rate` is now the azimuth encoder rate, which has no singularity at nadir, so the 12 degree nadir gate and `CLOCK_RATE_MIN_CONE_ANGLE_DEG` are removed.
