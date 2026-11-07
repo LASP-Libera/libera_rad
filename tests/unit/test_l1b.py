@@ -12,6 +12,7 @@ from libera_utils.constants import DataProductIdentifier
 from libera_utils.io.manifest import Manifest
 
 from libera_rad import l1b
+from libera_rad.constants import MOON_IN_FOV_FILL_VALUE
 
 
 class TestRequireSpiceInputs:
@@ -287,29 +288,15 @@ class TestCalculateDataQualityFlags:
         assert len(result) == 0
 
 
-def test_gate_clock_rate_near_nadir():
-    # The clock angle is an azimuth about nadir, so its rate is undefined there. Samples
-    # inside the cone gate are filled; samples at or beyond it are kept; and a coverage gap
-    # (NaN cone) stays NaN rather than being turned into a fill value.
-    rate = np.array([1.0, 2.0, 3.0, np.nan], dtype=np.float32)
-    cone = np.array([2.0, 6.0, 45.0, np.nan], dtype=np.float32)
-
-    gated = l1b._gate_clock_rate_near_nadir(rate, cone)
-
-    assert gated[0] == np.float32(-999.0)  # inside the nadir cone -> filled
-    assert gated[1] == np.float32(2.0)  # exactly at the gate -> kept
-    assert gated[2] == np.float32(3.0)
-    assert np.isnan(gated[3])  # coverage gap stays NaN
-    assert gated.dtype == np.float32
-
-
 class TestProcessL1aToL1b:
     """Integration tests for process_l1a_to_l1b function."""
 
     @pytest.fixture
     def mock_input_data(self):
         """Create mock input data."""
-        rad_times = pd.date_range("2025-01-01", periods=1000, freq="ms").values
+        # 5 ms raw samples decimate 2:1 onto the 10 ms output grid. The 100-sample length comes
+        # separately from the 10:1 downsample_libera_signal mock below.
+        rad_times = pd.date_range("2025-01-01", periods=1000, freq="5ms").values
         rad_data = xr.Dataset(
             {
                 "RAD_SAMPLE_FPE_TIME": (["time"], rad_times),
@@ -343,8 +330,10 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_geoloc,
             patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
+            patch("libera_rad.geolocation.add_moon_boresight_offsets", side_effect=lambda _km, df: df),
             patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_azimuth_elevation_for_timestamps") as mock_azel,
+            patch("libera_rad.geolocation.moon_in_field_of_view") as mock_moon_fov,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             # Setup mocks
@@ -388,7 +377,6 @@ class TestProcessL1aToL1b:
                     "solar_azimuth": np.linspace(120, 130, 100, dtype=np.float64),
                     "relative_azimuth": np.linspace(150, 160, 100, dtype=np.float64),
                     "cone_angle": np.linspace(5, 15, 100, dtype=np.float64),
-                    "cone_angle_rate": np.linspace(-1, 1, 100, dtype=np.float64),
                     "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
                     "spacecraft_velocity_inertial_y": np.full(100, 3.5, dtype=np.float64),
                     "spacecraft_velocity_inertial_z": np.full(100, 6.0, dtype=np.float64),
@@ -397,12 +385,18 @@ class TestProcessL1aToL1b:
                     "attitude_q2": np.zeros(100, dtype=np.float64),
                     "attitude_q3": np.zeros(100, dtype=np.float64),
                     "clock_angle": np.linspace(90, 270, 100, dtype=np.float64),
-                    "clock_angle_rate": np.linspace(-5, 5, 100, dtype=np.float64),
                     "along_track_angle": np.full(100, -0.16, dtype=np.float64),
                     "cross_track_angle": np.linspace(-60, 60, 100, dtype=np.float64),
+                    "moon_boresight_angle": np.linspace(2, 40, 100, dtype=np.float64),
+                    "moon_azimuth_offset": np.linspace(-30, 30, 100, dtype=np.float64),
+                    "moon_elevation_offset": np.linspace(5, -5, 100, dtype=np.float64),
+                    "moon_angular_radius": np.full(100, 0.26, dtype=np.float64),
+                    "moon_distance": np.full(100, 3.8e5, dtype=np.float64),
                 }
             )
             mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
+            moon_flags = (np.linspace(2, 40, 100) <= 6.26).astype(np.int8)
+            mock_moon_fov.return_value = moon_flags
             mock_azel.return_value = (np.zeros(100, dtype=np.float32), np.zeros(100, dtype=np.float32))
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
@@ -432,7 +426,6 @@ class TestProcessL1aToL1b:
             assert np.allclose(result["Viewing_Azimuth_Surface_WRT_North"], np.linspace(100, 110, 100), atol=1e-4)
             assert np.allclose(result["Relative_Azimuth_Surface"], np.linspace(150, 160, 100), atol=1e-4)
             assert np.allclose(result["Cone_Angle"], np.linspace(5, 15, 100), atol=1e-4)
-            assert np.allclose(result["Cone_Angle_Rate"], np.linspace(-1, 1, 100), atol=1e-4)
             assert result["Satellite_Position"].shape == (len(result["Latitude"]), 3)
             assert result["Line_Of_Sight"].shape == (len(result["Latitude"]), 3)
             assert not np.any(result["Satellite_Position"] == np.float64(-9999))
@@ -442,18 +435,26 @@ class TestProcessL1aToL1b:
             assert not np.any(result["Clock_Angle"] == np.float32(-999))
             assert np.allclose(result["Along_Track_Angle"], -0.16, atol=1e-4)
             assert np.allclose(result["Cross_Track_Angle"], np.linspace(-60, 60, 100), atol=1e-3)
-            # Clock rate is filled inside the 6 deg nadir cone (mocked cone spans 5..15 deg).
-            inside_cone = np.linspace(5, 15, 100) < 6.0
-            # Guard: the mocked cone angles must straddle the gate so both sides are exercised.
-            assert inside_cone.any()
-            assert not inside_cone.all()
-            assert np.all(result["Clock_Angle_Rate"][inside_cone] == np.float32(-999))
-            assert not np.any(result["Clock_Angle_Rate"][~inside_cone] == np.float32(-999))
+            # The mock parks the gimbal at zero, so only the first sample, with no predecessor, fills.
+            for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+                assert result[name][0] == np.float32(-999), f"{name} first sample should be filled"
+                assert np.all(result[name][1:] == np.float32(0)), f"{name} should be zero for a parked gimbal"
             # Start-of-hour state on the fixed 24-hour grid.
             assert result["Satellite_Position_Start_Of_Hour"].shape == (24, 3)
             assert result["Satellite_Velocity_Start_Of_Hour"].shape == (24, 3)
             assert np.allclose(result["Satellite_Position_Start_Of_Hour"], 7000.0)
             assert np.allclose(result["Satellite_Velocity_Start_Of_Hour"], 7.5)
+            # Lunar geometry: the offsets pass through curryer unchanged and the flag is
+            # the predicate's, evaluated inside the kernel context alongside the geometry.
+            mock_moon_fov.assert_called_once()
+            assert np.allclose(result["Moon_Boresight_Angle"], np.linspace(2, 40, 100), atol=1e-3)
+            assert np.allclose(result["Moon_Azimuth_Offset"], np.linspace(-30, 30, 100), atol=1e-3)
+            assert np.allclose(result["Moon_Elevation_Offset"], np.linspace(5, -5, 100), atol=1e-3)
+            np.testing.assert_array_equal(result["Moon_In_Field_Of_View"], moon_flags)
+            assert result["Moon_In_Field_Of_View"].dtype == np.int8
+            # Guard: the mocked sweep must cross the threshold so both states are exercised.
+            assert moon_flags.any()
+            assert not moon_flags.all()
 
     def test_process_l1a_to_l1b_use_geo_false(self, mock_input_data):
         """use_geo false should bypass KernelManager and SPICE geolocation."""
@@ -503,6 +504,15 @@ class TestProcessL1aToL1b:
         assert np.all(result["Subsatellite_Colatitude"] == np.float32(-999))
         assert np.all(result["Azimuth"] == np.float32(-999))
         assert np.all(result["Elevation"] == np.float32(-999))
+        # Geolocation is bypassed, so the Moon's position is unknown: the offsets take the
+        # angle fill and the flag its own fill, never 0 (which would assert the Moon was out).
+        assert np.all(result["Moon_Boresight_Angle"] == np.float32(-999))
+        assert np.all(result["Moon_Azimuth_Offset"] == np.float32(-999))
+        assert np.all(result["Moon_Elevation_Offset"] == np.float32(-999))
+        assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
+        for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+            assert np.all(result[name] == np.float32(-999)), f"{name} should be filled when use_geo is False"
+
         assert isinstance(dynamic_attributes, dict)
 
     def test_process_l1a_to_l1b_jpss_only_mode(self, mock_input_data):
@@ -518,8 +528,10 @@ class TestProcessL1aToL1b:
             patch("libera_rad.radiometer.gain_calibration.apply_gain_calibration") as mock_calibrate,
             patch("libera_rad.radiometer.gain_calibration.get_ground_cal_response_function") as mock_response,
             patch("libera_rad.geolocation.calculate_geometry") as mock_geometry,
+            patch("libera_rad.geolocation.add_moon_boresight_offsets", side_effect=lambda _km, df: df),
             patch("libera_rad.geolocation.calculate_start_of_hour_state") as mock_hourly,
             patch("libera_rad.geolocation.calculate_geolocation_for_timestamps") as mock_prod_geo,
+            patch("libera_rad.geolocation.moon_in_field_of_view") as mock_moon_fov,
             patch("libera_rad.radiometer.radiance.calculate_radiance") as mock_radiance,
         ):
             mock_cal = Mock()
@@ -554,11 +566,14 @@ class TestProcessL1aToL1b:
                     "solar_azimuth": np.full(100, np.nan),
                     "relative_azimuth": np.full(100, np.nan),
                     "cone_angle": np.full(100, np.nan),
-                    "cone_angle_rate": np.full(100, np.nan),
                     "clock_angle": np.full(100, np.nan),
-                    "clock_angle_rate": np.full(100, np.nan),
                     "along_track_angle": np.full(100, np.nan),
                     "cross_track_angle": np.full(100, np.nan),
+                    "moon_boresight_angle": np.full(100, np.nan),
+                    "moon_azimuth_offset": np.full(100, np.nan),
+                    "moon_elevation_offset": np.full(100, np.nan),
+                    "moon_angular_radius": np.full(100, np.nan),
+                    "moon_distance": np.full(100, np.nan),
                     # Velocity and body attitude come from the spacecraft observer, so they
                     # resolve in jpss_only (SPK + JPSS CK) even without the motor CK.
                     "spacecraft_velocity_inertial_x": np.full(100, -2.9, dtype=np.float64),
@@ -571,6 +586,7 @@ class TestProcessL1aToL1b:
                 }
             )
             mock_hourly.return_value = (np.full((24, 3), 7000.0), np.full((24, 3), 7.5))
+            mock_moon_fov.return_value = np.full(100, MOON_IN_FOV_FILL_VALUE, dtype=np.int8)
             mock_radiance.return_value = pd.Series(np.random.rand(100))
 
             result, _ = l1b.process_l1a_to_l1b(mock_input_data, dynamic_kernel_sources, jpss_only_mode=True)
@@ -594,13 +610,20 @@ class TestProcessL1aToL1b:
             "Solar_Azimuth_Surface_WRT_North",
             "Relative_Azimuth_Surface",
             "Cone_Angle",
-            "Cone_Angle_Rate",
             "Clock_Angle",
-            "Clock_Angle_Rate",
             "Along_Track_Angle",
             "Cross_Track_Angle",
+            "Moon_Boresight_Angle",
+            "Moon_Azimuth_Offset",
+            "Moon_Elevation_Offset",
         ):
             assert np.all(np.isnan(result[name])), f"{name} should be NaN in jpss_only mode"
+        # With no boresight there is no Moon-in-view answer, so the flag fills rather
+        # than claiming the Moon was absent.
+        mock_moon_fov.assert_called_once()
+        assert np.all(result["Moon_In_Field_Of_View"] == MOON_IN_FOV_FILL_VALUE)
+        for name in ("Cone_Angle_Rate", "Clock_Angle_Rate"):
+            assert np.all(result[name] == np.float32(-999)), f"{name} should be filled in jpss_only mode"
         # Spacecraft-observer fields still resolve without the motor CK.
         assert not np.any(result["Satellite_Position"] == np.float64(-9999))
         assert not np.any(result["Satellite_Velocity"] == np.float64(-999))

@@ -26,8 +26,10 @@ Libera data-processing system.
 | `libera_rad/geolocation.py`                    | Latitude/longitude/altitude calculation via SPICE kernels and `libera_utils`                          |
 | `libera_rad/config.py`                         | Package-relative paths to bundled data files (`transfer_function.nc`, calibration JSON, product YAML) |
 | `libera_rad/version.py`                        | Version string management                                                                             |
-| `libera_rad/calibration/constants.py`          | `ChannelName`, `BoardName`, `DetectorType`, `RadianceMethod` enums and enum-lookup helpers            |
+| `libera_rad/calibration/cal_algorithm.py`      | ObsID-dispatched calibration product algorithm (`libera-rad cal-combine`); `algorithm()` entry point  |
+| `libera_rad/calibration/constants.py`          | L1B science enums; family merge recipes; `CAL_EVENT_BY_OBSID` derived from `libera_utils.obsids`      |
 | `libera_rad/calibration/calibration_models.py` | Pydantic v2 models for ground-calibration data (`LiberaGroundCalibration`, etc.)                      |
+| `libera_rad/calibration/combiners/`            | L1A merge (`l1a_combine`) and event utilities/builders (`l1a_cal_event_utils`)                        |
 | `libera_rad/radiometer/radiance.py`            | Radiance computation functions (numerical and physical methods)                                       |
 | `libera_rad/radiometer/gain_calibration.py`    | FFT-based gain calibration and 100 Hz downsampling                                                    |
 | `libera_rad/data/`                             | Bundled calibration JSON, product definition YAML, transfer function NetCDF                           |

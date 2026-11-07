@@ -5,10 +5,17 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from curryer import spicierpy as sp
 from libera_utils.libera_spice import spice_utils
 from libera_utils.libera_spice.kernel_manager import KernelManager
 
-from libera_rad.geolocation import calculate_geometry, calculate_lat_lon_altitude
+from libera_rad.constants import DEFAULT_INSTRUMENT_OBSERVER, MOON_FOV_BUFFER_DEG, MOON_IN_FOV_FILL_VALUE
+from libera_rad.geolocation import (
+    add_moon_boresight_offsets,
+    calculate_geometry,
+    calculate_lat_lon_altitude,
+    moon_in_field_of_view,
+)
 
 
 def _dynamic_kernel_paths(kernel_dir: Path) -> list[Path]:
@@ -140,3 +147,76 @@ def test_dynamic_kernels_materialize_into_cache(monkeypatch, tmp_path, test_dyna
 
     for src in sources:
         assert (tmp_path / src.name).is_file(), f"Expected cached kernel missing: {src.name}"
+
+
+def test_lunar_geometry_from_kernels(test_dynamic_kernels_path):
+    """Lunar boresight geometry from real kernels must be physically self-consistent.
+
+    Exercises the curryer lunar fields, :func:`add_moon_boresight_offsets` and
+    :func:`moon_in_field_of_view` end to end against SPICE rather than mocks, checking the
+    invariants that would catch a frame, unit, or convention error.
+    """
+    km = KernelManager()
+    km.load_libera_dynamic_kernels(
+        _dynamic_kernel_paths(test_dynamic_kernels_path), needs_naif_kernels=True, needs_static_kernels=True
+    )
+
+    timestamps = pd.date_range(datetime(2028, 1, 2, 0, 13, 47), periods=500, freq="100ms").to_numpy()
+    geometry_data = calculate_geometry(km, timestamps)
+    geometry_data = add_moon_boresight_offsets(km, geometry_data)
+
+    direction = geometry_data[["moon_direction_x", "moon_direction_y", "moon_direction_z"]].to_numpy()
+    boresight_angle = geometry_data["moon_boresight_angle"].to_numpy()
+    azimuth_offset = geometry_data["moon_azimuth_offset"].to_numpy()
+    elevation_offset = geometry_data["moon_elevation_offset"].to_numpy()
+    angular_radius = geometry_data["moon_angular_radius"].to_numpy()
+    distance = geometry_data["moon_distance"].to_numpy()
+
+    # Guard: a granule of all-NaN lunar geometry would pass every check below vacuously.
+    assert np.isfinite(boresight_angle).any()
+
+    # A spacecraft position in the wrong units (the meters-not-km delivery bug) throws the
+    # Moon direction off entirely, so anchor on the radius before trusting the angles.
+    assert np.allclose(geometry_data["spacecraft_radius"].to_numpy(), 7000.0, atol=500.0)
+
+    # Declared product ranges.
+    assert np.nanmin(boresight_angle) >= 0.0
+    assert np.nanmax(boresight_angle) <= 180.0
+    assert np.nanmin(azimuth_offset) >= -180.0
+    assert np.nanmax(azimuth_offset) <= 180.0
+    assert np.nanmin(elevation_offset) >= -90.0
+    assert np.nanmax(elevation_offset) <= 90.0
+
+    # Physical lunar range and apparent size. Bounds are topocentric, not the familiar
+    # geocentric figures: the observer is the spacecraft, which sits up to an Earth radius
+    # plus altitude nearer or farther than Earth's center, widening perigee/apogee to
+    # roughly [349e3, 413e3] km and the disk radius to [0.241, 0.285] deg.
+    assert np.nanmin(distance) > 3.45e5
+    assert np.nanmax(distance) < 4.15e5
+    assert np.nanmin(angular_radius) > 0.240
+    assert np.nanmax(angular_radius) < 0.286
+
+    # The offset pair and the total angle describe one direction.
+    np.testing.assert_allclose(
+        np.cos(np.radians(boresight_angle)),
+        np.cos(np.radians(azimuth_offset)) * np.cos(np.radians(elevation_offset)),
+        atol=1e-9,
+    )
+
+    # curryer reports the direction in the IK's FOV frame, which is what lets the offsets be
+    # taken against the boresight with no rotation: the separation must come back out as a
+    # plain dot product. A direction reported in some other frame would fail here.
+    finite = np.isfinite(direction).all(axis=-1)
+    np.testing.assert_allclose(np.linalg.norm(direction[finite], axis=-1), 1.0, rtol=1e-12)
+    boresight = sp.ext.instrument_fov(DEFAULT_INSTRUMENT_OBSERVER).boresight
+    expected_angle = np.degrees(np.arccos(direction[finite] @ (boresight / np.linalg.norm(boresight))))
+    np.testing.assert_allclose(boresight_angle[finite], expected_angle, atol=1e-9)
+
+    # The flag agrees with the threshold it documents, and is the fill value exactly where
+    # the lunar geometry is missing rather than defaulting to "not in view".
+    flags = moon_in_field_of_view(km, geometry_data)
+    fov_half_angle = sp.ext.instrument_fov(DEFAULT_INSTRUMENT_OBSERVER).half_angle(degrees=True)
+    expected_in_view = boresight_angle <= fov_half_angle + angular_radius + float(MOON_FOV_BUFFER_DEG)
+    missing = np.isnan(boresight_angle)
+    np.testing.assert_array_equal(flags[missing], MOON_IN_FOV_FILL_VALUE)
+    np.testing.assert_array_equal(flags[~missing], expected_in_view[~missing].astype(np.int8))

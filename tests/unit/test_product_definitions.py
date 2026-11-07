@@ -6,10 +6,7 @@ from pathlib import Path
 import yaml
 
 from libera_rad.config import (
-    cal_gain_product_definitions,
-    cal_lw_product_definitions,
-    cal_solar_product_definitions,
-    cal_sw_product_definitions,
+    CAL_FAMILY_PRODUCT_DEFINITIONS,
     data_path,
     product_config_path,
 )
@@ -17,11 +14,7 @@ from libera_rad.version import version as libera_rad_version
 
 
 def _product_definition_paths() -> list[Path]:
-    paths = [product_config_path, *cal_gain_product_definitions.values()]
-    paths.extend(cal_lw_product_definitions.values())
-    paths.extend(cal_solar_product_definitions.values())
-    paths.extend(cal_sw_product_definitions.values())
-    return sorted(set(paths))
+    return sorted({product_config_path, *CAL_FAMILY_PRODUCT_DEFINITIONS.values()})
 
 
 def test_product_definition_algorithm_version_is_dynamic():

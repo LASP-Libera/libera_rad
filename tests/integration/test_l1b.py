@@ -29,6 +29,8 @@ from libera_rad.version import version as libera_rad_version
 # Grouped by what has to resolve for the field to exist, which is also what the tests below
 # assert: the spacecraft-observer fields ride the JPSS SPK and resolve in every mode, while the
 # boresight fields need the motor CK and are therefore fill in ``jpss_only``.
+_SCAN_RATE_VARS: tuple[str, ...] = ("Cone_Angle_Rate", "Clock_Angle_Rate")
+
 _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     # Position-derived, spacecraft observer -- available in every geolocation mode.
     "Subsatellite_Latitude",
@@ -46,11 +48,12 @@ _CURRYER_GEOMETRY_VARS: tuple[str, ...] = (
     "Solar_Azimuth_Surface_WRT_North",
     "Relative_Azimuth_Surface",
     "Cone_Angle",
-    "Cone_Angle_Rate",
+    # Differenced from the motor encoders rather than derived by curryer, but they also need
+    # the motor CK.
+    *_SCAN_RATE_VARS,
     # Orbital-frame look angles and the boresight vector -- also instrument observer, so these
     # are fill in jpss_only for the same reason as the surface geometry above.
     "Clock_Angle",
-    "Clock_Angle_Rate",
     "Along_Track_Angle",
     "Cross_Track_Angle",
     "Line_Of_Sight",
@@ -396,7 +399,7 @@ class TestL1bPhysicalInvariants:
             non_fill = vals[vals != fill_value]
             assert np.all(non_fill >= 0), f"{var_name}: non-fill radiance values must be non-negative"
 
-    @pytest.mark.parametrize("var_name", _CURRYER_GEOMETRY_VARS)
+    @pytest.mark.parametrize("var_name", [v for v in _CURRYER_GEOMETRY_VARS if v not in _SCAN_RATE_VARS])
     def test_curryer_geometry_fields_within_valid_range(self, l1b_product_dataset, var_name):
         """Computed geometry values must respect the valid_range the product definition declares."""
         definition = yaml.safe_load(product_config_path.read_text())["variables"][var_name]["attributes"]
@@ -411,6 +414,27 @@ class TestL1bPhysicalInvariants:
             f"{var_name} has computed values outside its declared valid_range [{low}, {high}]: "
             f"min={computed.min()}, max={computed.max()}"
         )
+
+    def test_scan_rates_match_the_reference_scan(self, l1b_product_dataset):
+        """The reference granule is a fixed-azimuth cross-track scan.
+
+        The clock rate reads zero throughout. Away from nadir the cone rate has the sign of the
+        change in Cone_Angle, which also checks the elevation encoder's nadir reading, and it
+        stays under the 62.5 deg/s elevation scan ceiling plus servo jitter.
+        """
+        fill = -999.0
+        clock_rate = l1b_product_dataset["Clock_Angle_Rate"].values
+        computed = (clock_rate != fill) & np.isfinite(clock_rate)
+        assert computed.sum() > 0.99 * clock_rate.size
+        assert np.max(np.abs(clock_rate[computed])) < 1e-3
+
+        cone_rate = l1b_product_dataset["Cone_Angle_Rate"].values[1:]
+        cone_angle = l1b_product_dataset["Cone_Angle"].values
+        off_nadir = (cone_rate != fill) & np.isfinite(cone_rate) & (np.minimum(cone_angle[:-1], cone_angle[1:]) > 1.0)
+        assert off_nadir.sum() > 0.9 * cone_rate.size
+        np.testing.assert_array_equal(np.sign(cone_rate[off_nadir]), np.sign(np.diff(cone_angle)[off_nadir]))
+        computed_cone = (cone_rate != fill) & np.isfinite(cone_rate)
+        assert np.max(np.abs(cone_rate[computed_cone])) < 100.0
 
     def test_subsatellite_point_tracks_instrument_ground_point(self, l1b_product_dataset):
         """The subsatellite point must stay near the instrument ground point.
@@ -541,6 +565,7 @@ class TestL1bJpssOnlyIntegration:
             "Relative_Azimuth_Surface",
             "Cone_Angle",
             "Cone_Angle_Rate",
+            "Clock_Angle_Rate",
         ],
     )
     def test_jpss_only_boresight_geometry_is_fill(self, jpss_only_l1b_product_dataset, var_name):
