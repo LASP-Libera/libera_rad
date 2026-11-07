@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 import xarray as xr
-from libera_utils.constants import DataProductIdentifier
+from libera_utils.constants import DataProductIdentifier, LiberaApid
 
 from libera_rad.calibration.combiners import l1a_cal_event_utils as utils
 from libera_rad.calibration.constants import CAL_EVENT_BY_OBSID
@@ -191,7 +191,7 @@ class TestSelectAndSliceEventInputs:
             coords={"PACKET_ICIE_TIME": ("PACKET", times[1:])},
         )
         pev = xr.Dataset(
-            {"X": ("PACKET", np.arange(3))},
+            {"X": ("PACKET", np.arange(3)), "PKT_APID": ("PACKET", np.full(3, LiberaApid.pev_sw_stat.value))},
             coords={"PACKET_ICIE_TIME": ("PACKET", times)},
         )
         rad = make_sample_companion("RAD_SAMPLE", times, samples_per_packet=2)
